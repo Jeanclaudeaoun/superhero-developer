@@ -1,0 +1,132 @@
+---
+title: "Managing AEX-9 Tokens"
+description: "How community token balances reach your wallet view, sale address versus token address, and what allowances do."
+---
+
+# Managing AEX-9 Tokens
+
+Every Superhero community token is an AEX-9 fungible token — the æternity equivalent of ERC-20. This
+page covers how those balances are discovered and displayed, the two different addresses a token has
+and which one you need, and the allowance mechanism that swaps and DAO votes depend on.
+
+## The AEX-9 surface
+
+The standard's entrypoints, as they appear in the ACI the agent skill ships:
+
+| Entrypoint | Arguments | What it does |
+| --- | --- | --- |
+| `meta_info` | — | Name, symbol, decimals |
+| `total_supply` | — | Total minted supply |
+| `balance` | `address` | One account's balance, as an option |
+| `balances` | — | The whole balance map |
+| `transfer` | `address, int` | Move your own tokens |
+| `allowance` | `from_account, for_account` | Read a granted allowance |
+| `allowance_for_caller` | `address` | Read the allowance granted to the caller |
+| `create_allowance` | `address, int` | Grant a new allowance |
+| `change_allowance` | `address, int` | Adjust an existing one by a delta |
+| `reset_allowance` | `address` | Revoke it entirely |
+| `transfer_allowance` | `from, to, int` | Spend someone else's allowance |
+| `mint` / `burn` | `address, int` / `int` | Supply changes, owner-gated |
+
+Amounts everywhere are integers in the token's **base units**. Divide by 10 to the power of
+`decimals` from `meta_info` to get a human figure. Superhero's own signing prompt deliberately does
+*not* do that scaling for you — decimals are a per-token on-chain fact a pure decoder cannot know,
+and guessing would misstate what you are approving. Count the digits.
+
+## Sale address vs token address
+
+A community token has **two** contract addresses and they are not interchangeable.
+
+| | What it is | What you use it for |
+| --- | --- | --- |
+| **Sale address** (`sale_address`) | The bonding-curve sale contract that mints and burns tokens against AE | Buying and selling on the curve; the DAO for that community; the token's page URL |
+| **Token address** (`address`) | The AEX-9 contract that actually holds balances and allowances | Balances, transfers, allowances, adding the token to a DEX pool |
+
+The app's FAQ glossary defines the sale address as "the contract that mints/burns tokens on the
+curve". The backend's token object carries both fields — plus `bonding_curve_address` and
+`factory_address` — so if you are working from the API you never have to guess which one you have.
+When something asks for "the token contract", it means `address`; when a DAO or a trade asks for a
+sale, it means `sale_address`.
+
+## How your balances are discovered
+
+Superhero does not maintain its own list of tokens you own. It asks the æternity **middleware** for
+the authoritative set:
+
+```text
+GET {MIDDLEWARE_URL}/v3/accounts/<your ak_ address>/aex9/balances
+```
+
+The response is a `data` array plus a `next` cursor, which the app follows — with a hard cap of 20
+pages, to avoid an unbounded loop. Each entry gives `contract_id`, an `amount`, `decimals`, and a
+token symbol and name. Anything with a zero balance is dropped.
+
+If the middleware returns nothing, the app falls back to probing: it takes the DEX's listed tokens
+plus every token appearing in a pool, calls `balance(you)` on each contract directly, and fills in
+symbol, name and decimals from `meta_info` where the listing did not supply them. The fallback is
+slower and only covers tokens the DEX knows about, which is why the middleware path is preferred.
+
+Practical consequence: a token you hold that the middleware has not indexed and the DEX has never
+listed may not appear automatically. That is what the add-tokens screen is for.
+
+## Adding a token the app does not show
+
+The screen lives at **`/defi/pool/add-tokens`** (the legacy path `/pool/add-tokens` still works). It
+scans your account for AEX-9 balances using the two mechanisms above, filters by name or symbol, and
+tells you whether a DEX pool already exists for each token — which is the question it exists to
+answer before you add liquidity.
+
+You need a **connected wallet** for it to have an account to scan. The address it works with is the
+AEX-9 **token address**, not the sale address.
+
+## Allowances
+
+An allowance grants a specific contract permission to move up to a stated number of *your* tokens.
+Superhero relies on this in two places.
+
+### DEX swaps
+
+Swapping a non-AE token requires an allowance for the DEX router first. AE itself never needs one —
+it is the native coin, not a contract balance.
+
+The app manages this for you: it reads the current allowance, calls `create_allowance` if there is
+none, and `change_allowance` with the *difference* if there is one but it is too small. It never
+grants an unlimited approval.
+
+One detail worth knowing if you inspect these transactions: the grantee is the router's **contract
+address re-encoded as an account address** — the same bytes with the `ct_` prefix swapped for `ak_`.
+An allowance that looks like it was granted to an account is in fact granted to the router contract.
+
+### DAO vote locking
+
+Governance votes lock the tokens you vote with until the vote closes, and that locking is
+implemented with the AEX-9 allowance mechanism — which is what prevents the same tokens being
+double-spent across two concurrent votes. Revoking your vote releases the lock.
+
+This is why a vote can ask you to sign twice: once to grant or adjust the allowance, once to cast.
+
+### Hygiene
+
+- **Read the amount** in the signing prompt. Superhero's built-in wallet names these calls in plain
+  language rather than showing raw calldata.
+- **Reset what you no longer need.** `reset_allowance` revokes one entirely. Do it after you finish
+  voting, or when you stop using a pool.
+- **Remember base units.** An allowance figure with 18 zeros after it is not a bug, but neither is it
+  a small number — check the digit count against the token's decimals.
+
+## Read more
+
+- [Wallet Security](/wallets/security) — approval hygiene, and why an allowance is a standing permission rather than a one-off.
+- [The Built-In Wallet](/wallets/built-in-wallet) — how allowance calls are decoded and named before you approve them.
+- [AEX Standards](/aeternity/aex-standards) — what AEX-9 specifies at the protocol level.
+- [AEX-9 Contracts](/contracts/aex9) — the contract-side reference for these entrypoints.
+- [Tokens API](/api-reference/tokens) — the token object carrying both `address` and `sale_address`.
+- [Token Standards on the æternity docs hub](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — the upstream specification.
+
+## Open questions
+
+- Is there an in-app way to add a token by pasting a contract address that the middleware has not
+  indexed and the DEX has never listed? The add-tokens screen discovers balances rather than
+  accepting an arbitrary address, and no manual-entry field was found in `src/views/AddTokens.tsx`.
+- Does Superhero surface existing allowances anywhere for review or bulk revocation, or must they be
+  reset per token through a contract call? No allowance-management screen was found in the web app.

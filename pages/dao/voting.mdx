@@ -1,0 +1,230 @@
+---
+title: "Voting"
+description: "Cast, revoke and withdraw a vote, and what locking your tokens means."
+---
+
+# Voting
+
+Voting in a community DAO is not a signature on a message — it is a token transfer. The
+tokens you vote with are moved into the vote contract and held there until you take them
+back. Before you can vote at all you have to grant the vote contract an AEX-9 allowance. This
+page covers that whole sequence, because the allowance step and the locking behaviour are
+what catch people out.
+
+## What you are actually doing
+
+```text
+stateful entrypoint vote(option: DAOVote.vote_option, amount: DAOVote.amount) : unit
+```
+
+where
+
+```text
+DAOVote.vote_option = bool   -- true = in favour, false = against
+DAOVote.amount      = int    -- tokens staked, in the token's smallest unit
+```
+
+The ballot is **binary**. There is no abstain option and no multi-choice ballot; a DAO vote is
+always for or against one subject. If you want a multi-option poll, you want an
+[æternity governance poll](/governance/polls), which is a different system.
+
+Voting power is **linear in tokens staked**. The contract keeps one running total per side:
+
+```text
+DAOVote.vote_state = map(DAOVote.vote_option, DAOVote.amount)
+```
+
+Your `amount` is added to the total under `true` or `false`. Ten times the tokens is ten
+times the weight — no quadratic discount, no cap, no time-weighting, no minimum. Whoever
+holds the most tokens has the most say, which is the point and also the main governance risk.
+
+The per-voter record is:
+
+```text
+DAOVote.vote_accounts = map(address, (DAOVote.amount, DAOVote.vote_option, bool))
+```
+
+— the amount you staked, which way you voted, and whether you have withdrawn.
+
+## The allowance step
+
+The vote contract has to pull your tokens, and an AEX-9 contract only lets a third party move
+tokens it has been given an allowance for. So voting is two transactions, not one:
+
+1. `create_allowance(for_account, value)` on the **community token** contract, naming the
+   **vote** contract as the spender.
+2. `vote(option, amount)` on the vote contract.
+
+The one detail that trips everybody: **AEX-9 allowances are granted to an `ak_` address, but
+the vote contract has a `ct_` address.** Rewrite the prefix and leave the rest of the string
+untouched. This is the standard æternity convention for allowing a contract to spend, and it
+is what the Superhero app does everywhere it needs an allowance.
+
+```text
+vote contract   ct_2a1b3c...xyz
+for_account     ak_2a1b3c...xyz     <- same bytes, ak_ prefix
+```
+
+The relevant AEX-9 entrypoints:
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `allowance(allowance_accounts)` | Read the current allowance; returns `option(int)` |
+| `create_allowance(for_account, value)` | Create an allowance where none exists |
+| `change_allowance(for_account, value_change)` | Adjust an existing allowance by a delta |
+| `reset_allowance(for_account)` | Remove the allowance entirely |
+| `allowance_for_caller(from_account)` | Read the allowance granted to you by another account |
+
+`allowance` takes a record — `allowance_accounts` is `from_account` plus `for_account` — and
+returns `None` when no allowance exists at all, which is why the create and change cases have
+to be handled separately. Calling `create_allowance` when one already exists fails; calling
+`change_allowance` when none exists fails too.
+
+### Code
+
+Illustrative — assumes an initialised `aepp-sdk` instance and contract ACIs to hand:
+
+```js
+// 1. Point at the community token and the vote contract.
+const token = await Contract.initialize({
+  ...sdk.getContext(), aci: FUNGIBLE_TOKEN_FULL_ACI, address: tokenAddress,
+});
+const vote = await Contract.initialize({
+  ...sdk.getContext(), aci: DAO_VOTE_ACI, address: voteAddress,
+});
+
+// 2. AEX-9 allowances are granted to an ak_ address. Rewrite the vote
+//    contract's ct_ prefix; the rest of the address is identical.
+const spender = voteAddress.replace('ct_', 'ak_');
+
+// 3. Create the allowance, or top up an existing one.
+const amount = 1_000_000_000_000_000_000n;          // 1 token at 18 decimals
+const current = (await token.allowance(
+  { from_account: myAddress, for_account: spender },
+)).decodedResult;
+
+if (current == null) {
+  await token.create_allowance(spender, amount);
+} else if (current < amount) {
+  await token.change_allowance(spender, amount - current);
+}
+
+// 4. Vote in favour with that stake.
+await vote.vote(true, amount);
+```
+
+Both transactions have to confirm. If the allowance transaction succeeds and the vote
+transaction fails, the allowance is left standing — harmless, but reset it with
+`reset_allowance` if you would rather not leave a live approval in place.
+
+### If you are using the app
+
+The web app handles all of this for you. Open the proposal at
+`/trends/dao/:saleAddress/vote/:voteId/:voteAddress`, connect a wallet holding the community
+token, and choose **Vote Yes** or **Vote No**. Your wallet will ask you to sign the allowance
+and then the vote.
+
+One behaviour worth knowing before you click: **the web app votes with your entire token
+balance.** It passes your full balance as the `amount`, so there is no partial-stake option in
+the UI. If you want to vote with part of your holdings, call `vote(option, amount)` yourself
+with the amount you intend.
+
+## Locking
+
+Once `vote` succeeds, the tokens are held by the vote contract. Until you revoke or withdraw
+them you cannot transfer them, sell them back to the bonding curve, or use them in another
+vote. This is deliberate: without it, one balance could be walked from address to address and
+voted repeatedly on the same proposal, or sold immediately after voting while the vote still
+counted.
+
+The lock has no timer of its own. It ends when you end it.
+
+## Revoke versus withdraw
+
+These are the two ways to get your tokens back, and they are not interchangeable.
+
+| | `revoke_vote()` | `withdraw()` |
+| --- | --- | --- |
+| When | While the vote is still open | After the closing height |
+| Effect on the tally | Removes your stake from the total | None — the result is already fixed |
+| Effect on your record | You count as not having voted | Your vote stands, marked as withdrawn |
+| Can you vote again | Yes, while the vote is open | No, the vote is closed |
+| Tokens | Returned | Returned |
+| Event emitted | `RevokeVote(address, option, amount)` | `Withdraw(address, amount)` |
+
+**Revoking is a governance action.** It pulls your weight back out of the tally, so a
+proposal that was passing can stop passing. Use it when you change your mind — revoke, then
+vote the other way, or leave your stake out of the decision entirely.
+
+**Withdrawing is pure housekeeping.** After the closing height the outcome is settled and
+`final_vote_state()` returns it; taking your tokens back cannot change it. Everyone who voted
+should withdraw once the vote closes. Nothing does it for you, and nothing expires — tokens
+left in a closed vote contract stay locked indefinitely until their owner calls `withdraw`.
+
+Withdrawing does not depend on how the vote went or on whether the subject was ever applied.
+A voter on the losing side of an expired, never-executed proposal still withdraws normally.
+
+## Reading a vote
+
+| Entrypoint | Returns |
+| --- | --- |
+| `get_state()` | The whole `DAOVote.state` record |
+| `metadata()` | Subject, description and link |
+| `subject()` | Just the subject variant |
+| `current_vote_state()` | The live tally, for and against |
+| `final_vote_state()` | The tally once closed; `None` while open |
+| `vote_accounts()` | Every voter, with stake, side and withdrawn flag |
+| `has_voted(voter)` | Whether that address currently has a vote standing |
+| `voted_option(voter)` | Which way, as `option(bool)` |
+| `has_withdrawn(voter)` | Withdrawal status, as `option(bool)` |
+| `is_closed()` | Whether the closing height has passed |
+| `close_height()` | The key-block height at which it closes |
+| `token()` | The AEX-9 token used for voting |
+| `version()` | Contract version |
+
+`final_vote_state()` returning `None` is the reliable open/closed test for an outcome — read
+it rather than comparing heights yourself.
+
+## Events
+
+| Event | Fields |
+| --- | --- |
+| `Vote` | voter address, option, amount |
+| `RevokeVote` | voter address, option, amount |
+| `Withdraw` | voter address, amount |
+
+Indexing these three gives you the complete voting history of a proposal without replaying
+contract state. See [Contract events](/contracts/events).
+
+## Risks worth stating plainly
+
+- **Your tokens are illiquid while locked.** A two-week vote is two weeks you cannot sell into
+  the bonding curve. If the token price moves against you, revoking is the only exit, and
+  revoking withdraws your influence from the proposal.
+- **Voting power is plain token weight.** A single holder above 55% of participating stake
+  decides any vote they show up for. The 10% participation quorum limits capture by tiny
+  minorities; it does nothing against a genuine large holder.
+- **The allowance persists.** Unless you reset it, the vote contract keeps a standing approval
+  to move that many tokens. It is scoped to one vote contract, which limits the exposure, but
+  it is still live approval.
+- **Nothing reminds you to withdraw.** Closed votes do not return tokens automatically.
+
+## Open questions
+
+- Whether `vote` can be called a second time to increase an existing stake, or whether it
+  requires `revoke_vote` first, is not determinable from the ACI. `vote_accounts` stores one
+  entry per address, which suggests a second call replaces or is rejected rather than adding,
+  but the `DAO.aes` source would settle it.
+- Whether `revoke_vote` is blocked after the closing height, and `withdraw` before it, is
+  enforced by the contract or only by the app's `canRevokeVote` and `canWithdraw` helpers, is
+  not visible in the ACI.
+
+## Read more
+
+- [Quorum and Thresholds](/dao/quorum-and-thresholds) — what your stake has to add up to for a proposal to pass.
+- [Proposals and Vote Subjects](/dao/proposals) — what you are voting on, and how to read a subject.
+- [How DAOs Work](/dao/overview) — where voting sits in the lifecycle, and what happens after it closes.
+- [Voting on governance polls](/governance/voting) — the other system, where nothing is locked.
+- [AEX standards](/aeternity/aex-standards) — the AEX-9 allowance mechanism this depends on.
+- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the canonical fungible-token standard, including the allowance entrypoints.
+- [Open a proposal and vote](https://superhero.com/trends/daos) — the live DAO list.

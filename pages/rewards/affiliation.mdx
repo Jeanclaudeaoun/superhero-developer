@@ -1,0 +1,269 @@
+---
+title: "The Affiliation System"
+description: "Four levels of referral rewards paid from every community-token buy, and what happens to the fees nobody claims."
+---
+
+# The Affiliation System
+
+Every community-token buy on Superhero carries a 1% spread between the buy and sell price.
+Half of it funds the community DAO; the other half funds a four-level referral system. This
+page documents exactly how that half is split, how the referral chain is built, when the
+money becomes withdrawable, and what happens when there is nobody to pay.
+
+The short version: **0.5% of every buy is split across up to four levels of inviters above
+the buyer, and if the buyer has no inviter the fee is burned.** Nothing accumulates in a pot
+that somebody can later drain.
+
+## The split
+
+When an invitee buys tokens, 0.5% of the transaction value is distributed up the chain:
+
+| Level | Relationship to the buyer | Share of the transaction |
+| --- | --- | --- |
+| 1 | The buyer's direct inviter | 0.300% |
+| 2 | That person's inviter | 0.125% |
+| 3 | One level further up | 0.050% |
+| 4 | One level further up again | 0.025% |
+| | **Total** | **0.500%** |
+
+Worked through a 1,000 AE buy:
+
+```text
+Buyer pays                      1000.00 AE
+  ├── bonding curve reserve      990.00 AE   (99.0%, redeemable by sellers)
+  ├── community DAO treasury       5.00 AE   (0.5%)
+  └── affiliation                  5.00 AE   (0.5%)
+        ├── level 1                3.00 AE   (0.300%)
+        ├── level 2                1.25 AE   (0.125%)
+        ├── level 3                0.50 AE   (0.050%)
+        └── level 4                0.25 AE   (0.025%)
+
+Buyer also receives ProtocolDAO tokens = 1000 × the AE value of the buy.
+```
+
+The on-chain source of truth for these numbers is the treasury itself.
+`get_affiliation_fee_percentages()` returns the four level shares as a list of integers and
+`get_affiliation_fee_precision()` returns the divisor they are scaled by — the percentages
+above are not storable as integers, so the contract keeps them scaled.
+`get_affiliation_fee_percentage()` returns the single aggregate figure. Read all three
+against a live node if you need to prove the split rather than cite it.
+
+## Unaffiliated fees are burned
+
+The whitepaper is explicit: *"transaction fees from unaffiliated purchases are burned"*, and
+the security section gives the reason — *"the 1% spread is deterministically split (0.5% DAO,
+0.5% affiliation), with unaffiliated fees burned rather than accumulated, eliminating
+extraction vectors for unclaimed funds."*
+
+This is a design decision worth understanding rather than skimming. If unattributed
+affiliation fees pooled somewhere, that pool would need an owner, an admin key and a policy —
+all of which are attack surface. Burning them removes the pool entirely. The cost is that a
+buy from an uninvited account produces slightly deflationary pressure instead of paying
+anyone.
+
+## How the referral chain is built
+
+The treasury stores the chain as a single map, `affiliation_tree: map(address, address)` —
+each address points at its direct inviter. There is no tree object; the four levels are found
+by walking that map upward four times.
+
+Two entrypoints write into it:
+
+- `redeem_invitation_code(invitee_address)` — the normal path. Someone opens an invite link,
+  the one-time key inside it signs this call, and the caller's wallet address is attached to
+  the inviter who funded the code. See [Invite Links](/rewards/invite-links).
+- `register_invitation(inviter_address)` — attaches the caller to an inviter directly,
+  without a funded code.
+
+Two read entrypoints get you back out:
+
+- `get_direct_inviter(account)` returns `Some(address)` or `None`.
+- `get_affiliation_tree(address)` returns the inviter address directly, and
+  `affiliation_tree()` returns the whole map.
+
+An address can only be attached once. The redeem path fails with
+`INVITEE_ALREADY_REGISTERED` if you try again.
+
+## What makes an invitee "unique", and why it gates your money
+
+Accruing rewards and withdrawing them are separate. Rewards accrue from the first buy in your
+downline. Withdrawing is gated on a qualification threshold, tracked per inviter in
+`unique_invitees: map(address, unique_invitees_state)`.
+
+That state is a two-case variant:
+
+```text
+unique_invitees_state
+  = ThresholdReached
+  | WaitingForInvitations(Set.set(address), map(address, int))
+```
+
+- **`ThresholdReached`** — you are done. The gate is open permanently.
+- **`WaitingForInvitations(reached, in_progress)`** — the set holds the invitees who have
+  already crossed the spend threshold; the map holds every other invitee against their
+  cumulative spend in aettos.
+
+The thresholds the app enforces are **4 unique invitees, each having spent at least 10 AE**.
+The Collect Rewards card renders the set as completed entries and the map as per-invitee
+progress bars toward 10 AE. Attempting `withdraw()` early reverts with
+`MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED` or `MINIMUM_OF_4_ACCOUNTS_SHALL_BUY`.
+
+A useful consequence: the spend is **cumulative**, not per-transaction. An invitee who buys
+1 AE ten times qualifies the same as one who buys 10 AE once.
+
+An account that has never invited anyone has no key in the map at all. Reading
+`get_unique_invitee` for such an address raises a `Key does not exist` map error rather than
+returning an empty state — the client special-cases this and displays zero progress.
+
+## Payout periods
+
+The treasury's fourth piece of state is `payout_periods: map(int, map(address, int))` — an
+outer map keyed by a period index, each holding per-address accrued amounts.
+`get_payout_period()` returns a single integer, and `payout_periods()` returns the whole
+structure.
+
+What the contract surface supports saying:
+
+- Accrual is **bucketed by period**, not held as one running balance per address. Each period
+  index owns its own address-to-amount map.
+- `record_sale_transaction(buyer, transaction_value)` is the payable, stateful entrypoint the
+  token sale calls on every buy. It receives the affiliation share as attached value and is
+  what writes into the current period's bucket.
+- `get_accumulated_rewards(account)` collapses that into the single number the UI shows as
+  **Available Rewards**, and `withdraw()` pays it out to the caller.
+
+What the ACI does **not** tell you, and which this page will not guess at: how long a period
+lasts, what advances the index, whether earlier periods stay withdrawable indefinitely, and
+whether `get_accumulated_rewards` sums across all periods or only settled ones. Those answers
+are in `AffiliationTreasury.aes`, not in its interface. See the open questions below.
+
+## `redemption_fee_cover`
+
+`register_invitation_code` takes three arguments and is payable:
+
+```text
+register_invitation_code(
+  invitation_addresses : list(address),   // one throwaway address per link
+  redemption_fee_cover : int,             // aettos, per link
+  invitation_amount    : int              // aettos gifted, per link
+)
+```
+
+The mechanism is a consequence of how redemption is signed. An invite link carries the
+**secret key** of a freshly generated account; the recipient's browser reconstructs that
+account and uses it to sign `redeem_invitation_code(<recipient wallet address>)`. That
+throwaway account has never held AE, so without help it cannot pay for its own transaction.
+`redemption_fee_cover` is the AE the inviter attaches to make that one call affordable — the
+recipient claims a gift without needing any AE first.
+
+Both implementations use the same value: **`10n ** 15n` aettos = 0.001 AE per link**, in the
+web app's invite hook and in the agent skill's `superhero-invite.mjs`. The CLI's help text
+spells out the arithmetic:
+
+```text
+Total cost = (amount_ae + redemption_fee) × count + gas
+Redemption fee cover: 0.001 AE per invite.
+```
+
+and the code attaches `(invitation_amount + redemption_fee_cover) × count` as the payable
+amount of the call.
+
+## Contract surface
+
+`AffiliationTreasury` is a payable contract. Its full entrypoint list, from the ACI:
+
+### State readers
+
+| Entrypoint | Returns |
+| --- | --- |
+| `get_state()` | The whole record: payout periods, affiliation tree, invitation codes, unique invitees |
+| `payout_periods()` | `map(int, map(address, int))` — accrual bucketed by period |
+| `affiliation_tree()` | `map(address, address)` — every invitee to its direct inviter |
+| `invitation_codes()` | `map(address, (address, int, bool))` — see the tuple layout below |
+| `unique_invitees()` | `map(address, unique_invitees_state)` |
+
+### Per-account queries
+
+| Entrypoint | Returns |
+| --- | --- |
+| `get_direct_inviter(account)` | `Option(address)` |
+| `get_affiliation_tree(address)` | The inviter address |
+| `get_invitation_code(address)` | `(inviter, amount_aettos, claimed)` |
+| `get_unique_invitee(address)` | `ThresholdReached` or `WaitingForInvitations(...)` |
+| `get_accumulated_rewards(account)` | Withdrawable balance in aettos |
+| `get_payout_period()` | Current period index |
+| `get_affiliation_fee_percentage()` | Aggregate fee, scaled |
+| `get_affiliation_fee_percentages()` | The four level shares, scaled |
+| `get_affiliation_fee_precision()` | The divisor the two above are scaled by |
+
+### State-changing entrypoints
+
+| Entrypoint | Notes |
+| --- | --- |
+| `register_invitation_code(invitation_addresses, redemption_fee_cover, invitation_amount)` | Payable. Funds one or many invite codes in a single call. |
+| `revoke_invitation_code(invitation_address)` | Cancels an unredeemed code. |
+| `redeem_invitation_code(invitee_address)` | Signed by the invite's one-time key; attaches the invitee and pays the gift. |
+| `register_invitation(inviter_address)` | Attaches the caller to an inviter without a funded code. |
+| `record_sale_transaction(buyer, transaction_value)` | Payable. Called by the token sale on every buy; routes the affiliation share into the current period. |
+| `withdraw()` | Pays the caller's accumulated rewards, subject to the unique-invitee threshold. |
+
+The `get_invitation_code` tuple layout is confirmed by the claim card, which reads field 0 as
+the inviter to display, field 1 as the aettos amount to format, and field 2 as the
+already-claimed flag.
+
+## Finding the contract
+
+The treasury is not a hardcoded address in the normal flow — it is resolved from the
+CommunityFactory:
+
+- The web app fetches the factory address from its own API, initialises the factory through
+  `bctsl-sdk`, and calls `affiliationTreasury()` on it.
+- The agent skill's `superhero-invite.mjs` initialises the factory at
+  `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` against
+  `https://mainnet.aeternity.io` and reads `affiliation_treasury()` from it.
+
+One address is hardcoded in the web app, as `INVITATIONS_CONTRACT`:
+
+```text
+ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ
+```
+
+It is used only to filter middleware transaction history — the app queries
+`/v3/transactions?contract=<that address>&caller_id=<your address>` to list the invitation
+codes you have registered and revoked. It carries no network switch, so treat it as the
+mainnet treasury address and resolve through the factory on any other network.
+
+## Open questions
+
+- **How long is a payout period, and what advances it?** `get_payout_period()` returns an
+  index with no unit. Whether periods are height-based, time-based, or advanced by a call is
+  not visible in the ACI. Read `AffiliationTreasury.aes`.
+- **Does `get_accumulated_rewards` span all periods?** The state is bucketed per period but
+  the UI treats the return value as one withdrawable balance. Whether older buckets stay
+  claimable, roll forward, or expire is undetermined.
+- **What happens to levels that do not exist?** If a buyer's chain is only two deep, the
+  0.050% and 0.025% shares have no recipient. The whitepaper only states that *unaffiliated*
+  purchases are burned. Whether a partial chain burns the unfilled levels, or reallocates
+  them, is not stated anywhere this page could verify.
+- **Is the burn a transfer to an unspendable address or a non-mint?** "Burned" is the
+  whitepaper's word; the mechanism is in the token sale contract, not the treasury ACI.
+- **What are the live values of the scaled percentage entrypoints?** This page cites the
+  whitepaper's 0.300 / 0.125 / 0.050 / 0.025. Confirming them on-chain means calling
+  `get_affiliation_fee_percentages()` and `get_affiliation_fee_precision()` against a node.
+- **Does revoking return the `redemption_fee_cover`?** The CLI calls revoke "reclaim funds"
+  without specifying whether that includes the fee cover as well as the gift.
+
+## Read more
+
+- [Invite Links](/rewards/invite-links) — the practical guide to creating, funding, sharing
+  and revoking the codes this contract tracks.
+- [Claiming Rewards](/rewards/claiming) — the `withdraw()` flow and its error messages.
+- [AffiliationTreasury contract](/contracts/affiliation-treasury) — the contract reference
+  page.
+- [Bonding curve fees and slippage](/tokens/fees-and-slippage) — where the 1% spread that
+  feeds this system originates.
+- [Value flow](/concepts/value-flow) — the whole-protocol view of the same money.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the "Affiliation Bonding Curve
+  Token Sale" section is the primary source for the percentages and the burn.
+- [Agent skill repository](https://github.com/superhero-com/superhero-agent-skill) — contains
+  `contracts/AffiliationBondingCurveTokenSale.aci.json`, the ACI this page is built from.

@@ -1,0 +1,173 @@
+---
+title: "Moderation"
+description: "How a network with no delete button moderates itself."
+---
+
+# Moderation
+
+Content on Superhero cannot be removed. The `Tipping` contract exposes no delete and no update
+entrypoint, so every post and comment ever published stays in the contract's state tree,
+readable by anyone running a node. Moderation therefore happens at the **community application
+layer**, through token-holder governance, and it hides rather than deletes. This page documents
+the on-chain moderation state, who can change it, and where the gaps are.
+
+## The design principle
+
+The whitepaper is explicit about this as a first design principle:
+
+> All content is published on-chain as immutable state. No single entity can remove, alter, or
+> suppress a post after it has been recorded. Moderation operates at the community application
+> layer through token-holder governance, not at the protocol level.
+
+Read that as a trade-off, not as a feature. It buys censorship resistance and pays for it with
+the absence of takedown. Anything published is published for good.
+
+## CommunityManagement.aes
+
+Each community gets its own `CommunityManagement` contract, deployed by the factory as step 5
+of community creation, initialised with a first moderator, a token threshold, a privacy flag
+and a metadata map.
+
+### State
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `owner` | `address` | The contract owner; transferable with `set_owner` |
+| `minimum_token_threshold` | `int` | Tokens required for write access in this community |
+| `is_private` | `bool` | Whether the community is private |
+| `moderator_accounts` | set of `address` | The current moderator set |
+| `muted_user_ids` | set of `string` | Muted user identifiers |
+| `meta_info` | map of `string` to `string` | Community metadata |
+
+### Entrypoints
+
+| Entrypoint | Signature | Stateful |
+| --- | --- | --- |
+| `get_state` | `() => CommunityManagement.state` | no |
+| `moderator_accounts` | `() => Set.set(address)` | no |
+| `muted_user_ids` | `() => Set.set(string)` | no |
+| `minimum_token_threshold` | `() => int` | no |
+| `owner` | `() => address` | no |
+| `meta_info` | `() => meta_info` | no |
+| `version` | `() => int` | no |
+| `add_moderator` | `(moderator: address) => unit` | yes |
+| `delete_moderator` | `(moderator: address) => unit` | yes |
+| `mute_user_id` | `(user_id: string) => unit` | yes |
+| `unmute_user_id` | `(user_id: string) => unit` | yes |
+| `change_minimum_token_threshold` | `(minimum_token_threshold: int) => unit` | yes |
+| `change_meta_info` | `(meta_info: meta_info) => unit` | yes |
+| `set_owner` | `(owner: address) => unit` | yes |
+
+Note the type of `muted_user_ids`: a set of **strings**, not addresses. Moderators mute
+identifiers, not accounts, which is a looser and less precisely documented concept than it
+first appears. See Open questions.
+
+## Who can do what
+
+There are two authority levels, and they are deliberately different.
+
+| Action | Who | How |
+| --- | --- | --- |
+| Mute a user id | A moderator | A direct call to `mute_user_id` |
+| Unmute | A moderator | `unmute_user_id` |
+| Appoint a moderator | Token holders | An `AddModerator` DAO vote, applied to the contract |
+| Remove a moderator | Token holders | A `DeleteModerator` DAO vote |
+| Change the write threshold | Token holders | A `ChangeMinimumTokenThreshold` DAO vote |
+| Change community metadata | Token holders | A `ChangeMetaInfo` DAO vote |
+
+Moderators act unilaterally within their mandate; the mandate itself is granted and revoked
+only by a vote. That is the whole accountability model — there is no appeal process and no
+platform-level override.
+
+### The vote that appoints a moderator
+
+Moderation changes ride the same DAO machinery as treasury payouts, with the same costs and
+thresholds:
+
+| Rule | Value |
+| --- | --- |
+| Who may open a vote | A holder with at least the community threshold of tokens |
+| Cost to open | 555 AE, paid to the DAO |
+| Voting period | Two weeks, measured in key-blocks |
+| Approval required | At least 55% of the vote stake in favour |
+| Quorum | At least 10% of the total token stake participating |
+| Execution window | Roughly two days after the vote closes |
+| Who executes | Anyone — any account or script can trigger the application |
+
+Tokens used to vote are locked by the vote contract via the AEX-9 allowance mechanism and can
+be reclaimed with `revoke_vote` before the close or `withdraw` after it. The 555 AE is a spam
+price, not a deposit: it goes to the DAO whether or not the vote passes.
+
+Practically, appointing a moderator takes two weeks and 555 AE. Moderation on Superhero is slow
+by design.
+
+The app offers five of the seven vote subjects in its create-vote UI — payout, change DAO,
+change the minimum token threshold, add moderator, delete moderator. The two it omits need
+richer input than the form supports: a payout of a specific amount takes two fields, and
+changing the metadata takes a map.
+
+## The write threshold
+
+`minimum_token_threshold` is the amount of the community's token an account must hold to write
+in that community. The whitepaper qualifies it as applying to "users with verified accounts",
+which ties the threshold to the identity layer — see [Names](/identity/names) for what
+"verified" means there.
+
+The same threshold appears in the chat rooms API as `min_token_threshold`, in raw integer base
+units, alongside the room's `is_private` flag. A room a holder is not eligible for simply does
+not appear in their room list, and the composer shows a "hold the token" gate. See
+[Chat](/social/chat).
+
+## What moderation cannot do
+
+Be blunt about this with anyone building on the platform:
+
+- **It cannot delete a post.** The bytes stay in contract state forever.
+- **It cannot delete a comment.** Comments are posts.
+- **It cannot prevent republication.** Anyone can post the same content again.
+- **It does not reach the indexer or other clients.** A different frontend reading the same
+  contract is free to ignore every mute.
+- **It is per-community.** There is no global mute list; each `CommunityManagement` instance
+  holds its own.
+
+What it can do is decide who is visible and who can write inside one community's surfaces.
+
+## Chat moderation is separate
+
+The Nostr chat layer has its own, entirely different control plane: the relay decides who is in
+a NIP-29 group, membership is maintained by a bot the API controls in response to token
+balances, and rooms carry relay-signed admin and role lists. None of that is
+`CommunityManagement` state. The per-room mute in the app is a *notification* preference, not a
+moderation action — it silences your own alerts and changes nothing for anyone else.
+
+## Open questions
+
+- **What is a `user_id`?** `muted_user_ids` is a set of strings rather than addresses. Whether
+  it holds `ak_` addresses as strings, registry names, or some other identifier is not
+  documented in the whitepaper or the ACI, and no client in the repositories reads or writes
+  it. This is the single biggest gap on this page: without it you cannot construct a mute call.
+- **Where is muting enforced?** No surface in the web app reads `muted_user_ids`. Whether the
+  indexer filters muted authors out of topic feeds, whether a frontend is expected to filter
+  client-side, and what exactly a mute hides — feed, comments, both — is unspecified.
+- **Is the community's `is_private` the same flag as the chat room's?** `create_community`
+  takes an `is_private` boolean that initialises the management contract, and the rooms API
+  exposes an `is_private` per room that gates reading. Whether the second is derived from the
+  first, or set independently by the room service, is not stated.
+- **Is there any platform-level moderation?** None appears in the app: there is no report
+  button, no block list and no admin surface in the client. Whether the API applies its own
+  filtering to indexed content is not visible from the frontend.
+- **Who owns a `CommunityManagement` contract, and who may call `set_owner`?** The DAO exposes
+  `get_community_management()` and applies moderation vote subjects, which implies it holds the
+  authority, but neither the whitepaper nor the ACI states who the initial `owner` is or what
+  the access rule on `set_owner` is. There is no vote subject for it.
+
+## Read more
+
+- [Posting](/social/posting) — why there is nothing to delete in the first place.
+- [Chat](/social/chat) — the relay-side membership control, which is the other half of community
+  moderation.
+- [Moderators](/dao/moderators) — the governance view of appointing and removing them.
+- [Voting](/dao/voting) — the mechanics, quorum and thresholds behind every moderation change.
+- [Community management contract](/contracts/community-management) — the contract reference.
+- [Community voting](https://superhero.com/trends/daos) — the live DAO list where moderation
+  votes are created.

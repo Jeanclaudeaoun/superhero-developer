@@ -1,0 +1,162 @@
+---
+title: "Accounts & Keys"
+description: "Address formats, keypairs and what each prefix means."
+---
+
+# Accounts & Keys
+
+Every identifier on æternity carries a two-letter prefix that says what it is. Getting them
+straight is the difference between a working integration and a 404 — a sale address is a `ct_`,
+a wallet is an `ak_`, and a trade receipt is a `th_`. This page is the lookup table, plus what
+the SDK expects when you hand it a secret key.
+
+## Address prefixes
+
+Identifiers are a raw byte array, base-encoded, with a prefix describing the function of those
+bytes. Base58 with a checksum is used for short identifiers meant to be read and pasted;
+base64 is used for longer binary payloads.
+
+### Base58 — the ones you will paste
+
+| Prefix | What it identifies | Where it shows up in Superhero |
+| --- | --- | --- |
+| `ak_` | Account (user) public key | Wallets, post authors, token holders, tip recipients |
+| `ct_` | Contract public key | Token sale addresses, DAO addresses, the Tipping contract |
+| `th_` | Transaction hash | Trade and post receipts; what you paste into an explorer |
+| `kh_` | Key-block hash | Block references in explorer links |
+| `mh_` | Micro-block hash | Block references in explorer links |
+| `sg_` | Signature | Delegated-posting payloads, signed attestations |
+| `nm_` | Name (AENS) | The on-chain object behind a `.chain` name |
+| `cm_` | Commitment | The salted preclaim hash in AENS registration |
+| `ok_` | Oracle public key | Not used by Superhero; validated and linked only |
+| `oq_` | Oracle query id | Not used by Superhero |
+| `ch_` | Channel id | State channels — not used by Superhero |
+| `pp_` | Peer public key | Node-to-node networking; never user-facing |
+
+### Base64 — the ones that appear in payloads
+
+| Prefix | What it identifies |
+| --- | --- |
+| `cb_` | Contract byte array (compiled bytecode, call data) |
+| `tx_` | Serialised transaction |
+| `st_` | State |
+| `ss_` | State trees |
+| `pi_` | Proof of inclusion |
+| `ov_` | Oracle query |
+| `or_` | Oracle response |
+
+The full enumeration lives in the protocol's API encoding spec, linked below.
+
+### Which prefixes Superhero validates
+
+`src/utils/address.ts` accepts exactly five prefixes when it validates a pasted identifier, and
+maps each to an explorer path:
+
+| Prefix | Explorer path segment |
+| --- | --- |
+| `ak_` | `accounts` |
+| `ct_` | `contracts` |
+| `nm_` | `names` |
+| `ok_` | `oracles/queries` |
+| `th_` | `transactions` |
+
+Anything else — a `kh_`, an `sg_`, a `cb_` — fails validation in the app, even though it is a
+perfectly valid æternity identifier. A string ending in `.chain` is treated as a name and
+passes without prefix checking.
+
+## Keys
+
+æternity accounts are **Ed25519** keypairs. The public key, base58-encoded with a checksum and
+the `ak_` prefix, *is* the address — there is no separate account-creation transaction, and an
+address is valid the moment you generate the key. The whitepaper's Cryptographic Integrity
+section describes Superhero's delegated posting as relying on "Blake2b hashing and Ed25519
+signature verification (via `Crypto.verify_sig`)", which is the same keypair doing the signing.
+
+### The secret key encoding the SDK expects
+
+Superhero's tooling pins `@aeternity/aepp-sdk` at `^14.1.0` (both `superhero/package.json` and
+`superhero-agent-skill/package.json`). **From v14, `MemoryAccount` takes the secret key as an
+`sk_`-prefixed encoded string**, not raw hex. The web app documents this in
+`src/utils/secretKey.ts`:
+
+> aepp-sdk v14 expects `sk_` encoded 32-byte secrets. Older persisted values can be raw hex or
+> a longer keypair payload.
+
+That module normalises whatever it is given:
+
+```js
+// superhero/src/utils/secretKey.ts — illustrative excerpt
+if (secret.startsWith('sk_')) return secret;          // already encoded
+const secretBytes = hexToBytes(secret);               // legacy raw hex
+if (secretBytes.length < 32) throw new Error('Secret key must contain at least 32 bytes');
+return encode(secretBytes.subarray(0, 32), Encoding.AccountSecretKey);
+```
+
+Two things follow. First, **only the first 32 bytes matter** — a longer legacy value is
+truncated to 32 bytes, which in the standard Ed25519 layout is the seed followed by a copy of
+the public key. Second, if you are handing a key to the agent skill, hand it the `sk_` form:
+
+```bash
+# Generates a v14-shaped keypair and prints the sk_ secret once
+node scripts/superhero-wallet.mjs generate
+
+# What every other script reads
+export AE_PRIVATE_KEY=sk_...
+node scripts/superhero-wallet.mjs address
+```
+
+`superhero-wallet.mjs` passes `AE_PRIVATE_KEY` straight into `new MemoryAccount(privateKey)`
+with no normalisation, so a raw-hex value that works in the web app will not work there.
+
+### Derivation from a mnemonic
+
+æternity's coin type in SLIP-0044 is **457**, and AEX-10 standardises the BIP32 derivation path
+for deterministic æternity wallets as `m/44'/457'/account'/0'/address_index'`.
+
+Superhero's built-in wallet derives exactly that path, and delegates the whole job to the SDK
+rather than reimplementing it. `src/features/wallet/derivation.ts` is unambiguous:
+
+```js
+export function deriveAccount(mnemonic, index) {
+  const account = new AccountMnemonicFactory(mnemonic).initializeSync(index);
+  return { address: account.address };
+}
+```
+
+with the accompanying comment pinning the path and the curve:
+
+> This is the ONLY derivation path for the inline wallet — never reimplement BIP32/SLIP-10 key
+> derivation by hand. `AccountMnemonicFactory` is the exact same factory the Superhero extension
+> / native wallet use (`m/44'/457'/index'/0'/0'`, SLIP-0010 ed25519), so calling it here
+> guarantees the inline signer derives byte-identical addresses to a user's existing wallet for
+> the same mnemonic + index.
+
+Two details follow from that. The account index varies while change and address index are both
+pinned to `0'`, and derivation is **SLIP-0010 for Ed25519**, not plain BIP32 — BIP32 was written
+for secp256k1 and does not apply unchanged to Ed25519. A golden-vector test
+(`src/features/wallet/__tests__/derivation.goldenvector.test.ts`) guards the path against
+drift, on the reasoning that a divergent path shows a user the wrong address for their seed,
+"which reads as lost funds".
+
+If you are implementing a wallet, use the SDK's factory. See also
+[Backup & recovery](/wallets/backup-and-recovery) and [Built-in wallet](/wallets/built-in-wallet).
+
+## Practical rules
+
+- **Never truncate an address before comparing it.** `src/utils/address.ts` truncates for
+  display only (`formatAddress`), and only in the middle.
+- **`ct_` addresses are case-sensitive base58.** `toTokenLookupParam` in the same file exists
+  specifically because uppercasing a sale address corrupts it while uppercasing a token symbol
+  is required.
+- **A `.chain` name is not an address.** Resolve it to an `ak_` through AENS before using it in
+  a transaction — see [AENS](/aeternity/aens).
+
+## Read more
+
+- [AENS](/aeternity/aens) — how `nm_` and `cm_` come into existence, and how names resolve to `ak_`.
+- [Wallet & keys for agents](/agents/wallet-and-keys) — generating and storing `AE_PRIVATE_KEY` for the agent skill.
+- [Wallet security](/wallets/security) — how to hold a key you actually care about.
+- [Explorers](/aeternity/explorers) — where each prefix takes you on æScan.
+- [æternity API encoding spec](https://github.com/aeternity/protocol/blob/master/node/api/api_encoding.md) — the authoritative list of every prefix and its base encoding.
+- [AEXs repository](https://github.com/aeternity/AEXs) — AEX-10 (derivation path) and AEX-3 (secret storage format).
+- [æternity JavaScript SDK quick start](https://sdk.aeternity.io/latest/quick-start/) — creating an account and signing with the v14 SDK.

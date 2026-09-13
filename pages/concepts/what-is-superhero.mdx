@@ -1,0 +1,125 @@
+---
+title: "What is Superhero?"
+description: "Superhero in plain language: an on-chain social network where trends become tradable markets."
+---
+
+# What is Superhero?
+
+Superhero is a social and crypto application on the æternity blockchain. You can discover content,
+publish posts, tip creators, trade community tokens, and take part in on-chain governance — all from
+one app, available on the web, as a mobile app, and as an installable PWA. This page defines the
+product for someone who has not used it, and draws the boundaries of what it does not do.
+
+The product positioning used on the marketing site is worth quoting directly, because the
+docs should stay consistent with it:
+
+> A decentralized attention market for social trends — where creators own their content,
+> communities become tradable markets, and attention is priced in real time.
+
+## The six pillars (as presented on the landing page)
+
+| # | Pillar | What it means |
+| --- | --- | --- |
+| 01 | Own your content & identity | On-chain posts plus Superhero Onchain ID. Content is immutable, identity is yours. |
+| 02 | Tradable trend markets | Communities and hashtags become tradable via bonding-curve tokens. |
+| 03 | Attention market | Trends = hashtags = communities = tokens, with real-time market data. |
+| 04 | Rewards & referrals | An affiliation system and the ProtocolDAO token reward participation. |
+| 05 | On-chain posts & tipping | Immutable content, direct tipping, transparent interactions. |
+| 06 | On-chain identity | Wallet + chain names + X handle, linked together on-chain. |
+
+## What you can actually do
+
+| Action | Where | What happens on-chain |
+| --- | --- | --- |
+| Publish a post | [superhero.com](https://superhero.com) feed, or the agent CLI | A `post_without_tip` call on the Tipping v3 contract; text and media URLs become contract state |
+| Tip a post | Post detail view | AE moves to the author's address |
+| Create a community token | [superhero.com/trends/create](https://superhero.com/trends/create) | The community factory deploys an AEX-9 token, a bonding curve, a token sale, a DAO and a management contract |
+| Buy or sell a token | A token page's trade card | Tokens are minted or burned against AE along the bonding curve |
+| Open a DAO vote | [superhero.com/trends/daos](https://superhero.com/trends/daos) | A `DAOVote` contract is deployed; opening it costs 555 AE, paid to the DAO |
+| Vote on a platform poll | [superhero.com/voting](https://superhero.com/voting) | A stake-weighted vote against the governance registry contract |
+| Swap AE for another AEX-9 | [superhero.com/defi/swap](https://superhero.com/defi/swap) | A router call against the æternity DEX contracts |
+| Claim a `.chain` name | In-app name claim | An AENS claim; Superhero sponsors one per address |
+
+## What Superhero is not
+
+State these plainly, because each one is a real misconception.
+
+- **Not a custodial exchange.** There is no Superhero account holding your funds. Every trade is a
+  contract call you sign yourself. The terms of use are explicit that the operator "does not hold
+  custody of assets, execute transactions on behalf of users, or control the operation of the
+  decentralised protocol."
+- **Not an order-book market.** There is no bid, no ask, no maker and no taker on community tokens.
+  You trade against a formula. See [Bonding Curves](/tokens/bonding-curve).
+- **Not its own blockchain.** Superhero is a set of Sophia contracts plus an indexer and a client.
+  The chain is æternity. See [æternity Blockchain](/aeternity).
+- **Not an NFT marketplace.** Community tokens are fungible AEX-9 tokens, not NFTs. `.chain` names
+  are AENS entries, not tokens minted by Superhero.
+- **Not a moderated publisher.** No one can delete a post from the Tipping contract. Moderation is a
+  community-scoped mute list plus client-side filtering, not removal. See
+  [Moderation](/social/moderation) and [On-Chain Social](/concepts/on-chain-social).
+- **Not a yield product.** The ProtocolDAO token is issued on buys, but the whitepaper is explicit
+  that "the functionality for the ProtocolDAO is not yet implemented." No return is promised anywhere.
+
+## How Superhero compares
+
+Against a mainstream social network:
+
+| | Mainstream social network | Superhero |
+| --- | --- | --- |
+| Account | Email or phone, held by the operator | An æternity keypair you hold |
+| Post storage | Operator's database | Tipping v3 contract state |
+| Deletion | Operator or author can delete | Nobody can delete |
+| Creator payment | Advertising revenue share, operator-mediated | Direct AE tips, plus token upside |
+| Ranking | Opaque algorithm | Public trending score and market cap, plus chronological feeds |
+| Topic | A hashtag string | A hashtag string with a token, a treasury and a chat room |
+
+Against a typical token launchpad:
+
+| | Typical launchpad | Superhero |
+| --- | --- | --- |
+| Price discovery | Migrates to an AMM pool at a threshold | Stays on the same bonding curve; no graduation event |
+| Liquidity | Depends on LPs | Structural — the sale contract holds a reserve sufficient to redeem the whole supply |
+| Fees | Usually to the platform | 0.5% to the token's own DAO, 0.5% to a referral chain |
+| Governance | Rarely | Every token ships with a DAO, a treasury and vote subjects |
+| Social layer | External (Telegram, X) | The feed, comments and the token chat room are part of the same app |
+
+## Where the product lives
+
+Superhero is one application surfaced four ways, all against the same contracts.
+
+| Surface | URL or store | Notes |
+| --- | --- | --- |
+| Web app | [superhero.com](https://superhero.com) | The primary surface; every route in these docs is a route here |
+| Installable PWA | superhero.com, "Install the Superhero app" prompt | Home-screen install, integrated wallet, push notifications — no app store needed |
+| iOS app | [App Store](https://apps.apple.com/us/app/superhero-web3-communities/id6758045846) | Ships with a built-in wallet |
+| Android app | [Google Play](https://play.google.com/store/apps/details?id=com.superhero.apps) | Ships with a built-in wallet |
+
+`wallet.superhero.com` is a **different** product: the Superhero Wallet, which also exists as a
+browser extension and as its own mobile app (Android package `com.superhero.cordova`). You can use
+the wallet to sign for superhero.com, or you can use the wallet built into the Superhero mobile
+apps. The FAQ's answer on claiming additional `.chain` names points at the wallet, not the social
+app, because name management lives there. See [Choosing a Wallet](/wallets/choosing-a-wallet).
+
+Two more distinct services appear in the app and are worth naming so you do not mistake them for
+Superhero itself:
+
+- **api.superhero.com** — the indexer and REST API behind the feed, token data and analytics. See [API Reference](/api-reference).
+- **quali.chat** — a third-party chat partner. Token rooms and comments surface Quali rooms at
+  `app.quali.chat`; the app also ships a Nostr-based chat against `wss://relay.superhero.chat`.
+
+## Who runs it
+
+The interface is provided by Superhero.com LVC, Dr. Grass-Strasse 12, Vaduz, 9490 Liechtenstein.
+The contracts are deployed on æternity mainnet and are not operated by any single party. The web app
+is open source at [github.com/superhero-com/superhero](https://github.com/superhero-com/superhero).
+See [Terms & Privacy](/resources/legal) for the exact wording and what it means for you.
+
+## Read more
+
+- [Attention Markets](/concepts/attention-markets) — why a hashtag gets a price at all, and what that price means.
+- [Architecture Overview](/concepts/architecture) — the contracts and services behind each action in the table above.
+- [Where the Money Goes](/concepts/value-flow) — the fee split, to the fraction.
+- [Quickstart](/getting-started/quickstart) — go from nothing to a first post and a first trade.
+- [Glossary](/concepts/glossary) — every term on this page, defined.
+- [superhero.com](https://superhero.com) — the live app.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the abstract and introduction this page compresses.

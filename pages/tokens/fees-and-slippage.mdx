@@ -1,0 +1,179 @@
+---
+title: "Fees & Slippage"
+description: "Everything that sits between the price you see and the price you get, separated into its three components."
+---
+
+# Fees & Slippage
+
+Three different things move the number. The **curve spread** is a fixed 1% of the curve value, split
+between the community DAO and the affiliation system. **Curve slippage** is the cost of your own
+trade size and depends entirely on how big it is relative to the supply. **Gas** is the æternity
+network fee, and it is the smallest of the three by a wide margin. Keep them apart and the arithmetic
+stops being confusing.
+
+## 1. The spread
+
+The spread is not a line item deducted from your trade. It is the gap between two curves:
+
+```text
+buy(x)  = 0.001 · e^(0.00000001 · x) − 0.0009999
+sell(x) = buy(x) · 0.995
+```
+
+The sale contract mints against `buy` and redeems against `sell`. The 0.5% difference accrues to the
+community's DAO treasury and is realised only when someone sells. On top of that, the affiliation
+token sale contract charges a further **0.5% affiliation fee on buys**, which is why the whitepaper
+describes the total spread between buy and sell price as **1%**.
+
+### Where each AE goes
+
+```text
+Buyer pays AE
+  ├── 99.0%  → Bonding Curve Reserve (redeemable by sellers)
+  ├──  0.5%  → Community DAO Treasury (governed by token holders)
+  └──  0.5%  → Affiliation System
+                ├── 0.300% → Level 1 Referrer
+                ├── 0.125% → Level 2 Referrer
+                ├── 0.050% → Level 3 Referrer
+                └── 0.025% → Level 4 Referrer
+                (if no referrer: burned)
+
+Buyer also receives:
+  └── ProtocolDAO Tokens = 1,000 × AE value
+```
+
+Unclaimed affiliation fees are **burned**, not accumulated. That is deliberate: it removes the pot of
+unclaimed funds that would otherwise be an extraction target.
+
+The live percentages are readable on-chain rather than being constants you have to trust:
+`fee_percentage()` and `fee_precision()` on the factory, and
+`get_affiliation_fee_percentage()`, `get_affiliation_fee_precision()` and
+`get_affiliation_fee_percentages()` on the affiliation treasury.
+
+### What 1% costs you in practice
+
+Say you buy 1,000 tokens at a supply of 10,000,000 and immediately sell them back:
+
+```text
+curve integral for the buy         0.105276443949 AE
+× 1.005 affiliation fee            0.105802826168 AE   ← what you pay
+
+curve integral for the sell        0.105276443949 AE
+× 0.995 sell factor                0.104750061729 AE   ← what you get back
+
+difference                         0.001052764439 AE
+```
+
+That is **1% of the curve value, and 0.995% of the AE you handed over**. Both statements are
+correct; they differ because the fee is added on top of the curve price on the way in. "Every
+position starts about 1% down" is the right mental model — see [Risks](/tokens/risks).
+
+The spread is charged on value, not on trade count, so ten small round trips cost the same 1% each
+as one large one. There is no fixed component to amortise.
+
+## 2. Curve slippage
+
+Slippage on a bonding curve is arithmetic, not congestion. You pay the integral of a rising curve
+over the range you mint into, while the quoted spot price is only the value at the left edge of that
+range. The larger your trade relative to the supply, the further above spot your average fill lands.
+
+Buying from a supply of 10,000,000, where spot is `1.052709e-4 AE`:
+
+| Tokens bought | Share of existing supply | Total cost (AE) | Average price (AE) | Premium to spot |
+| --- | --- | --- | --- | --- |
+| 1,000 | 0.01% | 0.105276 | 1.05276e-4 | +0.005% |
+| 100,000 | 1% | 10.582369 | 1.05824e-4 | +0.53% |
+| 1,000,000 | 10% | 110.815238 | 1.10815e-4 | +5.27% |
+| 10,000,000 | 100% | 1,624.184008 | 1.62418e-4 | +54.3% |
+| 50,000,000 | 500% | 21,699.788231 | 4.33996e-4 | +312% |
+
+A useful rule of thumb from that table: **your premium to spot is roughly half the percentage of the
+supply you are adding**, up to about 10%, and worse than that beyond it.
+
+Splitting the order does not help. The curve is path-independent — ten buys of 1,000,000 from a
+rising supply cost exactly the same total as one buy of 10,000,000, because the integral is the same
+area either way. The only levers are trade size and the supply you trade at.
+
+Near supply zero the effect is far more violent in relative terms, because the `−0.0009999` offset
+has cancelled almost all of the exponential: buying the first 1,000 tokens of a brand-new token costs
+5% above spot. See [Bonding Curves](/tokens/bonding-curve) for why.
+
+## 3. Slippage guards
+
+A guard is not a fee. It is the tolerance you accept for what other people do between your quote and
+your fill.
+
+| Surface | Default | Mechanism |
+| --- | --- | --- |
+| Web app trade card | **1%** | Stored per browser under the local-storage key `tokenTrade:slippage`; adjustable in the trade card |
+| `superhero-token-swap.mjs buy` | **3%** | Attaches `price(count) × 1.03` as the transaction amount |
+| `superhero-token-swap.mjs sell` | **3%** | Passes `sell_return(count) × 0.97` as `minimal_return_required` |
+| `superhero-token-create.mjs create` | **5%** | Attaches `calculate_buy_price(0, count) × 1.05`, rounded up |
+
+To change the CLI tolerance you edit `SLIPPAGE_PERCENT` at the top of the swap script — there is no
+flag. To set your own precisely, call the contract directly, as shown in
+[Buying & Selling](/tokens/buying-and-selling).
+
+The guards behave asymmetrically, and it is worth knowing which way:
+
+- **On a buy**, the guard is an upper bound on spend. You attach more AE than the quote; you cannot be charged more than you attached. If the price moved further than your tolerance, the call reverts.
+- **On a sell**, the guard is `minimal_return_required` — a floor on the payout. Below it the call reverts and your tokens stay where they are.
+
+## 4. Gas
+
+Every transaction pays an æternity network fee in AE, independent of everything above.
+
+| Action | Transactions | Documented cost |
+| --- | --- | --- |
+| Create a token | 1 contract call | About 0.001 AE, per the agent skill's token-creation guide |
+| Buy | 1 contract call | Not documented in the repositories |
+| Sell | 2 contract calls — allowance, then sell | Not documented in the repositories |
+| Post | 1 contract call | Not documented in the repositories |
+
+Only the creation figure is stated anywhere in the sources, and it is described there as
+approximate. Two things are worth noting regardless: a **sell costs two transactions**, not one,
+because of the allowance step; and the web app never lets you spend your whole balance. Its
+"spendable" figure is `balance − balance × (slippage + 1) / 100 − 0.001 AE`, so at the default 1%
+tolerance it holds back 2% of your balance plus a flat 0.001 AE for the fee.
+
+For what the gas is paying for, see [AE and gas](/aeternity/ae-and-gas).
+
+## Putting it together
+
+For a buy of `n` tokens at supply `S`:
+
+```text
+AE leaving your wallet
+  = ∫ from S to S+n of buy(x) dx     ← the curve, including your own slippage
+  × 1.005                             ← the affiliation fee
+  + network gas
+  ( + up to your slippage tolerance, if you attached a buffer )
+```
+
+And for the matching sell later, at whatever supply `S'` prevails then:
+
+```text
+AE returning to your wallet
+  = ∫ from S'−n to S' of buy(x) dx
+  × 0.995                             ← the sell factor, i.e. the DAO's cut
+  − network gas
+  ( reverts entirely if below minimal_return_required )
+```
+
+Nothing else is charged. There is no listing fee, no withdrawal fee, no maker or taker fee, and no
+fee for holding.
+
+## Read more
+
+- [Bonding Curves](/tokens/bonding-curve) — the integral behind every number on this page, worked out by hand
+- [Buying & Selling](/tokens/buying-and-selling) — how to set a guard yourself instead of taking the default
+- [Risks](/tokens/risks) — what a 1% round-trip spread means for a position you intend to hold
+- [Affiliation rewards](/rewards/affiliation) — where the 0.5% affiliation half of the spread ends up
+- [DAO treasury](/dao/treasury) — what the community can do with its half
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the source of the value-flow diagram and the fee percentages
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — quotes on live tokens, with the fee already included in the displayed cost
+
+## Open questions
+
+- **Gas for a buy, a sell and a post is undocumented.** No figure appears in the web app, the whitepaper, the FAQ or the agent skill. Mining one of each and reading the fee off [aeScan](https://aescan.io) would produce real numbers; they will vary with the contract's gas usage, so a range is more honest than a point estimate.
+- Whether the 0.5% affiliation fee is included in `TokenSale.price(count)` or added by the caller is not settled by the ACI. The web app adds it explicitly for display; the CLI sends `price()` plus a 3% buffer and does not distinguish. This changes nothing about the total you pay, but it does change how you should compute a quote from `calculate_buy_price`.

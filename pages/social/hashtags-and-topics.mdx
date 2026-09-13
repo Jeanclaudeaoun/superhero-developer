@@ -1,0 +1,189 @@
+---
+title: "Hashtags & Topics"
+description: "How a hashtag becomes a topic, and how a topic becomes a token."
+---
+
+# Hashtags & Topics
+
+The hashtag is where Superhero's social layer meets its market layer. The landing page states
+the equivalence directly:
+
+> Trends = Hashtags = Communities = Tokens.
+
+A `#tag` in a post is a plain substring on chain. Off chain it becomes a topic with its own
+feed, a row in the trending index, and — if someone launches one — a bonding-curve token with a
+treasury, a DAO and a chat room. This page follows that chain from the character you type to
+the market it can turn into.
+
+## Writing a tag
+
+Type `#` followed by a name. The composer offers a picker while you type, and the resulting
+text is what goes on chain verbatim — there is no separate tag field in the contract.
+
+Which characters count as part of a tag is not fixed by the client. It comes from the community
+factory's collections: each collection publishes an `allowed_name_chars` rule set, and the
+composer merges every collection's rules into one character class. The English collection
+(`WORDS`) allows `-`, `0` through `9` and `A` through `Z`; other collections cover Chinese,
+Arabic and Russian, and a collection added later is picked up automatically. A tag is capped at
+50 characters for the picker's purposes.
+
+Two consequences worth knowing:
+
+- A name containing a character no collection allows — a `.` or a `_`, for example — truncates
+  when rendered, so the composer's picker refuses to offer it.
+- The set of valid tag characters can grow when a new collection is deployed, without any
+  client change.
+
+Account mentions use the same trigger mechanics but a different storage form: `@name` in the
+composer becomes `[account:ak_…]` on the wire. See [Posting](/social/posting).
+
+## The display envelope
+
+A tag may carry an optional suffix describing how it should render:
+
+```text
+#SYMBOL                      plain tag — shows the symbol and a 24h change badge
+#SYMBOL{change=0}            same, with the change badge suppressed
+#SYMBOL{mode=compact}        adds the price
+#SYMBOL{mode=advanced}       adds the price and a chart
+```
+
+The symbol itself is never modified, so nothing already on chain renders differently when the
+grammar evolves. Three named modes are sugar over three booleans — `chart`, `price` and
+`change` — each settable to `1` or `0`, and the ladder is strictly monotonic: tag is a subset of
+compact, which is a subset of advanced. The `tag` preset carries `change: true` because that is
+what today's rendering already shows; turning the badge off requires `change=0` explicitly.
+
+The payload is at most 64 characters and may not contain braces or newlines. The writer is
+permissive and the reader is strict: an unknown key, an unrecognised value, or an entirely
+unparseable payload degrades to the plain tag rather than rendering as literal text. That
+asymmetry is deliberate — a post written today cannot be made to look broken by a change to the
+grammar tomorrow.
+
+## From tag to link
+
+When a post renders, each tag becomes a link to the token page:
+
+```text
+/trends/tokens/<TAG in uppercase>?showTrade=0
+```
+
+Resolution happens in two ways. The API may have resolved it already: a post item carries a
+`trend_mentions` array with `name`, `sale_address`, `collection_info` and a `performance`
+summary for each `#tag` found in the content. When that is present the client uses it directly.
+When it is not, the client searches `GET /api/tokens` with the tag as the search term, takes a
+case-insensitive exact match on the token's name or symbol, and falls back to the first result.
+
+The rendered pill also shows a 24-hour change badge, from the mention's embedded performance or
+from `GET /api/tokens/{address}/performance`. A tag with no matching token still links — the
+token page handles the miss — so a hashtag is always navigable.
+
+## From tag to topic
+
+Every tag that appears in posts becomes a topic with its own feed:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/topics/name/{name}` | The topic's `posts` and its `post_count` |
+| `GET /api/topics` | The topic index |
+| `GET /api/topics/{id}` | One topic by id |
+| `GET /api/topics/popular/trending` | Trending topics |
+
+You can also filter the main post index by topic: `GET /api/posts?topics=…` takes a
+comma-separated list with partial matching.
+
+A token's page renders its topic feed as the discussion tab. That tab defaults to posts by
+token holders only and falls back to everyone when the holders-only view would be empty, and
+its composer requires the token's hashtag before the Post button enables — so the topic feed
+stays on topic by construction.
+
+## The trending index
+
+Trending tags are a separate, ranked index:
+
+```text
+GET /api/trending-tags?order_by=score&order_direction=DESC&limit=100&page=1&search=
+```
+
+| Parameter | Values |
+| --- | --- |
+| `order_by` | `score`, `source` or `created_at` |
+| `order_direction` | `ASC` or `DESC` |
+| `limit`, `page` | Pagination |
+| `search` | Filter by substring |
+
+Items carry a `tag` and a `score`. The client is defensive about field naming — it accepts
+`tag` or `name`, `score` or `value`, and `source` or `platform` — which suggests the shape has
+moved over time. A single tag can be read at `GET /api/trending-tags/{tag}`.
+
+This index drives the trending rail beside the feed, the trending pill carousel, the
+repositories list, and the trend cloud visualisation at `/trends/visx`, which renders tags
+sized by score. Trending also feeds the popular feed's `trendingBoost` weighting — see
+[The Feed](/social/feed).
+
+## From topic to token
+
+A topic becomes a token when somebody creates one. That is a permissionless action: open
+`https://superhero.com/trends/create`, pick a name, and the community factory deploys the whole
+stack — an AEX-9 token, an exponential bonding curve, an affiliation token sale, a DAO that
+owns and benefits from the sale, and a `CommunityManagement` contract — then registers the
+community in its on-chain registry.
+
+The naming rules come from the collection you create in:
+
+| Rule | Source |
+| --- | --- |
+| Token name must equal its symbol | Enforced by the factory |
+| Name must be unique within the collection | The factory's community registry |
+| Allowed characters | The collection's `allowed_name_chars` |
+| Allowed length | The collection's `allowed_name_length` |
+
+Once the token exists, every `#tag` matching its name or symbol in any post — including posts
+written before the token existed — starts resolving to its page. Nothing rewrites the old
+posts; resolution simply starts succeeding.
+
+From there the token layer takes over: price is set by the bonding curve, 1% of every trade
+splits between the community DAO and the affiliation system, and holders govern the treasury.
+See [Tokens overview](/tokens/overview) and [Trending score](/tokens/trending-score).
+
+## The whole chain
+
+```text
+you type #AENIGHTS in a post
+  -> stored verbatim in the Tipping contract's title string
+  -> indexer extracts it as a topic; the post joins /api/topics/name/aenights
+  -> the tag accrues a score in /api/trending-tags
+  -> it renders as a pill linking to /trends/tokens/AENIGHTS
+  -> someone creates the token at /trends/create
+  -> the pill gains a live price and 24h change
+  -> holders get a DAO, a treasury, a chat room and a moderation threshold
+```
+
+Each arrow is a different system. Only the first is on chain in the social contract; the token
+at the end is on chain in a different one; everything in between is the indexer.
+
+## Open questions
+
+- **What feeds the trending score, and over what window?** The endpoint exposes a `score` and
+  can order by it, but neither the score's inputs, its decay, nor its window is documented in
+  the app repository.
+- **What is `source` / `platform`?** `order_by=source` is accepted and the client reads a
+  `source` or `platform` field, which implies tags can originate somewhere other than Superhero
+  posts. Whether off-platform trends are ingested, and from where, is not stated anywhere
+  available.
+- **How do topics and trending tags relate?** They are separate endpoints with separate shapes.
+  Whether every topic gets a trending-tag row, and whether a trending tag can exist with no
+  posts behind it, is unconfirmed.
+- **Who may call `POST /api/trending-tags`?** The generated client exposes a create method for
+  trending tags with no callers in the app and no documented authorisation.
+
+## Read more
+
+- [Posting](/social/posting) — where the tag is written, and the other content conventions.
+- [The Feed](/social/feed) — topic feeds and the `trendingBoost` ranking signal.
+- [Tokens overview](/tokens/overview) — what a hashtag becomes once it has a token.
+- [Trending score](/tokens/trending-score) — the token-side ranking this index feeds.
+- [Collections and naming](/tokens/collections-and-naming) — the character and length rules a
+  tag must satisfy to become a token.
+- [Tokenize a trend](https://superhero.com/trends/create) — create the token for a hashtag.
+- [Trending tokens](https://superhero.com/trends/tokens) — the live token index.

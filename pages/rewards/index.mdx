@@ -1,0 +1,73 @@
+---
+title: "Rewards & Affiliation"
+description: "Earn AE through the rewards program, invite links and the four-level affiliation system."
+---
+
+# Rewards & Affiliation
+
+Superhero pays out AE through two completely separate systems. They share a page in the app
+(`/trends/invite`) and they are routinely confused, so start here before reading anything
+else in this section.
+
+## Two programs, one page
+
+| | Superhero Rewards Program | Trading Affiliate Program |
+| --- | --- | --- |
+| What you do | Link your X account, post about Superhero | Create funded invite links, get people trading |
+| Who pays | Superhero's backend, off-chain scan of your X posts | The bonding curve — 0.5% of every buy in your downline |
+| Where the money comes from | A discretionary program budget | Protocol fees, split on-chain |
+| Payout | Sent automatically to your connected wallet | You call `withdraw()` on the AffiliationTreasury contract |
+| Gate | X account with at least 100 followers | 4 direct invitees who have each spent at least 10 AE |
+| Ceiling | The FAQ quotes "up to 200 AE" | Uncapped — it accrues as long as your downline trades |
+| Can be switched off | Yes, at any time without notice | No, it is contract logic |
+
+The **Superhero Rewards Program** is a growth campaign. It is off-chain, discretionary,
+geo-restricted, and explicitly not guaranteed.
+
+The **Trading Affiliate Program** is protocol mechanics. Every community-token buy carries a
+1% spread; half of it goes to the community DAO and half to affiliation. That affiliation
+half is split across up to four levels of referrers above the buyer, and if there is no
+referrer it is **burned** rather than kept by anyone.
+
+## The affiliation split at a glance
+
+```text
+Buyer pays AE for a community token
+  ├── 99.0%  → bonding curve reserve (redeemable by sellers)
+  ├──  0.5%  → community DAO treasury
+  └──  0.5%  → affiliation system
+                ├── 0.300% → level 1 (direct inviter)
+                ├── 0.125% → level 2
+                ├── 0.050% → level 3
+                └── 0.025% → level 4
+                (if the buyer has no inviter: burned)
+```
+
+Source: the "Affiliation Bonding Curve Token Sale" and "Token Economics Summary" sections of
+the [Superhero whitepaper](https://superhero.com/whitepaper).
+
+## In this section
+
+- [Superhero Rewards Program](/rewards/rewards-program) — the two X milestones, the follower
+  tiers, the streak bonus, and the eligibility disclaimer you must read before participating.
+- [Claiming Rewards](/rewards/claiming) — which rewards arrive automatically, which need a
+  transaction you sign, and what the failure modes look like.
+- [The Affiliation System](/rewards/affiliation) — the deep page. Exact percentages, the
+  `AffiliationTreasury` contract surface, payout periods, and the burn on unaffiliated buys.
+- [Invite Links](/rewards/invite-links) — creating, funding, sharing, revoking and tracking
+  invite links. Read the secrecy warning on that page before you generate one.
+- [Leaderboards](/rewards/leaderboards) — the trading leaderboard, its four metrics, and the
+  endpoint behind it.
+
+## Read more
+
+- [Bonding curve fees and slippage](/tokens/fees-and-slippage) — where the 1% spread that
+  funds affiliation actually comes from.
+- [Value flow](/concepts/value-flow) — the full picture of how AE moves through the protocol.
+- [AffiliationTreasury contract](/contracts/affiliation-treasury) — the contract reference.
+- [X verification](/identity/x-verification) — linking your X account to your SuperheroID,
+  which is the precondition for the rewards program.
+- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — both programs live
+  on this one page in the app.
+- [Superhero FAQ](https://superhero.com/faq) — the canonical short answers on rewards,
+  milestones, eligibility and invitations.

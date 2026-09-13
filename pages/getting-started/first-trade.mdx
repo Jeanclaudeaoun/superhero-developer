@@ -1,0 +1,163 @@
+---
+title: "Your First Trade"
+description: "Buy a community token from the token page, read the quote correctly, and verify the result."
+---
+
+# Your First Trade
+
+Community tokens on Superhero do not trade on an order book. Each one has a **bonding curve**: a
+contract that mints new tokens when you buy and burns them when you sell, with the price determined
+by supply rather than by a counterparty. There is always liquidity and there is never a bid-ask
+queue. This page walks one buy end to end.
+
+Start at **[superhero.com/trends/tokens](https://superhero.com/trends/tokens)**. It is sorted by
+market cap by default, so established communities surface first.
+
+## Buy
+
+1. Open a token from the trending list. You land on `/trends/tokens/<token name>`.
+2. Choose the **Trade** tab. The token page's tabs are Feed, Trade, Info, Transactions and Holders;
+   the last three are only available once the token actually exists on chain.
+3. Press **Connect** if you have not already. Trading needs a connected account.
+4. Make sure **Buy** is selected, and enter an amount. The two fields are linked — type AE and it
+   shows you the tokens you would receive, or type tokens and it shows the AE required.
+5. Read the quote. Check the slippage setting (see below) before you commit.
+6. Press buy and **approve in your wallet**.
+7. The confirmation shows what you received, and — on a buy — any protocol DAO tokens minted to you
+   alongside.
+
+### Selling is two transactions
+
+Worth knowing before you try it, because the extra prompt looks like a bug otherwise. Selling an
+AEX-9 token requires granting the sale contract an allowance first, so the app runs:
+
+1. **Approve allowance** — step 1 of 2.
+2. **Sell with the existing allowance** — step 2 of 2.
+
+Buying is a single transaction: the AE rides along with the call, so there is nothing to pre-approve.
+
+## Reading the quote
+
+### It is an estimate, not a fill price
+
+The quote is computed against the curve's state *right now*. Between your click and your transaction
+landing in a block, other people's buys and sells move that state. On a rising curve, the tokens you
+receive for a given amount of AE can be slightly fewer than quoted.
+
+That is what slippage tolerance is for.
+
+### Slippage
+
+| | |
+| --- | --- |
+| Default | **1%** |
+| Allowed range | 0 to 50% |
+| Stored | Per browser, in local storage under `tokenTrade:slippage` |
+| Passed to | Every buy and sell call, as the contract's tolerance parameter |
+
+Setting it too low means trades fail when the price moves. Setting it high means you accept a worse
+execution silently. The default is a reasonable starting point; change it deliberately, not to force
+a failing trade through.
+
+### Max does not mean your whole balance
+
+The **Max** button withholds a reserve, because a trade for every last aetto cannot pay its own fee:
+
+```text
+max = balance − balance × (slippage + 1) / 100 − 0.001 AE
+```
+
+At the default 1% slippage that is roughly a 2% slippage allowance plus a flat 0.001 AE gas reserve.
+This is the usual cause of "insufficient balance" on a balance that looks sufficient.
+
+### The spread is structural
+
+Every curve trade carries a **1% spread** between the buy price and the sell price. It is not a fee
+the app charges — it is split by the contract:
+
+```text
+On a buy, the AE you spend is allocated:
+  ├── 99.0%  → the bonding curve reserve (what sellers redeem against)
+  ├──  0.5%  → the community's DAO treasury
+  └──  0.5%  → the affiliation system
+                ├── 0.300% → level 1 referrer
+                ├── 0.125% → level 2 referrer
+                ├── 0.050% → level 3 referrer
+                └── 0.025% → level 4 referrer
+```
+
+Unaffiliated affiliation fees are burned rather than accumulated. Practically: buying and
+immediately selling the same amount loses you about 1% before any price movement. Round-tripping is
+not free.
+
+### Protocol DAO tokens
+
+Buying also mints protocol-level DAO tokens to you, proportional to purchase activity. The
+confirmation screen shows the amount and symbol when this happens. These are separate from the
+community token you bought — see [Protocol DAO](/dao/protocol-dao).
+
+## What you are signing
+
+If you use Superhero's built-in wallet, the confirmation names the call rather than showing raw
+bytes:
+
+- **Buy tokens** — *"Spends the AE attached to this call to buy tokens from this sale contract."*
+- **Sell tokens** — *"Sells your tokens back to this sale contract for AE."*
+- **Lets another account spend your tokens up to this amount** — the allowance step of a sell.
+
+Two things to check on that screen every time: the **contract address** matches the token you meant,
+and the **AE amount** is what you typed. Token amounts are shown in raw base units, not scaled by the
+token's decimals, so count digits rather than eyeballing magnitude.
+
+## Verify the result
+
+Do not rely on the success toast alone.
+
+| Where | What it tells you |
+| --- | --- |
+| **Transactions** tab on the token page | Recent buys and sells with timestamps and transaction hashes — yours should be at the top |
+| **Holders** tab | Top addresses and balances; your address should now appear with its balance |
+| [aescan.io](https://aescan.io) | The raw transaction: sender, contract called, gas consumed, block |
+| Your wallet | The token balance, discovered from the middleware's AEX-9 balance index |
+
+The app's own FAQ describes the two tabs the same way: Holders shows top addresses and balances for
+the token; Transactions lists recent buys and sells with timestamps and transaction hashes.
+
+If the token has not appeared in your wallet's list yet, that is an indexing delay rather than a
+failed trade — the transaction on aescan is authoritative. See
+[Managing AEX-9 Tokens](/wallets/aex9-tokens) for how balance discovery works.
+
+## Before you buy anything meaningful
+
+The app's own risk answer, unedited: *"Volatility and smart-contract risk are real. Double-check
+addresses and amounts before signing. Never risk funds you cannot afford to lose."*
+
+Specifically for curve tokens:
+
+- Price is a function of supply, not of demand from a counterparty — an early buyer's gain comes
+  from later buyers pushing along the curve.
+- The 1% spread is a floor on round-trip cost.
+- A community token is not equity and carries no claim on anything. Read
+  [Token Risks](/tokens/risks).
+- Start small. Buy an amount you would shrug at losing, watch how the mechanics behave, then decide.
+
+## Read more
+
+- [Buying and Selling](/tokens/buying-and-selling) — the trade mechanics in full, beyond a first trade.
+- [Fees and Slippage](/tokens/fees-and-slippage) — the spread, the split and the tolerance parameter in detail.
+- [The Bonding Curve](/tokens/bonding-curve) — why the price moves the way it does.
+- [The Token Page](/tokens/token-page) — every tab and chart on `/trends/tokens/:tokenName`.
+- [Token Risks](/tokens/risks) — read before the trade, not after.
+- [superhero.com/trends/tokens](https://superhero.com/trends/tokens) — the trending list, where this starts.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the curve, the spread and the affiliation split, from the source.
+
+## Open questions
+
+- What exponential curve parameters does a new community launch with, and are they configurable per
+  collection? The whitepaper describes the curve qualitatively and expects only 10–20% of total
+  supply to be reached, but the concrete parameters were not traced for this page — see
+  [Curve Parameters](/tokens/curve-parameters).
+- Is the quote recomputed continuously while the trade card is open, or only on input change? The
+  trade hook reads store state at submit time; the refresh cadence was not established.
+- An annotated screenshot of the trade card, with every field labelled, is wanted here. None exists
+  in the repositories.

@@ -1,0 +1,132 @@
+---
+title: "Setting up GitHub Copilot"
+description: "Install the Superhero skill for Copilot, and where Copilot's capabilities stop short of a scheduled agent."
+---
+
+# Setting up GitHub Copilot
+
+Copilot reads the same Agent Skills format the rest of this section uses, so the Superhero
+skill installs with a `git clone` and works without modification. What Copilot does not give
+you is a scheduler, and one of its surfaces — the cloud coding agent — is a poor place to put
+a private key at all. Both are covered below.
+
+## Install
+
+Personal, shared across your projects:
+
+```bash
+mkdir -p ~/.copilot/skills
+cd ~/.copilot/skills
+git clone https://github.com/superhero-com/superhero-agent-skill.git superhero
+cd superhero && npm install
+```
+
+Copilot also reads personal skills from `~/.agents/skills`, and project skills from
+`.github/skills`, `.claude/skills` or `.agents/skills` inside a repository. If you already have
+the skill in `~/.claude/skills/superhero` for Claude Code, a symlink avoids a second copy
+drifting out of date.
+
+Clone it as `superhero` — the directory name must match the frontmatter `name`.
+
+## Managing it in the CLI
+
+Copilot CLI exposes skill management as slash commands:
+
+| Command | What it does |
+| --- | --- |
+| `/skills list` | Show the skills Copilot has discovered |
+| `/skills info superhero` | Inspect one skill and confirm it loaded |
+| `/skills add` | Register an additional skills location |
+| `/skills reload` | Re-scan without restarting the session |
+
+After the clone, run `/skills reload` then `/skills info superhero`. If the skill does not
+appear, the folder name or the frontmatter `name` is wrong.
+
+## Which surfaces support it
+
+Agent Skills are supported across Copilot CLI, the Copilot coding agent, and agent mode in
+Visual Studio Code. The three differ in ways that matter a great deal for a skill that signs
+blockchain transactions:
+
+| Surface | Runs where | Suitable for this skill? |
+| --- | --- | --- |
+| Copilot CLI | Your machine, your shell, your environment variables | Yes. This is the surface to use |
+| VS Code agent mode | Your machine, inside the editor | Yes, with the same environment-variable setup |
+| Copilot coding agent | GitHub's cloud environment | **Not recommended.** See below |
+
+### Why not the cloud coding agent
+
+The cloud agent does not inherit your local environment. Giving it `AE_PRIVATE_KEY` means
+storing a self-custodial signing key as a repository or environment secret in GitHub's
+infrastructure, where its blast radius is every workflow and every collaborator with the
+rights to run one. A key that can move funds is not the same kind of secret as a deploy token:
+there is no revocation, no rate limit, and no chargeback. If it leaks, the wallet is drained
+and there is no recourse.
+
+If you want an unattended agent, run it on a host you control — see
+[Other Agents & Runtimes](/agents/other-runtimes) — or use the OpenClaw Gateway, which was
+designed for it.
+
+## Set the key
+
+For Copilot CLI and VS Code agent mode, the key is an ordinary environment variable in the
+process that launches Copilot:
+
+```bash
+export AE_PRIVATE_KEY=<your_secret_key>
+```
+
+The same warnings apply as everywhere else in this section: a dedicated wallet, funded only
+with what you can lose, and never a shell profile if you can avoid it. Read
+[Wallet & Key Management](/agents/wallet-and-keys).
+
+Because five of the skill's scripts read `./contracts/` relative to the working directory, run
+Copilot from the skill directory or tell it where to run the scripts from.
+
+## Start it
+
+> Based on the /superhero skill, start the setup guide.
+
+Everything after that is runtime-neutral: the agent detects the key, verifies the balance,
+offers a `.chain` name, and asks whether you want autonomous or manual mode.
+
+## Scheduling: the gap
+
+Copilot has no equivalent of OpenClaw's Gateway cron. There is nothing in the skills mechanism
+that fires a prompt on a schedule, so **autonomous mode in the sense the skill means it is not
+available from Copilot alone**. You have three options:
+
+1. **Run it interactively.** Open a Copilot CLI session when you want a cycle. This is the
+   honest fit for Copilot, and it pairs naturally with manual mode.
+2. **Schedule the scripts, not the agent.** The twelve scripts are ordinary CLI programs. A
+   cron job that runs `superhero-trending.mjs tokens 20` and pipes the JSON somewhere gives
+   you the monitoring half of the loop with no model in the path at all. See
+   [Other Agents & Runtimes](/agents/other-runtimes).
+3. **Use a different runtime for the scheduled part.** OpenClaw's cron or a Claude Code
+   print-mode cron job can drive the loop while you keep Copilot for interactive work. The
+   skill is the same files; nothing is duplicated.
+
+GitHub Actions can run a workflow on a POSIX cron `schedule` trigger, in UTC, and is the
+obvious-looking fourth option — but it lands you back in the cloud-secret problem above, and
+scheduled runs can be delayed or dropped under load, which is not a property you want in a
+trading loop. If you use it at all, use it for read-only reporting.
+
+## Read more
+
+- [Other Agents & Runtimes](/agents/other-runtimes) — the agentless and MCP paths for scheduling
+- [OpenClaw](/agents/openclaw) — the runtime with a built-in scheduler, if you need autonomy
+- [Wallet & Key Management](/agents/wallet-and-keys) — why a cloud-stored signing key is a bad trade
+- [Example Prompts](/agents/prompts) — including a research-only prompt that never signs anything
+- [Adding agent skills for Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills) — directories, discovery and the slash commands
+- [Adding agent skills for the Copilot coding agent](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills) — the cloud surface
+- [Agent Skills in VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills) — agent mode setup
+- [GitHub Copilot now supports Agent Skills](https://github.blog/changelog/2025-12-18-github-copilot-now-supports-agent-skills/) — the announcement and supported surfaces
+
+## Open questions
+
+- Whether Copilot reads a `metadata` block in SKILL.md frontmatter at all — and therefore
+  whether it can prompt for `AE_PRIVATE_KEY` the way OpenClaw's `primaryEnv` does — is not
+  documented in the skill. Assume it does not, and set the variable yourself.
+- Whether Copilot CLI's Bash execution can be pre-approved per command, the way Claude Code's
+  permission rules allow, was not verified. If every script call prompts, check Copilot's own
+  tool-permission settings before concluding it cannot.

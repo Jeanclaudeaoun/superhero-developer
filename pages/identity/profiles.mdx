@@ -1,0 +1,135 @@
+---
+title: "Profiles & Accounts"
+description: "What an account page shows and how to edit your own."
+---
+
+# Profiles & Accounts
+
+Every æternity address has a profile page on Superhero whether or not anyone has ever set it
+up. This page documents what those pages show, where each field comes from, how you edit your
+own, and how the leaderboards rank accounts.
+
+## The two profile surfaces
+
+| Route | What it is |
+| --- | --- |
+| `/users/:address` | The social profile: header, feed, owned and created tokens, transactions |
+| `/user/:address` | Legacy path; redirects to `/users/:address` |
+| `/trends/accounts` | The trader index — every account with token activity |
+| `/trends/accounts/:address` | The Trendminer view of an account, focused on trading |
+| `/trends/leaderboard` | Ranked accounts by portfolio performance |
+
+Live: the social profile is at `https://superhero.com/users/` followed by an `ak_` address.
+
+## The header
+
+| Element | Source |
+| --- | --- |
+| Display name | The linked preferred AENS name, else `public_name`, else the AENS name resolved for the address, else a shortened `ak_…` |
+| Verified badge | Rendered when an X link resolves for the account |
+| Bio | `links.bio`, falling back to `profile.bio` and then the account's own `bio` |
+| Website | `links.site` |
+| Avatar | The profile's `avatarurl`, with a deterministic generated fallback |
+| Balances and counts | The account aggregate — holdings count and total created tokens |
+
+The account aggregate served by `GET /api/accounts/{address}` carries `address`, `bio`,
+`chain_name`, `chain_name_updated_at`, an embedded `profile`, `public_name`, and a `links`
+object with `x`, `bio`, `site` and `prefered_aens_name`. The `links` object is authoritative:
+the client reads it first and treats the flat fields as fallbacks for older records.
+
+## The tabs
+
+`/users/:address` has four tabs, selected by a `tab` query parameter (`feed` is the default and
+omits the parameter):
+
+| Tab | Value | Contents |
+| --- | --- | --- |
+| Feed | `feed` | The account's posts and on-chain activity items |
+| Owned | `owned` | Tokens the account holds, ordered by balance |
+| Created | `created` | Tokens the account created |
+| Transactions | `transactions` | The account's trades, with the token expanded |
+
+All four datasets are prefetched in the background when the page loads, so switching tabs is
+instant. The feed tab merges posts from `GET /api/posts?account_address=…` with trade and
+token-creation activity items.
+
+## On-chain versus API
+
+| Field | Where it lives |
+| --- | --- |
+| Custom name, chain name, X name, display source | `ProfileRegistry.aes` state |
+| Preferred AENS name, bio, website, X link, Nostr key | Address links — signed by you, relayed on-chain by the backend |
+| AENS name ownership and pointers | æternity AENS |
+| Avatar URL, cached aggregates, counts | Superhero API |
+| Posts and comments | `Tipping` v3 contract, indexed by the API |
+| Balances, portfolio history, leaderboard stats | Computed by the API from chain data |
+
+There is no field on a profile that the API can change on its own behalf. Everything a user
+controls is behind either a contract call from their own address or a wallet signature they
+produced.
+
+## Editing your own profile
+
+The editor is the **Edit SuperheroID** action on your own profile. It is one modal over several
+independent operations, not a single save:
+
+| Field | How it is written |
+| --- | --- |
+| Bio | Claim at `/api/address-links/bio/claim`, sign the returned message, submit at `/bio/submit` |
+| Website | The same claim-sign-submit pair under `/api/address-links/site/` |
+| Preferred `.chain` name | The same pair under `/api/address-links/prefered-aens-name/` |
+| X handle | The OAuth plus attestation flow — see [Verifying Your X Account](/identity/x-verification) |
+| Fullname, avatar, custom name | The legacy challenge-and-patch path: `POST /api/profile/{address}/challenge`, sign the challenge, `PATCH /api/profile/{address}` |
+
+Each link has a matching unlink: `/unclaim` returns a message and nonce, you sign it, and
+`/unclaim/submit` relays the removal. Because the operations are independent, a partial failure
+is possible — the bio can save while the website call fails — and the editor reloads its state
+afterwards rather than assuming the form is authoritative.
+
+The legacy pair used for fullname, avatar and custom name is marked deprecated in the app's own
+REST inventory, with no callers recorded. Prefer the address-link endpoints for anything new.
+
+## Leaderboards
+
+`/trends/leaderboard` ranks accounts by portfolio performance from
+`GET /api/accounts/leaderboard`.
+
+| Query parameter | Values |
+| --- | --- |
+| `window` | `7d`, `30d` or `all` |
+| `sortBy` | `pnl`, `roi`, `aum` or `mdd` |
+| `sortDir` | `ASC` or `DESC` |
+| `points` | Sparkline resolution — 7 for a week, 30 otherwise |
+| `page`, `limit` | Pagination; the client asks for 18 per page |
+
+Each row carries `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
+`buy_count`, `sell_count`, `volume_usd`, `created_tokens_count`, `owned_trends_count` and a
+`portfolio_value_usd_sparkline` of timestamp-value pairs.
+
+Two details worth knowing before you read a ranking. The default sort direction is descending
+for every metric except maximum drawdown (`mdd`), which sorts ascending because a smaller
+drawdown is better. And the ranking is portfolio performance only — it says nothing about
+posting, tipping or governance participation.
+
+## Open questions
+
+- **What ranks the account index at `/trends/accounts`?** It reads `GET /api/accounts` with
+  `order_by` and `order_direction`, but the accepted `order_by` values are not documented in
+  the REST inventory.
+- **How is `public_name` computed server-side?** The client treats it as pre-resolved, but
+  whether the API applies the registry's chain-then-X-then-custom precedence, the account's
+  `display_source` preference, or something else, is not stated.
+- **Is `GET /api/profile/{address}` live?** It is documented with a full response shape but
+  stubbed to return `null` in the current client, which reads `GET /api/accounts/{address}`
+  instead.
+
+## Read more
+
+- [SuperheroID](/identity/superhero-id) — what the profile is a view onto.
+- [Names: Custom, Chain and X](/identity/names) — why the displayed name may not be the one you
+  set.
+- [Verifying Your X Account](/identity/x-verification) — the one profile field with a
+  cryptographic proof behind it.
+- [Profile API](/api-reference/profile) — the endpoint-level reference for everything on this page.
+- [Portfolio](/tokens/portfolio) — the holdings and performance numbers the profile surfaces.
+- [Superhero](https://superhero.com/) — open any post author's name to land on their profile.

@@ -1,0 +1,179 @@
+---
+title: "Factory & Contracts API"
+description: "Discover the live community factory, its collections and their naming rules — instead of hardcoding addresses."
+---
+
+# Factory & Contracts API
+
+`GET /api/factory` is the discovery endpoint for the whole token system. It tells you which
+community factory is live right now, which collections it offers, and exactly which characters a
+token name in each collection may contain. Read it at startup instead of hardcoding a contract
+address, and a factory upgrade or a new language collection costs you nothing.
+
+All paths are relative to `https://api.superhero.com`. Reads need no authentication.
+
+| Method & path | Status | Returns |
+| --- | --- | --- |
+| `GET /api/factory` | Live, used by the web app and the agent skill | The active community factory schema |
+| `GET /api/contracts` | **Deprecated** in the generated client | Deployed contract addresses |
+| `GET /api/stats` | Defined, no callers | Platform statistics |
+
+## `GET /api/factory`
+
+```bash
+curl -s "https://api.superhero.com/api/factory"
+```
+
+The response is the schema the web app types as `ICommunityFactorySchema`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `address` | string | `ct_...` of the live `CommunityFactory` contract |
+| `collections` | object | Map of collection key to collection data |
+
+Each entry in `collections` is an `ICollectionData`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | Full collection id, formatted `NAME-ak_deployer` |
+| `name` | string | Human-readable label, used as the badge on a token |
+| `description` | string | Optional |
+| `allowed_name_length` | **string** | Maximum token name length in this collection |
+| `allowed_name_chars` | array of rule objects | Which characters a name may contain |
+
+`allowed_name_length` is a string, not a number. Parse it.
+
+### How the app uses it
+
+Both consumers fetch the schema once and cache it. The web app holds it in a shared atom with an
+in-flight request guard so that a feed rendering dozens of rows fires exactly one `/api/factory`
+request, then passes `schema.address` to `initCommunityFactory()` from `bctsl-sdk`. The agent
+skill does the same thing from a script:
+
+```js
+// superhero-agent-skill/scripts/superhero-token-create.mjs
+const factorySchema = await fetch('https://api.superhero.com/api/factory').then(r => r.json());
+const collectionId = Object.values(factorySchema.collections)[0]?.id;
+if (!collectionId) throw new Error('Could not get collection from Superhero factory API');
+```
+
+Taking `Object.values(...)[0]` is a shortcut that works today because the default collection is
+first. If you care which collection you land in, match on `id` or `name` instead of position.
+
+### `allowed_name_chars`
+
+This is the useful part and it is worth reading carefully. Each rule is one of two forms — a set
+of single code points, or an inclusive code point range:
+
+```json
+[
+  { "SingleChar": [45] },
+  { "CharRangeFromTo": [48, 57] },
+  { "CharRangeFromTo": [65, 90] }
+]
+```
+
+That example is the English `WORDS` collection: `-`, then `0` through `9`, then `A` through `Z`.
+Turn it into a validator by mapping each rule to a character-class fragment:
+
+```js
+function allowedNameCharsToPattern(rules) {
+  return (rules || []).map((rule) => {
+    if (rule.SingleChar?.length) {
+      return rule.SingleChar.map((c) => String.fromCodePoint(c)).join('');
+    }
+    if (rule.CharRangeFromTo?.length === 2) {
+      const [start, end] = rule.CharRangeFromTo;
+      return start > end ? '' : `${String.fromCodePoint(start)}-${String.fromCodePoint(end)}`;
+    }
+    return '';
+  }).join('');
+}
+// then: new RegExp(`^[${pattern}]+$`, 'u')
+```
+
+Escape `-`, `\`, `]`, `^` and `[` before putting them in a character class, and keep the `u` flag
+so astral code points count as one character rather than as a surrogate pair.
+
+Because the rules come from the server, a name written in Chinese, Arabic or Russian is matched to
+its collection automatically, and a collection the backend adds later is picked up with no client
+change. The web app's create-token form uses exactly this to decide which collection a typed name
+belongs to.
+
+### Collection metadata on a token
+
+You do not have to join against the factory schema to label a token — `TokenDto` carries
+`collection` (the id string) and `collection_info`, a resolved `CollectionInfoDto` with `id`,
+`name`, `description` and `allowed_name_length`. `collection_info` is `null` when the token has no
+collection or the collection is unknown to the factory. See [Tokens](/api-reference/tokens).
+
+You can also filter the token list by collection directly:
+
+```bash
+# Every token in the Chinese collection
+curl -s "https://api.superhero.com/api/tokens?collection=CHINESE&limit=20"
+```
+
+`collection` accepts `all` (the default), a bare collection name, or a full collection id.
+
+## Detecting a factory upgrade
+
+There is no version field and no upgrade notification. What there is:
+
+1. **`GET /api/factory` returns `address`.** Cache it alongside the value you last saw. A change
+   means a new factory is live.
+2. **Every token carries `factory_address`.** Tokens minted by an older factory keep pointing at
+   it, so `factory_address` on a `TokenDto` is a reliable record of provenance.
+3. **`GET /api/tokens?factory_address=ct_...`** filters the token list to one deployment, which is
+   how you would enumerate what a retired factory produced.
+
+A practical check: fetch the schema, compare `address` to your cached value, and if it differs,
+re-derive anything you hold that depends on it — the factory address itself, the collection ids,
+and the `AffiliationTreasury` address, which the web app reads through the factory rather than
+from configuration:
+
+```js
+const factory = await initCommunityFactory(sdk, schema.address);
+const treasury = await factory.affiliationTreasury();
+```
+
+### Hardcoded addresses to be aware of
+
+The agent skill is not consistent about this, and the inconsistency is instructive.
+`superhero-token-create.mjs` discovers the collection from `/api/factory` at runtime, but
+`superhero-invite.mjs` hardcodes `FACTORY_ADDRESS` as
+`ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` and derives the affiliation treasury from
+it. If the factory is replaced, the first script follows and the second breaks. Prefer discovery.
+
+The web app hardcodes exactly one contract address in `src/config.ts` that this endpoint does not
+cover — `CONTRACT_V3_ADDRESS`, the social posting contract, which is
+`ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` on mainnet. Governance and DEX addresses
+are likewise configuration rather than discovery; see [Contract addresses](/contracts/addresses).
+
+## `GET /api/contracts` and `GET /api/stats`
+
+Both exist in the generated client. `GET /api/contracts` is marked `@deprecated` there;
+`GET /api/stats` is not deprecated but has no caller anywhere in either repository, and both are
+typed `any`. Neither has a documented response shape. Use `/api/factory` for the factory and
+[Analytics](/api-reference/analytics) for platform numbers.
+
+## Read more
+
+- [Tokens API](/api-reference/tokens) — `collection`, `collection_info` and `factory_address` on every token
+- [API Conventions](/api-reference/conventions) — base URLs, and why reads need no credential
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — the affiliation treasury reached through the factory
+- [Community factory](/contracts/community-factory) — what the contract itself does
+- [Collections and naming](/tokens/collections-and-naming) — the naming rules from a creator's point of view
+- [Contract addresses](/contracts/addresses) — the addresses this endpoint does not cover
+- [Create a token on superhero.com](https://superhero.com/trends/create) — the form driven by this schema
+
+## Open questions
+
+- **What is in `GET /api/stats`?** No caller, typed `any`, no documented shape.
+- **Does `GET /api/factory` ever report more than one factory?** The schema has a single
+  `address`, so the answer is presumably no — but nothing states whether an upgrade retires the old
+  factory immediately or runs both for a period.
+- **Are there rule forms other than `SingleChar` and `CharRangeFromTo`?** The web app's parser
+  returns an empty fragment for anything else, so an unrecognised rule silently narrows the
+  allowed set rather than failing. Whether the contract can emit other forms is unknown.
+- **What replaced `GET /api/contracts`?** It is marked deprecated with no successor named.

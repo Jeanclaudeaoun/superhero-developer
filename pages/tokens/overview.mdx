@@ -1,0 +1,108 @@
+---
+title: "Community Tokens"
+description: "What a community token is, which contracts it deploys, and what owning one actually gets you."
+---
+
+# Community Tokens
+
+A Superhero community token is an AEX-9 fungible token whose entire supply is minted and burned
+against a bonding curve, with a DAO treasury attached. Creating one deploys a small cluster of
+contracts in a single transaction; buying one gives you a governance stake and a write threshold in
+that community, not a claim on a company. This page frames what you are buying before
+[Bonding Curves](/tokens/bonding-curve) explains how it is priced.
+
+| Property | Value |
+| --- | --- |
+| Standard | AEX-9 (æternity fungible token) |
+| Decimals | 18, read from the token's `meta_info()` |
+| Issuance | Minted on buy, burned on sell, via the bonding curve |
+| Pricing | Exponential bonding curve, a pure function of supply |
+| Buy/sell spread | 1% of the curve value — 0.5% to the community DAO, 0.5% to affiliation |
+| Utility | Community governance voting, write-access threshold, community membership |
+| Solvency | The full supply is redeemable at all times against the curve reserve |
+| Supply cap | None. Supply is elastic and grows with demand |
+
+## What gets deployed
+
+`CommunityFactory.create_community` deploys the whole community in one transaction, in a fixed
+order:
+
+| Step | Contract | Role |
+| --- | --- | --- |
+| 1 | `FungibleTokenFull` | The AEX-9 token itself: balances, transfers, allowances |
+| 2 | `BondingCurveExponential` | Pricing. Pure arithmetic, no state of its own |
+| 3 | `AffiliationBondingCurveTokenSale` | Buy, sell, mint, burn, affiliation fee routing |
+| 4 | `DAO` | Owner and beneficiary of the sale; holds the treasury |
+| 5 | `CommunityManagement` | Moderators, mute list, write threshold, community metadata |
+| 6 | — | Registration in the factory's on-chain community registry |
+| 7 | — | Optional initial token purchase, in the same transaction |
+
+`create_community` returns the tuple `(DAO, TokenSale, CommunityManagement)`. In practice the
+bonding curve contract is shared: the factory exposes a single `bonding_curve()` and the sale
+contract points at it, so all communities from one factory price on the same curve.
+
+## Token address versus sale address
+
+This trips people up constantly, because both are `ct_` addresses and both appear on a token page.
+
+| Address | Field on the API | What you do with it |
+| --- | --- | --- |
+| Token contract | `address` | AEX-9 operations: `balance`, `transfer`, `create_allowance` |
+| Sale contract | `sale_address` | Everything about trading: `price`, `buy`, `sell`, `sell_return` |
+| Bonding curve | `bonding_curve_address` | Read-only pricing maths |
+| DAO | `dao_address` | Treasury, proposals, votes |
+
+**The sale address is the handle.** Every CLI command, every portfolio row and every trending
+listing keys off `sale_address`; you only need the token address when you are doing raw AEX-9 work
+such as approving an allowance before a sell. A useful quirk: the sale contract holds tokens under
+the account form of its own address, so an allowance is granted to `sale_address` with its `ct_`
+prefix rewritten as `ak_` — see [Buying & Selling](/tokens/buying-and-selling).
+
+## What holding the token gets you
+
+- **Governance.** Holders at or above the community's `minimum_token_threshold` can open DAO votes; any holder can vote, with voting weight equal to the tokens they lock in the vote contract. Opening a vote costs 555 AE, paid to the DAO. See [DAO voting](/dao/voting).
+- **A treasury you collectively control.** 0.5% of the curve value on every trade accrues to the community's DAO, and holders vote on how it is spent. See [Treasury](/dao/treasury).
+- **Write access and membership.** `CommunityManagement` stores a `minimum_token_threshold` that gates write access in the community for verified accounts, plus the moderator set and mute list. See [Moderators](/dao/moderators).
+- **ProtocolDAO tokens.** Buying a community token also mints you platform-wide ProtocolDAO tokens, proportional to the AE value of the buy. Their governance framework is not yet live. See [ProtocolDAO](/dao/protocol-dao).
+
+## What it is not
+
+Documentation is the wrong place to be coy about this.
+
+- **Not equity.** A community token conveys no ownership of any company, no share of profits, and no claim on anyone's assets other than the AE sitting in its own bonding-curve reserve.
+- **Not a revenue share.** The DAO treasury is spent by vote, not distributed automatically. There is no dividend.
+- **Not a fixed-supply asset.** Anyone can mint more at any time by buying. Your percentage of the supply falls whenever someone else buys, even if your balance does not change.
+- **Not backed by a promise.** The only guarantee is arithmetic: the curve will always quote you a sell price, and the reserve will always be able to pay it. Whether that price is higher or lower than what you paid depends entirely on what everyone else does.
+- **Not free to enter and exit.** The 1% spread means an instant round trip returns about 0.995 of what you put in, before gas. See [Risks](/tokens/risks).
+
+## Two token types on the platform
+
+| Aspect | Community token | ProtocolDAO token |
+| --- | --- | --- |
+| Standard | AEX-9 | AEX-9 |
+| Scope | One community | The whole platform |
+| Issuance | Minted on buy against the curve | Minted as a reward on every community-token buy |
+| Price | Bonding curve | Not sold; issued only as a by-product of buying |
+| Utility today | Voting, write threshold, membership | None yet — issuance is live, governance is in development |
+
+The whitepaper puts ProtocolDAO issuance at **1,000× the AE value of each buy**. The web app's own
+estimate is slightly lower: `protocolTokenReward` in `useTokenTrade.ts` computes
+`(1 − 0.05) × 1000 × aeValue`, i.e. 950 tokens per AE spent, using a constant named
+`PROTOCOL_DAO_AFFILIATION_FEE = 0.05`. Treat the on-chain `Mint` event emitted by the protocol token
+contract on your buy as the authority — the app reads exactly that event to display what you
+actually received.
+
+## Read more
+
+- [Bonding Curves](/tokens/bonding-curve) — how the price of all this is computed, with worked numbers
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — launch one from the app in a few minutes
+- [Collections & Naming Rules](/tokens/collections-and-naming) — the namespace your token name has to fit into
+- [Community factory contract](/contracts/community-factory) — `create_community` and the registry, entrypoint by entrypoint
+- [Risks](/tokens/risks) — read this before you buy anything
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list of every community token
+- [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the fungible token specification these tokens implement
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the source for the deployment sequence and the token economics summary
+
+## Open questions
+
+- The 1,000× and 950× ProtocolDAO issuance figures above disagree. The whitepaper states 1,000× the AE value of the buy; the app's display constant nets off 5% first. Decoding a `Mint` event from the protocol token contract on any recent buy transaction — the address is on the factory as `protocol_dao_token()` — would settle which is the on-chain behaviour.

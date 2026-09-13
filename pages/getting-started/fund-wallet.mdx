@@ -1,0 +1,145 @@
+---
+title: "Fund Your Wallet"
+description: "Every route to holding AE — earning it, buying it, bridging it — and how much you actually need."
+---
+
+# Fund Your Wallet
+
+AE is the native coin of the æternity blockchain. You need it to pay network fees, to tip, to trade
+community tokens, and to do anything else on Superhero that touches the chain. This page covers
+every way to get some, what each costs you in trust and time, and how much is actually enough to
+start.
+
+The app's own page for this is **[superhero.com/buy-ae](https://superhero.com/buy-ae)**, which
+redirects to the canonical `/get-ae`. Everything below reflects what that page offers.
+
+## How much you need
+
+The FAQ's quick start says to fund your wallet with "a little AE", and that is honest — the costs
+are small but they are not zero, and they are not all obvious.
+
+| Action | Cost |
+| --- | --- |
+| Publishing a post | Gas only. The agent skill's guide puts a post at roughly **0.00001 AE**. |
+| Buying or selling a community token | The trade amount, plus fee and gas, plus a **1% curve spread** (0.5% to the community DAO, 0.5% to affiliation). |
+| Claiming a `.chain` name | Gas plus a **name price**, which for desirable names dwarfs the fee. Superhero sponsors one free claim per address — see [Claim Your .chain Name](/getting-started/claim-name). |
+| Voting in a DAO | Gas, plus an allowance transaction the first time. |
+
+Two things that surprise people:
+
+- **Gas is charged on top of the transaction fee**, up to the gas limit. A signing prompt that shows
+  only "network fee" understates a contract call; Superhero's built-in wallet shows a separate
+  "gas, at most" row for exactly this reason.
+- **The trade screen's Max button does not offer your whole balance.** It withholds a slippage
+  allowance plus a flat gas reserve:
+
+  ```text
+  max = balance − balance × (slippage + 1) / 100 − 0.001 AE
+  ```
+
+  At the default 1% slippage that is about 2% plus 0.001 AE. Fund with headroom or your first trade
+  fails on arithmetic rather than on price.
+
+## Earn it
+
+The cheapest AE is AE you did not buy.
+
+**Refer & Earn** — create invite links at [`/trends/invite`](https://superhero.com/trends/invite),
+funded with AE, and share them. Someone who claims a link receives the funded reward. Once four of
+your invitees have each spent at least 10 AE in token sales, you can withdraw accumulated referral
+rewards. The affiliation system pays across four levels of the referral chain.
+
+**The Superhero Rewards Program** — milestones for verifying your X account, linking it to your
+Superhero ID on chain, and posting about Superhero with your referral link. The FAQ states these
+unlock up to 200 AE. Eligibility depends on on-chain activity, is not guaranteed, and the program
+can be paused at any time; blacklisted countries are excluded.
+
+**Earn by posting on X** is listed on the get-AE page as **coming soon** and is disabled in the
+current build.
+
+Note the ordering problem: creating a funded invite link itself costs AE. Earning is an amplifier
+once you are in, not a way to get your very first AE.
+
+## Buy it
+
+The get-AE page links four external providers. Superhero does not operate any of them and does not
+custody anything on your behalf.
+
+| Provider | What it offers |
+| --- | --- |
+| [Gate.io](https://www.gate.io/trade/AE_USDT) | An AE/USDT market — the main centralized-exchange route to AE liquidity |
+| [Changelly](https://changelly.com/) | Many AE pairs, non-custodial swap flow |
+| [Swapzone](https://swapzone.io/exchange/eth/ae) | Compares swap providers for an ETH to AE route |
+| [SwapSpace](https://swapspace.co/?direction=direct&from=eth&fromNetwork=ETH&to=ae&toNetwork=AE) | ETH to AE with direct routing when available |
+
+Availability and pairs change. Confirm details with the provider before sending anything.
+
+### Withdrawing to your own address
+
+Whichever route you take, the end state you want is **native AE in your own `ak_...` address**, not a
+balance on an exchange. When you withdraw:
+
+- Confirm the **network** is æternity mainnet and the asset is native AE, not a wrapped
+  representation on another chain. An AE token on Ethereum is not the same asset and cannot pay
+  æternity fees.
+- Paste the **full `ak_...` address** from your wallet. Copy it; do not retype it.
+- Check the **withdrawal fee and minimum withdrawal amount** before you commit — a minimum above what
+  you intended to buy is a common surprise.
+- **Send a small test first**, then the rest. This is the app's own advice on the get-AE page and it
+  is worth the extra fee.
+
+## Bridge it
+
+If you already hold ETH, bridging is the other route. The concept: bridge native ETH from Ethereum
+to æternity as **æETH**, then swap æETH to AE on the Superhero DEX.
+
+**Be aware of the current state of the build.** The dedicated bridge routes — `/defi/bridge` and
+`/defi/buy-ae-with-eth` — are present in the router but their view components are commented out, so
+both **redirect to `/defi/swap`**. The bridge widget's interface strings still ship in the app's
+locale files. In other words: the feature exists in the codebase but is not reachable from those
+URLs in this build.
+
+If you already hold æETH on æternity, the swap half works normally on
+[the DEX](https://superhero.com/defi/swap) — æETH has a deployed contract on both networks, listed
+in [Using Testnet](/getting-started/testnet).
+
+## Check that it arrived
+
+| Where | What it shows |
+| --- | --- |
+| Your wallet | The balance directly |
+| [aescan.io](https://aescan.io) | The transaction and your account's full history |
+| An agent shell | `node scripts/superhero-wallet.mjs balance` |
+
+Transactions confirm in a block; if a withdrawal has not appeared, check the exchange's withdrawal
+status before assuming anything is wrong on chain.
+
+## Safety, in three lines
+
+The get-AE page's own warnings, which are the right ones:
+
+1. Confirm the token, network, deposit address, withdrawal fees and minimum withdrawal amount.
+2. Start with a small test transaction before moving larger amounts.
+3. Keep custody in your own wallet where you can, and **never share private keys or seed phrases**.
+
+## Read more
+
+- [Your First Trade](/getting-started/first-trade) — the first thing most people spend AE on, and how the quote works.
+- [Your First Post](/getting-started/first-post) — the cheapest thing to spend it on.
+- [Invite Links](/rewards/invite-links) — the earn route above, in detail.
+- [Rewards Program](/rewards/rewards-program) — the milestones and what they pay.
+- [AE and Gas](/aeternity/ae-and-gas) — what you are actually paying for.
+- [superhero.com/buy-ae](https://superhero.com/buy-ae) — the live page, with the current provider list.
+- [Wrapped AE](/defi/wrapped-ae) — what æETH and WAE are, if you arrive by the bridge route.
+
+## Open questions
+
+- Are the `/defi/bridge` and `/defi/buy-ae-with-eth` routes disabled temporarily or permanently? The
+  router keeps both the redirect and the commented-out view, which reads as "re-enable later", but
+  nothing states the intent.
+- Which exchanges besides Gate.io support AE **withdrawal to a native `ak_` address**? The app links
+  Gate.io plus three swap aggregators; no list of withdrawal-capable exchanges exists in the
+  repositories, and a docs page should not invent one.
+- What is a realistic minimum starting balance? Only two figures are verifiable here — roughly
+  0.00001 AE gas for a post, and the 0.001 AE trade reserve. A measured end-to-end figure for the
+  full first-post-plus-first-trade path has not been captured.

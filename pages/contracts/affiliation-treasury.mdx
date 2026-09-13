@@ -1,0 +1,267 @@
+---
+title: "AffiliationTreasury"
+description: "Referral accounting, invite codes and reward withdrawal."
+---
+
+# AffiliationTreasury
+
+`AffiliationTreasury.aes` is the one contract shared by every community. It holds the referral
+tree, the funded invite codes, and the accumulated AE rewards each account can withdraw. Every
+token sale calls into it on every buy.
+
+Mainnet `ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ`, testnet
+`ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK`. Better: resolve it at runtime with
+`factory.affiliation_treasury()`, which is what the agent skill's `superhero-invite.mjs`
+does. The ACI lives inside `superhero-agent-skill/contracts/CommunityFactory.aci.json`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `() => AffiliationTreasury.state` | — |
+| `register_invitation_code` | `(invitation_addresses: list(address), redemption_fee_cover: int, invitation_amount: int) => unit` | stateful, payable |
+| `revoke_invitation_code` | `(invitation_address: address) => unit` | stateful |
+| `redeem_invitation_code` | `(invitee_address: address) => unit` | stateful |
+| `register_invitation` | `(inviter_address: address) => unit` | stateful |
+| `record_sale_transaction` | `(buyer: address, transaction_value: int) => unit` | stateful, payable |
+| `withdraw` | `() => unit` | stateful |
+| `get_accumulated_rewards` | `(account: address) => int` | — |
+| `get_direct_inviter` | `(account: address) => option(address)` | — |
+| `get_affiliation_tree` | `(address: address) => address` | — |
+| `affiliation_tree` | `() => map(address, address)` | — |
+| `get_affiliation_fee_percentage` | `() => int` | — |
+| `get_affiliation_fee_percentages` | `() => list(int)` | — |
+| `get_affiliation_fee_precision` | `() => int` | — |
+| `get_invitation_code` | `(address: address) => tuple(address, int, bool)` | — |
+| `invitation_codes` | `() => map(address, tuple(address, int, bool))` | — |
+| `get_unique_invitee` | `(address: address) => AffiliationTreasury.unique_invitees_state` | — |
+| `unique_invitees` | `() => map(address, AffiliationTreasury.unique_invitees_state)` | — |
+| `get_payout_period` | `() => int` | — |
+| `payout_periods` | `() => map(int, map(address, int))` | — |
+| `get_state` | `() => AffiliationTreasury.state` | — |
+
+## Types
+
+```sophia
+datatype unique_invitees_state =
+    ThresholdReached
+  | WaitingForInvitations(Set.set(address), map(address, int))
+                       // invitees seen,    per-invitee buy volume
+
+record state =
+  { payout_periods   : map(int, map(address, int))
+  , affiliation_tree : map(address, address)                  // invitee -> direct inviter
+  , invitation_codes : map(address, (address * int * bool))   // inviter, amount, redeemed?
+  , unique_invitees  : map(address, unique_invitees_state) }
+```
+
+`invitation_codes` is keyed by the **invite address** — the public key of a throwaway keypair
+whose secret key is the invite link. Each entry is a three-element tuple, decoded in
+JavaScript as an array:
+
+```javascript
+const [inviter, amount, redeemed] = await treasury
+  .get_invitation_code('ak_invite...')
+  .then((r) => r.decodedResult);
+```
+
+## The fee split
+
+The percentages are literal constants in the public Sophia source:
+
+```text
+let affiliation_fee_precision  = 1 * 10 ^ 5          // 100000
+let affiliation_fee_percentages = [300, 125, 50, 25]
+entrypoint get_affiliation_fee_percentage(): int = 500  // 0.5%, hardcoded for performance
+```
+
+Dividing by the precision gives the whitepaper's four levels exactly:
+
+| Level | Constant | Share of the transaction |
+| --- | --- | --- |
+| 1 — the direct inviter | 300 | 0.300% |
+| 2 | 125 | 0.125% |
+| 3 | 50 | 0.050% |
+| 4 | 25 | 0.025% |
+| **Total** | **500** | **0.500%** |
+
+`get_affiliation_fee_percentage()` returns the pre-summed `500` — the source comments this as
+"hardcoded for performance, sum of affiliation_fee_percentages". So the answer to whether
+`get_affiliation_fee_percentages` returns the 0.3 / 0.125 / 0.05 / 0.025 split is **yes**, at
+a precision of 10^5.
+
+Always divide by `get_affiliation_fee_precision()`, not by a hardcoded 100000, in case the
+constant changes in a future deployment.
+
+## How a buy pays out
+
+`record_sale_transaction(buyer, transaction_value)` is payable and is called by the token sale
+during `buy_with_affiliation`. The treasury checks that the attached AE really is the
+affiliation share before crediting anyone:
+
+```text
+let required_fee = (get_affiliation_fee_percentage() * transaction_value) / affiliation_fee_precision
+require(Call.value >= required_fee, "AMOUNT_IS_NOT_EQUAL_TO_THE_AFFILIATION_PERCENTAGE")
+update_inviters(buyer, buyer, transaction_value, affiliation_fee_percentages)
+```
+
+`update_inviters` then walks up the `affiliation_tree` from the buyer, crediting each level
+its share. Rewards accumulate in the contract; they are not spent out on each buy.
+
+### The burn path for unaffiliated buys
+
+When a buy comes through the plain `buy(count)` entrypoint, no affiliation rewardee is
+supplied and the treasury is not credited. The 0.5% is burned rather than accumulated. The
+whitepaper is explicit that this is a security property, not an oversight: there is no pool of
+unclaimed affiliation AE for anyone to contest, extract, or govern.
+
+The burn itself happens at the sale layer, not in the treasury — the treasury only ever sees
+fees that have a referral chain attached. The exact burn call in
+`AffiliationBondingCurveTokenSale.aes` was not read line by line; see Open questions.
+
+## Invite codes
+
+An invite is a funded keypair. You generate a throwaway account, register its public key with
+the treasury along with a gift amount, and hand the **secret key** to the invitee as a link.
+
+```javascript
+import { MemoryAccount } from '@aeternity/aepp-sdk';
+
+const REDEMPTION_FEE_COVER = 10n ** 15n;                 // 0.001 AE, the contract minimum
+const inviteAmount = BigInt(new BigNumber(1).shiftedBy(18).toFixed(0));   // 1 AE gift
+const keyPairs = Array.from({ length: 5 }, () => MemoryAccount.generate());
+
+const totalCost = (inviteAmount + REDEMPTION_FEE_COVER) * BigInt(keyPairs.length);
+
+await treasury.register_invitation_code(
+  keyPairs.map((kp) => kp.address),
+  REDEMPTION_FEE_COVER,
+  inviteAmount,
+  { amount: totalCost.toString() },
+);
+
+// The link carries the secret key:
+const links = keyPairs.map((kp) => `https://superhero.com#invite_code=${kp.secretKey}`);
+```
+
+The contract enforces both numbers exactly:
+
+```text
+let minimum_redemption_fee_cover = 10 ^ 15 // minimal amount to cover redemption tx fees is
+                                           // ~2.01e14 (overpaid by few times to be sure)
+require(redemption_fee_cover >= minimum_redemption_fee_cover, "MINIMUM_REDEMPTION_AND_FEE_NOT_MEET")
+require(Call.value == (redemption_fee_cover + invitation_amount) * List.length(invitation_addresses),
+        "INVITATION_AMOUNT_AND_FEE_NOT_MATCHING")
+```
+
+| Rule | Value |
+| --- | --- |
+| Minimum `redemption_fee_cover` | `10 ^ 15` aettos = 0.001 AE per invite |
+| Required `Call.value` | exactly `(redemption_fee_cover + invitation_amount) * number of addresses` |
+| `invitation_amount` semantics | per invite, not a total |
+
+The redemption fee cover exists because a brand-new invitee has no AE and cannot pay for their
+own redemption transaction. The source notes the real cost is around `2.01e14` aettos and the
+minimum is deliberately set several times higher.
+
+`revoke_invitation_code(invitation_address)` reclaims an unredeemed invite's funds.
+`redeem_invitation_code(invitee_address)` is what the invitee's client calls, signing with the
+secret key from the link, to claim the gift and record the inviter relationship.
+
+## Unique invitees and the payout threshold
+
+An inviter does not become eligible by handing out links — the invitees have to actually
+trade. That is what `unique_invitees_state` tracks:
+
+```sophia
+datatype unique_invitees_state =
+    ThresholdReached
+  | WaitingForInvitations(Set.set(address), map(address, int))
+```
+
+While an account is `WaitingForInvitations`, the contract holds the set of invitees seen so
+far and how much each of them has bought. Two constants from the source govern the transition:
+
+| Constant | Value | Meaning |
+| --- | --- | --- |
+| `unique_invitee_count_threshold` | `4` | how many qualifying invitees are needed |
+| `unique_invitee_buy_amount_threshold` | `10 * 10 ^ 18` | 10 AE of buys before an invitee counts |
+
+So an invitee only counts toward your threshold once they have bought at least 10 AE worth,
+and you need four such invitees before your state flips to `ThresholdReached`. This is an
+anti-sybil measure: funding four self-owned accounts and cycling 40 AE through them costs
+real spread on every trade.
+
+```javascript
+const state = await treasury.get_unique_invitee('ak_me...').then((r) => r.decodedResult);
+if ('ThresholdReached' in state) {
+  // eligible
+} else {
+  const [invitees, volumes] = state.WaitingForInvitations;
+  console.log('qualifying invitees so far:', invitees.size);
+}
+```
+
+## Payout periods and `withdraw`
+
+```text
+let payout_period_interval = 2592000000 // 1000ms * 60s * 60m * 24h * 30d
+entrypoint get_payout_period() : int = Chain.timestamp / payout_period_interval
+```
+
+The period is a **30-day bucket derived from the chain clock**, not a per-account timer.
+`get_payout_period()` returns the current bucket index — the number of 30-day windows since
+the Unix epoch. `payout_periods` maps each bucket index to a map of account to amount, so the
+contract keeps reward accounting segmented by month.
+
+`withdraw()` pays out the caller's accumulated rewards. `get_accumulated_rewards(account)`
+reads the balance available. The precise interaction between the period buckets, the
+`ThresholdReached` state and what `withdraw` releases was not read from source — see Open
+questions before building anything that predicts a payout.
+
+The treasury's own test suite patches `payout_period_interval` from `2592000000` down to
+`25920` — about 30 seconds — so tests can cross a period boundary. That confirms the period
+boundary is the thing that gates a payout.
+
+## Events
+
+```sophia
+datatype event =
+    UserInvited(address, address)                   // invitee, inviter
+  | RewardAdded(address, int)                       // user, added amount
+  | Withdrawn(address, int)                         // user, reward amount
+  | InvitationRegistered(address, address, int)     // caller, invitation_address, amount
+  | InvitationRedeemed(address, address, address)
+  | InvitationRevoked(address, address)
+  | RecordSaleTransaction(address, int)
+```
+
+The argument comments for the first four are from the source. The argument meanings for
+`InvitationRedeemed`, `InvitationRevoked` and `RecordSaleTransaction` were not read; infer
+them from the corresponding entrypoint signatures with care.
+
+## Open questions
+
+- **Exactly when `withdraw()` succeeds.** The 30-day payout period, the four-invitee
+  `ThresholdReached` state and `get_accumulated_rewards` are all verified, but the condition
+  `withdraw` itself checks — current period only, past periods only, or threshold-gated — was
+  not read from source. Read `withdraw` in
+  [`AffiliationTreasury.aes`](https://github.com/superhero-com/bcl-contracts) before relying
+  on a payout schedule.
+- **The burn call for unaffiliated fees.** The whitepaper and this page both state that the
+  0.5% is burned when no referrer exists, and the factory's collection fee is demonstrably
+  burned to `ak_11111111111111111111111111111111273Yts`. The specific burn in
+  `AffiliationBondingCurveTokenSale.aes` for the affiliation half was not read.
+- **Argument meanings for `InvitationRedeemed`, `InvitationRevoked` and
+  `RecordSaleTransaction`.** Three addresses and two addresses respectively, with no source
+  comment read.
+- **Whether the affiliation tree has a depth limit beyond four paid levels.** Rewards stop at
+  level four, but whether the tree itself is bounded was not verified.
+
+## Read more
+
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the contract that funds this one on every buy
+- [Affiliation](/rewards/affiliation) — the reward programme explained for participants
+- [Invite links](/rewards/invite-links) — creating and sharing invites from the app
+- [Claiming rewards](/rewards/claiming) — the withdrawal flow
+- [Invite friends on superhero.com](https://superhero.com/trends/invite) — where invites are generated in the app

@@ -1,0 +1,187 @@
+---
+title: "Invitations & Affiliations API"
+description: "Track invite links, their claim status and referral analytics — and how they relate to the on-chain AffiliationTreasury."
+---
+
+# Invitations & Affiliations API
+
+Superhero invites are on-chain objects: an invite link is a private key, and the AE behind it sits
+in the `AffiliationTreasury` contract until someone redeems it. This API is the indexed view of
+that — it tells you which invites an address has issued and which have been claimed, without
+making you walk the chain. Everything that *creates* or *revokes* an invite is a contract call,
+not a REST call.
+
+All paths are relative to `https://api.superhero.com`. Reads need no authentication.
+
+## Endpoints
+
+| Method & path | Query | Returns |
+| --- | --- | --- |
+| `GET /api/invitations` | `order_by`, `order_direction`, `inviter`, `limit`, `page` | Paginated invitation rows |
+| `GET /api/affiliations/invites/{code}` | — | Invite-link information for a code |
+| `POST /api/affiliations` | — | Register a batch of invite codes |
+| `POST /api/affiliations/invites/{code}/{provider}/{access_code}` | — | Exchange a provider access code for a reward code |
+| `GET /api/affiliations/preview` | — | Preview payload |
+| `GET /api/bcl-affiliation/analytics` | `start_date`, `end_date` | Referral programme metrics |
+| `GET /api/bcl-affiliation/analytics/top-inviters` | `start_date`, `end_date`, `limit` | Leaderboard of inviters |
+| `GET /api/bcl-affiliation/analytics/x-verification` | `start_date`, `end_date` | X-verification funnel metrics |
+| `GET /api/bcl-affiliation/analytics/x-invite` | `start_date`, `end_date` | X-invite usage metrics |
+| `GET /api/bcl-affiliation/tree` | — | The referral tree |
+
+Each `/api/bcl-affiliation/*` endpoint has a `/preview` sibling that takes no parameters.
+
+Account-level invite counters live on the accounts endpoint instead —
+`GET /api/accounts?order_by=total_invitation_count` also accepts
+`total_claimed_invitation_count` and `total_revoked_invitation_count`. See
+[Accounts](/api-reference/accounts).
+
+## `GET /api/invitations`
+
+The one endpoint here with a verified item shape, because the web app pages through it to
+annotate an inviter's list with claim status.
+
+| Parameter | Notes |
+| --- | --- |
+| `inviter` | Filter to invitations sent by this `ak_...` |
+| `order_by` | `amount` or `created_at` |
+| `order_direction` | `ASC` or `DESC` |
+| `limit`, `page` | Standard pagination, `limit` capped at 100 |
+
+```bash
+curl -s "https://api.superhero.com/api/invitations?inviter=ak_YOUR_ADDRESS&limit=100&page=1"
+```
+
+Fields read by the web app:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `receiver_address` | string | The **ephemeral invitee keypair** address encoded in the link |
+| `claimed` | boolean | Whether the invite has been redeemed |
+| `claimer_address` | string or null | The **real wallet** that redeemed it |
+| `claimed_at` | string or null | ISO 8601 timestamp of the claim |
+| `claim_tx_hash` | string or null | `th_...` of the claiming transaction |
+| `amount` | — | The AE behind the invite. Present, since `order_by=amount` works |
+
+The distinction between `receiver_address` and `claimer_address` is the whole model: an invite
+link *is* a throwaway private key, whose address is `receiver_address`. Whoever redeems the link
+moves the funds to their own wallet, which is `claimer_address`. A generated-but-unclaimed invite
+has a `receiver_address` and no `claimer_address`.
+
+The generated client spells out why the row carries claim status at all:
+
+> Filter to invitations sent by this address; each item includes its claim status (claimed,
+> claimer_address, claimed_at, claim_tx_hash) so callers no longer need a per-invitee middleware
+> lookup.
+
+That is a direct instruction: **use this endpoint rather than querying the middleware per
+invitee.** The web app still reads the middleware for the invite-creation transactions themselves
+(see below), and uses this endpoint only for the claim side.
+
+## `/api/affiliations/*`
+
+Four endpoints, none of which has a caller in the web app or the agent skill. What the generated
+client does state:
+
+| Endpoint | Summary | Body |
+| --- | --- | --- |
+| `GET /api/affiliations/invites/{code}` | "Get invite link" | — |
+| `POST /api/affiliations` | "Generate multiple invites link" | `CreateAffiliationDto` |
+| `POST /api/affiliations/invites/{code}/{provider}/{access_code}` | "Get reward code" | — |
+| `GET /api/affiliations/preview` | — | — |
+
+`CreateAffiliationDto` is the only typed body:
+
+```json
+{ "sender_address": "ak_...", "codes": ["...", "..."] }
+```
+
+It returns the same shape back. No credential is declared for `POST /api/affiliations` in the
+generated client — treat that as undocumented, not as an open write endpoint.
+
+The three-segment `POST` path takes an OAuth-style `provider` and `access_code` alongside the
+invite code, which reads as a social-provider reward path parallel to the X flows on
+[Profile](/api-reference/profile). Nothing in either repository confirms that reading.
+
+## How this relates to the on-chain treasury
+
+Invites are created and revoked on chain. The contract is `AffiliationTreasury`, reached through
+the community factory rather than from configuration:
+
+```js
+const factory = await initCommunityFactory(sdk, factorySchema.address);
+const treasury = await factory.affiliationTreasury();
+```
+
+Three entrypoints matter:
+
+| Entrypoint | What it does |
+| --- | --- |
+| `register_invitation_code(addresses, redemption_fee, amount)` | Funds a batch of invite keypairs. Payable — send `(amount + redemption_fee) * count` |
+| `revoke_invitation_code(address)` | Reclaims an unused invite |
+| `get_invitation_code(address)` | Returns `[sender, amount, claimed]` for one invite |
+
+The agent skill's `superhero-invite.mjs generate` does exactly this: it generates `count`
+throwaway keypairs, calls `register_invitation_code` with their addresses, and builds each link
+as the keypair's **secret key** appended to a URL fragment:
+
+```text
+https://superhero.com#invite_code=<secret key>
+```
+
+It covers redemption gas with a fixed `0.001 AE` per invite (`10n ** 15n` aettos) on top of the
+gift amount, so the total sent is `(amount + 0.001) * count` plus the call's own gas. Revoking
+takes the invite's **address**, not its secret key.
+
+The web app reads the creation side from the middleware rather than from this API, because the
+invite amounts live in the transaction arguments:
+
+```text
+GET {middlewareUrl}/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ&caller_id=ak_...
+```
+
+It then filters to `tx.function === 'register_invitation_code'`, reads the invitee addresses from
+argument 0 and the per-invite amount from argument 2 (in **aettos** — divide by 1e18), and follows
+`response.next` to page. See [Node & Middleware](/api-reference/node-and-middleware).
+
+So the complete picture of one inviter's invites needs both sources: the middleware for what was
+created and for how much, and `GET /api/invitations?inviter=...` for what has since been claimed.
+
+## Referral analytics
+
+The `/api/bcl-affiliation/*` family covers the referral programme — overall metrics, a top-inviter
+leaderboard, and two funnels specific to X (verification and invite usage) — plus
+`GET /api/bcl-affiliation/tree`, which returns the referral tree.
+
+```bash
+curl -s "https://api.superhero.com/api/bcl-affiliation/analytics/top-inviters?limit=10"
+```
+
+Every one of these is typed `any` in the generated client with no caller in either repository, so
+the response shapes are unverified. `start_date` and `end_date` are snake_case here, consistent
+with the rest of `/api/analytics`.
+
+## Read more
+
+- [API Conventions](/api-reference/conventions) — pagination and the write-endpoint authentication model
+- [Accounts API](/api-reference/accounts) — the per-account invitation counters
+- [Factory & Contracts API](/api-reference/factory-and-contracts) — discovering the factory the treasury hangs off
+- [Node & Middleware](/api-reference/node-and-middleware) — the middleware query behind invite creation
+- [Affiliation treasury](/contracts/affiliation-treasury) — the contract itself
+- [Invite links](/rewards/invite-links) — the feature from a user's point of view
+- [Invite page on superhero.com](https://superhero.com/trends/invite) — where invites are generated
+
+## Open questions
+
+- **What unit is `amount` on an invitation row?** `order_by=amount` proves the field exists, but
+  no consumer reads it — the web app takes the amount from the middleware transaction arguments
+  instead. Given every other big-integer string in the API, aettos is the likely answer. Fetch one
+  row and compare against the matching `register_invitation_code` transaction.
+- **What is the full invitation row?** Only six fields are read by the web app. `inviter`,
+  `revoked` and a creation `tx_hash` would all be natural to have, and none is confirmed.
+- **What does `GET /api/affiliations/invites/{code}` take as `{code}`?** The invite's address, its
+  secret key, or an opaque server-side code? The parameter is an untyped string and there is no
+  caller.
+- **Are the `/api/affiliations/*` write endpoints authenticated?** None declares a credential.
+  Confirm with the API operators before relying on either answer.
+- **What is in `GET /api/bcl-affiliation/tree`?** No caller, typed `any`. "bcl" is the
+  bonding-curve-launch prefix used across the backend, but the tree's node shape is undocumented.

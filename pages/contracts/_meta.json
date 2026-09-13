@@ -1,0 +1,18 @@
+{
+  "index": "Overview",
+  "addresses": "Deployed Addresses",
+  "calling-contracts": "Calling Contracts",
+  "tipping": "Tipping (v3)",
+  "community-factory": "CommunityFactory",
+  "token-sale": "AffiliationBondingCurveTokenSale",
+  "bonding-curve": "BondingCurveExponential",
+  "dao": "DAO",
+  "dao-vote": "DAOVote",
+  "community-management": "CommunityManagement",
+  "affiliation-treasury": "AffiliationTreasury",
+  "aex9": "FungibleTokenFull (AEX-9)",
+  "profile-registry": "ProfileRegistry",
+  "governance-contracts": "Registry & Poll",
+  "events": "Events",
+  "security": "Security Model"
+}

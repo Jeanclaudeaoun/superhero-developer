@@ -1,0 +1,159 @@
+---
+title: "Superhero Rewards Program"
+description: "Earn AE by linking your X account and posting about Superhero — the milestones, follower tiers and eligibility rules."
+---
+
+# Superhero Rewards Program
+
+The Superhero Rewards Program pays AE for promoting Superhero on X. You link your X account
+to your on-chain SuperheroID, post about Superhero, and the backend scans your posts and
+sends AE to your connected wallet. This page documents both milestones, the follower tiers
+that set your per-post rate, how verification actually runs, and the eligibility rules that
+limit the whole thing.
+
+This is **not** the affiliate program. Affiliate rewards come from trading fees and are
+withdrawn from a contract — see [The Affiliation System](/rewards/affiliation).
+
+## Where it lives
+
+The program is rendered at the top of `https://superhero.com/trends/invite`, above the
+Refer & Earn cards. Connect your wallet first; nothing on the page tracks progress without
+an active account.
+
+## Milestone 1 — Link X Account & Post
+
+**Reward: 50 AE.** Two steps, both of which must complete before milestone 2 unlocks.
+
+| Step | What you do |
+| --- | --- |
+| 1 | Link your X account to your on-chain SuperheroID. The button sends you to your profile page at `/users/<your address>`. |
+| 2 | Post about Superhero from that linked account. The post must mention Superhero — either a `superhero.com` link or a tag of `@superhero_chain`. |
+
+The app pre-fills the compose intent with:
+
+```text
+Check out @superhero_chain — earn AE tokens by posting on X! https://superhero.com
+```
+
+Two conditions apply that the FAQ does not mention:
+
+- **Your X account must have at least 100 followers.** Accounts under that threshold are not
+  eligible for this reward.
+- Milestone 1 is a **regular post** — it does not need your referral link. Only milestone 2
+  requires the link.
+
+Linking X also sets up your SuperheroID profile automatically. SuperheroID is the identity
+contract that ties your social accounts to your wallet address; see
+[SuperheroID](/identity/superhero-id) and [X verification](/identity/x-verification).
+
+## Milestone 2 — Post on X & Earn
+
+**Reward: 10–30 AE per qualifying post, plus a 50 AE streak bonus.** Locked until milestone 1
+is paid.
+
+Every post must contain **your unique referral link** in the post text. The link is minted
+for you the first time you press "Post on X" on the rewards card; the app fetches it, then
+opens an X compose intent pre-filled with:
+
+```text
+Check out @superhero_chain — earn AE tokens by posting on X! <your referral link>
+```
+
+Your per-post rate is set by your follower count:
+
+| Follower count | Per qualifying post |
+| --- | --- |
+| Under 100 | Not eligible |
+| 100 – 10,000 | 10 AE |
+| 10,000 – 1,000,000 | 20 AE |
+| Over 1,000,000 | 30 AE |
+
+Two counters run on this milestone:
+
+- **Posts rewarded** — the card tracks progress toward **10 rewarded posts**. The milestone
+  reads "completed" at 10.
+- **Streak** — posting on 10 consecutive days earns an **extra 50 AE**. The card shows your
+  current streak out of 10 days.
+
+At the base tier those numbers add up to exactly the figure the FAQ quotes:
+50 AE (milestone 1) + 10 posts × 10 AE + 50 AE (streak) = 200 AE.
+
+## How verification works
+
+Nothing here is on-chain until the payout. The flow is a signed request to the Superhero
+backend, which scans X on your behalf.
+
+1. The rewards card calls `GET /api/profile/<address>/x-posting-reward` on load and renders
+   your status, rewarded post count, streak, follower count, tier and referral link.
+2. Pressing **Check rewards** first requests a challenge from
+   `POST /api/profile/x-posting-reward/recheck-challenge`. The response carries a `nonce`,
+   an expiry and a `message`.
+3. Your wallet signs that message. The signature, nonce and expiry are submitted to
+   `POST /api/profile/<address>/x-posting-reward/recheck`, which runs the scan and returns
+   your updated status.
+4. Minting the referral link uses the same signed proof against
+   `POST /api/profile/<address>/x-reward/referral-link`.
+
+**The recheck is rate-limited.** The status response carries `next_check_allowed_at`; until
+that timestamp passes the button is disabled and shows a countdown. A submit past the cap
+returns HTTP 429 and the scan is skipped. The client code documents this as a 24-hour cap.
+
+**A successful check can still pay nothing.** A recheck that returns HTTP 200 may carry an
+`error` string explaining why no reward was sent — below the follower minimum, the X identity
+was already rewarded on another address, or the payout transaction failed. The card surfaces
+that string as a red banner rather than silently reporting "no change".
+
+**Payouts are automatic.** The earnings banner states plainly: "Your AE rewards have been
+sent automatically to your connected wallet." There is no claim transaction for this program
+and therefore no gas cost to you. See [Claiming Rewards](/rewards/claiming) for the rewards
+that *do* need a transaction.
+
+## Eligibility — read this before participating
+
+This is the disclaimer shown at the foot of the rewards page, reproduced in substance:
+
+> The Superhero reward program rewards users for creating content on other social media
+> platforms (like X) with backlinks and/or invite links, referring new users to the platform.
+> Rewards will be distributed in the form of AE tokens. **Eligibility and rewards depend on
+> on-chain activity, are not guaranteed and can be paused at any time without notice or
+> liability.** The right is reserved to disqualify any user from the program. **Users from
+> blacklisted countries are not eligible for rewards.** By participating in the program,
+> users agree to these terms and conditions. Rewards sent may be subject to tax reporting.
+> Users are responsible for any tax obligations arising from receiving rewards.
+
+Concretely, that means:
+
+- **Nothing is owed to you.** Completing a milestone does not create a claim.
+- **The program can stop mid-stream.** It can be paused at any time, without notice, with no
+  liability for work already done.
+- **Geography matters.** Users in blacklisted countries are not eligible. The list is not
+  published in the app.
+- **Individual disqualification is allowed** at the operator's discretion.
+- **Rewards are income.** They may be reportable, and the tax consequences are yours.
+
+## Open questions
+
+- **Is 200 AE a hard cap?** The FAQ says "earn up to 200 AE tokens", and the base tier
+  arithmetic lands exactly on 200. But the UI caps the post counter at 10 while paying
+  20 AE or 30 AE per post at higher follower tiers, which would exceed 200 AE. Nothing in
+  the client enforces a 200 AE ceiling. Settling this needs the backend reward service, not
+  the web app.
+- **Which countries are blacklisted?** The list is enforced server-side and is not present
+  in the client bundle or the FAQ.
+- **What counts as a "qualifying post"?** The client only reads
+  `per_post_total_paid_count` and `current_streak_days` back from the API. The matching
+  rules — how the referral link is detected, whether deleted posts are clawed back, how a
+  streak day is bounded — live in the backend scanner.
+- **Is the 24-hour recheck cap exact?** The client comment says 24 hours, but the actual
+  window is whatever `next_check_allowed_at` says, which the server sets.
+
+## Read more
+
+- [Claiming Rewards](/rewards/claiming) — what arrives automatically versus what you sign for.
+- [Invite Links](/rewards/invite-links) — the other half of the `/trends/invite` page.
+- [The Affiliation System](/rewards/affiliation) — the on-chain referral system, which has
+  entirely different rules.
+- [X verification](/identity/x-verification) — the linking step behind milestone 1.
+- [Rewards page on superhero.com](https://superhero.com/trends/invite) — where you connect a
+  wallet, link X and press Check rewards.
+- [Superhero FAQ](https://superhero.com/faq) — the canonical short answers this page expands.

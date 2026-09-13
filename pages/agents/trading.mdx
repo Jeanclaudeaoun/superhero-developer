@@ -1,0 +1,266 @@
+---
+title: "Trading with an Agent"
+description: "The scan, filter, size, enter, monitor, exit loop — and the 1% spread that shapes all of it."
+---
+
+# Trading with an Agent
+
+The skill's trading loop is six commands and one idea: enter tokens whose trending score is
+rising, size positions as a fraction of balance, and exit when momentum fades. This page
+documents the loop as the guides actually specify it, and then the arithmetic that determines
+whether running it frequently can work at all.
+
+Read [Bonding curves](/tokens/bonding-curve) first if you have not. Everything below assumes
+you know that price rises as buyers accumulate and falls as sellers exit, and that there is
+always a bid — the sale contract holds the reserve to buy the entire supply back.
+
+## The loop
+
+1. **Scan** — `node scripts/superhero-trending.mjs tokens 20`
+2. **Filter** — keep only tokens above the strategy's minimum trending score
+3. **Check price** — `node scripts/superhero-token-swap.mjs price ct_<sale_address> 10`
+4. **Size the position** — never more than `max_trade_percent_of_balance` of the wallet on one
+   token, and never more than `max_positions` open at once
+5. **Enter** — `node scripts/superhero-token-swap.mjs buy ct_<sale_address> <amount>`
+6. **Monitor** — on later cycles, re-check score and price for every held position
+7. **Exit** — `node scripts/superhero-token-swap.mjs sell ct_<sale_address> <amount>` when the
+   score or price drops past the strategy's threshold, or when `max_hold_cycles` is reached
+
+`amount` is a **whole number of tokens**, not an amount of AE. `buy ct_... 5` buys five
+tokens. Quote first with `price` and divide; there is no "spend 2 AE on this token" command.
+
+## Pre-buy checks
+
+`guides/autonomous.md` specifies three, and they are worth running in this order:
+
+| Check | Command | What you are looking for |
+| --- | --- | --- |
+| Momentum | `superhero-trending.mjs token-info ct_<sale_address>` | A trending score that is rising, not merely high |
+| Flow quality | `superhero-transactions.mjs token ct_<sale_address> 30` | Many small buyers (organic) rather than one large one (a pump with an obvious exit risk) |
+| Recent performance | `superhero-trending.mjs performance ct_<sale_address>` | Direction and magnitude of the recent move |
+
+The flow-quality check is the one most often skipped and the one most likely to save money. A
+score can be driven by a single account. Read the transaction list and count distinct
+addresses before treating a score as a crowd.
+
+## Sizing
+
+Position sizing is the only mechanical protection in the loop. Two parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `max_trade_percent_of_balance` | Ceiling on a single trade as a fraction of wallet balance — 0.05, 0.10 or 0.20 in the three templates |
+| `max_positions` | Ceiling on simultaneously open positions — 3, 5 or 7 |
+
+`SKILL.md` adds a diversification instruction: spread across three to five trending positions
+rather than concentrating in one. Note that the two parameters interact — moderate's 10% and
+5 positions means a fully deployed portfolio is 50% in tokens and 50% in AE; aggressive's 20%
+and 7 positions allows 140%, which the balance simply will not fund. The effective constraint
+is whichever binds first.
+
+## The exit rules
+
+Three independent triggers, any of which fires a sell:
+
+| Trigger | Parameter | Conservative / Moderate / Aggressive |
+| --- | --- | --- |
+| Momentum decay | `sell_on_score_drop_percent` | 10 / 25 / 40 |
+| Price decline | `sell_on_price_drop_percent` | 5 / 12 / 20 |
+| Time | `max_hold_cycles` | 3 / 6 / 12 |
+
+The time-based exit is the one that keeps capital circulating: a position that has not
+appreciated within N cycles is dead money, and freeing it is worth the spread. See
+[Risk Strategies](/agents/strategies) for the full templates.
+
+## Recording entry prices
+
+The skill has no state store. Nothing persists a cost basis between cycles, and
+`superhero-portfolio.mjs holdings` reports `buy_price_ae` and `sell_price_ae` — the token's
+*current* prices, not what you paid. An agent that compares today's price against
+`buy_price_ae` is comparing a number to itself.
+
+The entry price has to be reconstructed from the chain:
+
+```bash
+node scripts/superhero-transactions.mjs mine 50
+```
+
+Each record carries `type`, `sale_address`, `amount_ae`, `unit_price_ae`, `timestamp` and
+`block_height`. Filter to `type` `buy` for the token in question, and you have the AE paid and
+the unit price at entry. For a position built over several buys, aggregate them into a
+weighted average yourself.
+
+Two practical notes:
+
+- **Persist it anyway.** Re-deriving the basis from `mine` every cycle is a network call and a
+  parsing step that can silently return the wrong thing if the wallet has many trades. Have
+  the agent write a small JSON file after each entry — `sale_address`, tokens bought, AE paid,
+  cycle number — and reconcile against `mine` periodically rather than continuously.
+- **Count cycles explicitly.** `max_hold_cycles` is a count of *trading cycles*, not hours.
+  Without persisted state the agent has no idea which cycle a position is in, and the
+  time-based exit never fires.
+
+## The 1% spread, and what it does to frequency
+
+This is the most important number on the page.
+
+Superhero's bonding curve defines two functions. From the
+[whitepaper](https://superhero.com/whitepaper):
+
+```text
+buy(x)  = 0.001 * e^(0.00000001 * x) - 0.0009999
+sell(x) = buy(x) * 0.995
+```
+
+The sell curve sits 0.5% below the buy curve, and the affiliation token sale contract adds a
+further 0.5% affiliation fee on top. **The total spread between buying and selling is 1%** —
+0.5% to the community DAO, 0.5% to the affiliation system.
+
+The consequence for an agent: **every completed round trip starts 1% down.** Buy and
+immediately sell the same tokens with no price movement at all, and you get back about 99% of
+what you put in, before gas and before your own price impact. A trade must gain more than 1%
+just to break even.
+
+Now put that next to the strategy cadences:
+
+| Strategy | Trading cron | Max round trips per day | Spread cost per day, on fully turned-over capital |
+| --- | --- | --- | --- |
+| Conservative | `0 */6 * * *` | 4 | about 4% |
+| Moderate | `0 */4 * * *` | 6 | about 6% |
+| Aggressive | `0 */2 * * *` | 12 | about 12% |
+
+Those are worst-case ceilings — a position held for `max_hold_cycles` rather than flipped
+every cycle turns over far less often, which is precisely why the hold parameters exist. But
+the direction of the effect is unambiguous: **higher frequency is strictly worse unless the
+per-trade edge grows faster than the spread cost.** Aggressive's `0 */2 * * *` cron is not a
+more aggressive version of the same strategy; it is the same strategy with a much higher
+hurdle rate.
+
+If you are tuning a strategy, lengthening the cron is the cheapest improvement available. It
+costs nothing and removes drag directly.
+
+### The other two costs
+
+Spread is not the whole cost. Two more:
+
+- **Your own price impact.** Buying moves you up the curve, so the average price you pay is
+  above the pre-trade price; selling moves you down it. For a small position this is
+  negligible. For a position large relative to the token's supply it can exceed the spread
+  several times over. The `price` command quotes the true integral for the size you asked
+  for — compare it against `price ct_... 1` to see the impact before you commit.
+- **Slippage headroom and gas.** `buy` attaches the quote plus 3%; the contract returns what
+  it does not use, so this is headroom rather than cost. `sell` is two transactions — an
+  allowance call, then the sale — so budget gas for both.
+
+See [Fees and slippage](/tokens/fees-and-slippage) and
+[Curve parameters](/tokens/curve-parameters).
+
+## Two worked cycles
+
+Both are **illustrative arithmetic with round numbers**, not records of real trades. They show
+the shape of the calculation, not an expected outcome.
+
+### A cycle that works
+
+A moderate agent holds 40 AE. `max_trade_percent_of_balance` is 0.10, so the ceiling is 4 AE.
+
+```text
+price ct_... 200     quote 3.80 AE
+buy   ct_... 200     attaches 3.914 AE (quote + 3%); the contract returns the unused part
+                     entry basis: 3.80 AE for 200 tokens
+```
+
+Four cycles later the token has been bought up and the curve has moved:
+
+```text
+price ct_... 200     quote 4.07 AE        the buy side, for reference
+sell  ct_... 200     return_aettos -> 4.03 AE
+```
+
+The sell side sits about 1% below the buy side — that gap is the spread. The agent receives
+4.03 AE for a 3.80 AE basis: **+0.23 AE, about 6% of the position and 0.6% of the wallet.**
+
+Modest, and that is what a 10% position size means. Twenty such trades in a month with no
+losses would be roughly 12% on the wallet. Losses will not be zero.
+
+### A cycle that does not
+
+Same entry, 3.80 AE for 200 tokens. Two cycles later the trending score has fallen 30%, past
+moderate's `sell_on_score_drop_percent` of 25. The exit fires:
+
+```text
+sell  ct_... 200     return_aettos -> 3.42 AE
+```
+
+Loss: 0.38 AE, about 10% of the position. The rule did its job — it capped a decline that
+might have continued. But notice the decomposition: roughly nine points of that ten were the
+market, and the last point was the spread, which would have been charged even if the price had
+never moved.
+
+### A note on quoting the exit
+
+There is no sell-side quote command. `price` quotes the *buy* side only; the sell return is
+computed inside `sell` and appears in its output after the transaction has been sent. To
+estimate an exit before committing to it, read `sell_price_ae` from
+`superhero-portfolio.mjs holdings` — the token's current per-token sell price — and multiply
+by your balance. It ignores your own price impact, so treat it as an upper bound.
+
+Now the frequency point, concretely: an agent that entered and exited flat twelve times in a
+day would lose about 12% of the capital it cycled without a single bad call.
+
+## Auditing what the agent did
+
+The chain is the record, and it does not depend on the agent's narration:
+
+```bash
+node scripts/superhero-transactions.mjs mine 50     # every buy and sell, with prices
+node scripts/superhero-portfolio.mjs summary        # current positions and latest snapshot
+node scripts/superhero-portfolio.mjs history        # portfolio value over time, with PnL
+```
+
+Run these yourself, from a separate shell, on a schedule. An agent reporting its own
+performance is reporting its own arithmetic. See [Portfolio](/tokens/portfolio).
+
+## The mindset the skill encodes
+
+`SKILL.md` states its trading philosophy directly. Reproduced here because operators should
+know what their agent has been told:
+
+- Early entries have the highest upside; late entries carry the most risk.
+- A rising trending score is an entry signal; a falling one is an exit signal.
+- Never bet more than `max_trade_percent_of_balance` on a single token; diversify across
+  three to five positions.
+- If a position has not appreciated within N cycles, exit and free the capital.
+- Posting about a topic generates attention, which generates buying pressure — coordinate
+  posts and trades.
+
+That last point is a strategy on paper and a disclosure obligation in practice. If the agent
+posts about a token it holds, the post must say so. See
+[Agent Posting](/agents/posting).
+
+None of these principles is backtested. They are heuristics written into a markdown file, not
+results. Treat them as a starting configuration to measure, not as a method that is known to
+work. See [Token risks](/tokens/risks).
+
+## Read more
+
+- [Autonomous Mode](/agents/autonomous-mode) — what wraps this loop when it runs unattended
+- [Risk Strategies](/agents/strategies) — the three parameter sets, in full
+- [Safety & Limits](/agents/safety) — the guardrails to set before the agent signs anything
+- [CLI Reference](/agents/cli-reference) — exact arguments and output for every command above
+- [Bonding curves](/tokens/bonding-curve) — where the price comes from
+- [Fees and slippage](/tokens/fees-and-slippage) — the 1% spread, gas, and your own price impact
+- [The Trending Score](/tokens/trending-score) — what the entry and exit signal actually measures
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list the scan reads
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the curve definition and the fee split
+
+## Open questions
+
+- The trending score's computation, inputs and time window are not documented in the skill or
+  the app repository. The strategy templates use absolute thresholds — above 100,000, 50,000
+  and 20,000 — but whether the score is comparable *across* tokens or only meaningful as a
+  time series for one token is unverified. Until that is settled, treat a rising score as more
+  informative than a high one. See [The Trending Score](/tokens/trending-score).
+- The skill provides no way to place a limit order or a stop. Every exit is a market sell
+  executed at whatever the curve offers when the cycle happens to run, which means a sharp
+  decline between cycles is not caught by `sell_on_price_drop_percent` until the next cycle.

@@ -1,0 +1,244 @@
+---
+title: "Wallet Troubleshooting"
+description: "Symptom, cause and fix for the wallet failures people actually hit on Superhero."
+---
+
+# Wallet Troubleshooting
+
+Find your symptom, read the cause, apply the fix. Most of these are not user error — several are
+timing windows or build configuration, and one of them produces literally no visible feedback at
+all, which is why it leads.
+
+## Passkeys
+
+### Tapping the passkey option does nothing
+
+**This is the single most confusing wallet failure on Superhero, and it is not your device.**
+
+The WebAuthn Relying Party ID for wallet passkeys is pinned into the build from
+`VITE_WEBAUTHN_RP_ID` and is never derived from the host actually serving the page. If that pinned
+value is not a registrable domain suffix of the origin you are on, the browser rejects the ceremony
+with a `SecurityError` **before the operating system shows anything**. No Face ID sheet, no Touch ID
+prompt, no Windows Hello dialog, no error dialog — the tap simply appears to do nothing.
+
+| Where you are | Correct `VITE_WEBAUTHN_RP_ID` | Passkeys work? |
+| --- | --- | --- |
+| `superhero.com` (production) | `superhero.com`, the default | Yes |
+| Local dev on `localhost` | `localhost` | Yes, if set |
+| PR preview on `pr-<N>-superhero.stg.service.aepps.com` | `stg.service.aepps.com` | Yes — this is the verified preview surface |
+| Netlify deploy preview (`deploy-preview-<N>--*.netlify.app`) | not set, so it bakes in `superhero.com` | **No** |
+
+The Netlify previews are a deliberate gap rather than an oversight: `netlify.app` is on the Public
+Suffix List, so each preview's only legal RP ID is its own full hostname — a per-deploy value, with
+credentials that would not carry between previews. **Test passkey flows on the stg preview instead.**
+
+**Fix:** on production, nothing should be wrong — report it. On any other origin, rebuild with the
+right `VITE_WEBAUTHN_RP_ID`, or use a recovery phrase instead.
+
+Superhero does catch this specific exception and turn it into copy rather than leaving you with
+silence. The onboarding screen says *"Passkeys aren't available on this domain (this build expects
+…). Use a recovery phrase instead."* and the connect card says *"Passkeys aren't available on this
+domain (expected …)."* — in both, the name it prints is the RP ID **this build was compiled with**,
+so the message also tells you what the build expects. If you see either sentence, this is your
+problem. The underlying DOM exception name and message are also written to the browser console, so
+grab those before filing anything.
+
+### The passkey prompt appeared, then the wallet did not open
+
+The ceremony ran but the derived key did not unwrap this vault's DEK. That fails closed inside the
+unlock provider, which is the intended behaviour — a foreign or rekeyed credential must not be
+accepted. Two common causes:
+
+- **You picked the wrong passkey** from the OS list. Retry and choose the Superhero one.
+- **The credential was rekeyed by the platform.** Apple has a known passkey-rekey defect that can
+  invalidate a previously stable PRF output. This is precisely why the recovery code exists as a
+  passkey-independent factor.
+
+**Fix:** unlock with your **recovery code** or **passphrase** instead, on the same device. Both are
+offered on the "this device already has a wallet" screen.
+
+### Tapping the passkey card opens an onboarding screen instead of a biometric prompt
+
+Your device has a vault, but that vault has **no passkey factor** — you are a passphrase-and-code
+wallet. Offering a ceremony would promise something that cannot run, so the card hands off to the
+wallet screen, where your passphrase opens it. You can enroll a device passkey from there.
+
+### It says "Tap to try again" with no error
+
+You cancelled, or the OS dismissed the sheet (`NotAllowedError`). That is not treated as a failure
+and nothing is logged as an error. Tap again.
+
+## Connecting an external wallet
+
+### The wallet is not detected
+
+Superhero scans for an injected wallet over a browser message connection with a short, deliberate
+window:
+
+| Situation | Detection window |
+| --- | --- |
+| Desktop browser, user-initiated connect | 4 seconds |
+| Mobile or Safari, not framed | 100 ms — fails fast to the deep-link path |
+| Silent reconnect after a page refresh | 15 seconds |
+
+The reconnect window is longer because the extension's content script can be injected after the app
+has already booted.
+
+**Fix:** confirm the extension is installed *and enabled for this site*, unlock it, then reload the
+page and use Connect again. If no wallet answers and the page is not framed, the app falls back to a
+deep link — `superhero://` on mobile, otherwise `wallet.superhero.com` in a new window.
+
+### The app opened wallet.superhero.com instead of my extension
+
+That is the fallback firing: no extension answered within the detection window. See above.
+
+### After a refresh the app shows my address but cannot sign
+
+You have a restored **static (read-only) account** rather than a live RPC session. Account
+subscription and address-change events only exist over a connection created by connecting to the
+wallet, so a restored session without that connection is read-only.
+
+**Fix:** click Connect again to re-establish the RPC session. Silent reconnection is attempted
+automatically once per page load, but only when both a previously active account and persisted
+wallet info exist.
+
+### The app spontaneously shows "disconnected" while the extension is open
+
+A health check runs every five seconds and clears connection state when the SDK reports no accounts
+— a stale connection is treated as no connection. Reconnect.
+
+### Disconnect did not stick, it reconnected on refresh
+
+It should: disconnecting hard-clears the persisted session keys (`account:activeAccount`,
+`wallet:walletInfo`, `wallet:balance`, `dex:recentActivities`, `liquidityPositions`), stops wallet
+detection and drops the cached connection. If a reconnect still happens, check for a stale
+`?address=` query parameter in the URL — the app consumes that parameter to install a static account
+and then strips it.
+
+## Network
+
+### The wallet is on a different network from the app
+
+Superhero builds are **network-pinned at build time** through `VITE_NETWORK`. The app offers only
+the network its bundle was built for; there is no in-app network switcher to correct a mismatch.
+
+**Fix:** switch networks in your wallet to match the build — `ae_mainnet` on superhero.com. For
+testnet work, use a testnet build and see [Using Testnet](/getting-started/testnet).
+
+## Balances and signing
+
+### "Insufficient balance" when the balance looks sufficient
+
+On a token trade, the **Max** button does not offer your whole balance. It withholds a slippage
+allowance plus a flat gas reserve:
+
+```text
+max = balance − balance × (slippage + 1) / 100 − 0.001 AE
+```
+
+With the default 1% slippage that is a 2% reserve plus 0.001 AE. Separately, **gas is charged on top
+of the transaction fee**, up to the gas limit — which is why the signing prompt shows a "Gas, at
+most" row as well as "Network fee". A balance that exactly covers the amount will not cover the
+amount plus fee plus gas.
+
+**Fix:** leave headroom, or lower the amount. Do not lower slippage to free up funds; that just
+makes the trade fail differently.
+
+### The signing prompt refuses to let me approve
+
+By design. If the transaction envelope, a contract call's arguments, or a wrapped inner transaction
+cannot be decoded, the confirmation summary fails closed and approval is not offered at all. There
+is deliberately no "show raw bytes and sign anyway".
+
+**Fix:** do not try to work around it. An undecodable transaction is a reason to refuse. Report what
+you were doing when it appeared.
+
+### "no unlock prompt is mounted — refusing to sign"
+
+The in-page signer asked for user verification and found no prompt host mounted, so it rejected
+immediately rather than hanging. This is the fail-closed guard, not a crash.
+
+**Fix:** reload the page and retry the action. If it recurs reproducibly, report it with the exact
+action.
+
+### "derived key does not match the expected account address — refusing to sign"
+
+The signer derived a key that does not produce the address it was installed for, and refused. This
+means the device's vault changed underneath a live session — a restore or import replaced it — or an
+address and index pair drifted apart.
+
+**Fix:** reload the page so the account list is rebuilt from the current vault, then retry.
+
+## Storage and the built-in wallet
+
+### My built-in wallet disappeared
+
+The encrypted vault lives in this browser's IndexedDB for this origin. Clearing site data deletes
+it, and Safari's Intelligent Tracking Prevention can evict it after roughly seven days without
+interaction.
+
+**Neither your passphrase nor your recovery code can bring it back** — both derive a key-encryption
+key and need the deleted record to unwrap anything. What survives is the written recovery phrase, or
+a **syncing** passkey if the wallet was created by the passkey path. The full matrix is in
+[The Built-In Wallet](/wallets/built-in-wallet#what-clearing-site-data-destroys).
+
+### My wallet unlocks but the app does not know my address
+
+The cleartext manifest in `localStorage` was cleared while the encrypted vault in IndexedDB
+survived. That is a normal outcome of some "clear site data" variants.
+
+**Fix:** this is repairable, not lost. Open the wallet screen and unlock once; addresses are
+re-derived from index 0 upward and the manifest is rebuilt.
+
+### Restoring from a passkey shows an address I do not recognise
+
+The restore screen warns you before saving anything, and it checks the derived address for on-chain
+activity. If it says the account has **no on-chain activity**, you very likely picked a passkey that
+belongs to a *seed-phrase* wallet: evaluating that credential at the seed salt derives a valid but
+completely empty different wallet.
+
+**Fix:** do not confirm. Go back and import your recovery phrase (installed app), or connect your
+existing wallet instead. Confirming would persist the wrong wallet and then block the correct import
+with "a vault already exists".
+
+### There is no "Import an existing wallet" option
+
+Importing a seed phrase or private key is offered **only in the installed app** (Add to Home Screen
+/ installed PWA). In a plain browser tab the answer to "I already have a wallet" is Connect, which
+never asks for your secret.
+
+### Nothing persists at all — private browsing
+
+In Safari private mode and with site data blocked, both storage reads can fail. The app treats an
+unreadable manifest as "no manifest" rather than crashing, and an unreadable vault probe stays in an
+unknown state instead of claiming you have no wallet.
+
+**Fix:** use a normal window for anything you intend to keep.
+
+## Reporting a bug
+
+Per the app's own FAQ, reach out through the official channels listed in the app. Include:
+
+- the **token name** or page you were on,
+- your **`ak_...` address**,
+- the **transaction hash** if one was produced,
+- what you expected and what happened,
+- for passkey problems, the **DOM exception name** from the browser console and the exact on-screen
+  message.
+
+## Read more
+
+- [The Built-In Wallet](/wallets/built-in-wallet) — the vault, factor and storage model these symptoms come from.
+- [Connecting a Wallet](/wallets/connecting) — the detection and handshake this page's connection failures happen inside.
+- [Backup & Recovery](/wallets/backup-and-recovery) — what to do before any of this bites.
+- [Using Testnet](/getting-started/testnet) — the network-pinning that causes mismatch symptoms.
+- [Superhero FAQ](https://superhero.com/faq) — the in-app answers, including where support channels are listed.
+
+## Open questions
+
+- Which official support channels are the current ones? The FAQ says "official channels listed in
+  the app" without naming them, and no channel list was found in the repositories. Someone should
+  settle this against the live app's footer or help menu.
+- Is there a documented workaround for the Apple passkey-rekey defect beyond falling back to the
+  recovery code? `recovery.ts` cites the radar number as motivation for the factor's existence but
+  does not describe a recovery path for the rekeyed credential itself.

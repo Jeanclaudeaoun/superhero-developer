@@ -1,0 +1,150 @@
+---
+title: "Leaderboards"
+description: "The trading leaderboard — its four metrics, its timeframes, and the endpoint behind it."
+---
+
+# Leaderboards
+
+Superhero has one leaderboard: the **Trading Leaderboard** at
+`https://superhero.com/trends/leaderboard`. It ranks wallets by on-chain trading performance
+over a window you choose. This page documents each metric, how the ranking is ordered, and
+the endpoint you can call yourself.
+
+Note what it is not: there is no separate creator, referrer or reward leaderboard. Affiliate
+earnings and rewards-program payouts do not appear here at all.
+
+## Metrics
+
+Pick one metric at a time from the **Sort by** control. It maps directly to the `sortBy`
+query parameter.
+
+| Metric | Parameter | What it measures | Sort direction |
+| --- | --- | --- | --- |
+| PnL | `pnl` | Profit and loss over the window, in USD | Descending — highest first |
+| ROI | `roi` | Return on invested capital over the window, as a percentage | Descending |
+| AUM | `aum` | Assets under management — current portfolio value, in USD | Descending |
+| MDD | `mdd` | Maximum drawdown over the window, as a percentage | **Ascending** — smallest drawdown first |
+
+MDD is the one inversion: a small maximum drawdown is a good result, so the app flips
+`sortDir` to `ASC` for that metric and leaves it `DESC` for the other three. If you call the
+endpoint directly and forget this, your MDD board will be upside down.
+
+The app explains ROI in a banner on the page:
+
+> ROI shows how efficiently a user turned capital into profit during the selected leaderboard
+> period. For most leaderboard windows, it is calculated as PNL divided by the portfolio
+> value at the start of the period, shown as a percentage.
+
+The hedge in "for most leaderboard windows" is the app's own — see the open questions.
+
+## Timeframes
+
+| Control | Sent as | Sparkline points |
+| --- | --- | --- |
+| 7D | `window=7d` | `points=7` |
+| 30D | `window=30d` | `points=30` |
+| All | `window=all` | `points=30` |
+| Custom range | `startDate` and `endDate`, ISO-8601 | Not sent |
+
+Custom ranges are entered as `dd/mm/yyyy hh:mm` in local time and converted to ISO-8601
+before the request. Both ends are required; entering one shows a hint rather than firing a
+query. A start after the end is rejected in the client, and an unparseable date disables the
+query entirely rather than sending a malformed request. When a custom range is applied,
+`window` and `points` are omitted.
+
+## What each row shows
+
+The card for a ranked wallet renders from these response fields:
+
+| Field | Shown as |
+| --- | --- |
+| `address`, `chain_name` | The wallet, with its `.chain` name if it has one |
+| `pnl_usd` | PnL for the timeframe, in USD |
+| `roi_pct` | ROI for the timeframe |
+| `aum_usd` | AUM, labelled "Latest portfolio value" |
+| `mdd_pct` | Maximum drawdown for the timeframe |
+| `buy_count`, `sell_count` | Buys and sells |
+| `created_tokens_count` | Tokens this account created |
+| `owned_trends_count` | Owned trends |
+| `portfolio_value_usd_sparkline` | The inline sparkline, an array of point pairs |
+| `volume_usd` | Present in the response type; not rendered on the card |
+
+Rank is computed client-side from the page offset — `(page − 1) × 15 + index + 1` — so it is
+the rank within the currently selected metric and window, not a global standing.
+
+## The endpoint
+
+```text
+GET /api/accounts/leaderboard
+```
+
+Base URL is Superhero's API: `https://api.superhero.com` on mainnet.
+
+| Parameter | Values |
+| --- | --- |
+| `sortBy` | `pnl`, `roi`, `aum`, `mdd` |
+| `sortDir` | `ASC` or `DESC` |
+| `window` | `7d`, `30d`, `all` |
+| `points` | Number of sparkline points |
+| `startDate`, `endDate` | ISO-8601; mutually exclusive with `window` and `points` |
+| `page` | 1-based |
+| `limit` | Page size. The UI uses 15. |
+
+The response is the standard paginated envelope: an `items` array of the fields above, plus a
+`meta` object carrying `page`, `limit`, `totalItems`, `totalPages`, `window`, `sortBy`,
+`sortDir` and a `timeFilter` block with the resolved `value`, `unit`, `start` and `end`.
+
+Example:
+
+```bash
+curl "https://api.superhero.com/api/accounts/leaderboard?sortBy=pnl&sortDir=DESC&window=7d&points=7&page=1&limit=15"
+```
+
+And the inverted case for drawdown:
+
+```bash
+curl "https://api.superhero.com/api/accounts/leaderboard?sortBy=mdd&sortDir=ASC&window=30d&points=30&page=1&limit=15"
+```
+
+## Caching
+
+The client caches each metric-and-window combination for **60 seconds** before considering it
+stale, and keeps fetched windows in memory for **5 minutes** before garbage-collecting them.
+Switching metrics or pages within those windows is served from cache. That is client-side
+caching only — it says nothing about how often the backend recomputes the underlying
+rankings.
+
+## How to climb it
+
+The app's own empty-state advice, which doubles as a plain statement of what the metrics
+reward:
+
+- Trade trend tokens regularly to build up volume.
+- Keep PnL and ROI positive over time.
+- Own and hold trending tokens to grow AUM.
+
+## Open questions
+
+- **How often does the backend recompute rankings?** The 60-second stale time and 5-minute
+  cache lifetime are client-side. Nothing in the web app reveals the server's refresh cadence
+  or how far behind the chain the figures run.
+- **How is ROI computed for the "all" window?** The in-app explanation says "for most
+  leaderboard windows", explicitly leaving at least one case undefined. The formula for an
+  all-time window is not stated.
+- **Are there eligibility filters?** Whether accounts below some minimum volume, portfolio
+  value or trade count are excluded is decided server-side and is not visible in the client.
+- **Which trades count?** Whether the leaderboard covers bonding-curve trades only, or also
+  [DEX swaps](/defi/swap), is not determinable from the client — it just renders what the
+  endpoint returns.
+
+## Read more
+
+- [Rewards & Affiliation](/rewards) — the two reward programs, neither of which feeds this
+  board.
+- [Portfolio](/tokens/portfolio) — how an individual account's holdings and performance are
+  presented.
+- [Accounts API](/api-reference/accounts) — the wider account and leaderboard REST surface.
+- [Trading leaderboard on superhero.com](https://superhero.com/trends/leaderboard) — the live
+  board with its filters.
+- [Trending tokens](https://superhero.com/trends/tokens) — the tokens whose trades produce
+  these rankings.

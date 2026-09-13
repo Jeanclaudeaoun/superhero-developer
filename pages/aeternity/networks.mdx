@@ -1,0 +1,126 @@
+---
+title: "Networks & Endpoints"
+description: "Mainnet and testnet endpoints in one table, and who operates each one."
+---
+
+# Networks & Endpoints
+
+Everything below comes from `superhero/src/config.ts`, the single place the web app defines its
+networks. `VITE_NETWORK` selects `ae_mainnet` or `ae_uat` at build time, and a runtime
+`window.__SUPERCONFIG__` can override any individual value in a deployed container.
+
+## The table
+
+| | Mainnet (`ae_mainnet`) | Testnet (`ae_uat`) |
+| --- | --- | --- |
+| Superhero API | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
+| Node | `https://mdw.wordcraft.fun` | `https://testnet.aeternity.io` |
+| Middleware | `https://mdw.wordcraft.fun/mdw` | `https://testnet.aeternity.io/mdw` |
+| WebSocket | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
+| Compiler | `https://v7.compiler.aepps.com` | `https://v7.compiler.aepps.com` |
+| Explorer | `https://aescan.io` | `https://testnet.aescan.io` |
+| Governance API | `https://governance-server-mainnet.prd.service.aepps.com/` | `https://governance-server-testnet.prd.service.aepps.com/` |
+| DEX backend | `https://dex-backend-mainnet.prd.service.aepps.com` | `https://dex-backend-testnet.prd.service.aepps.com` |
+| Wallet | `https://wallet.superhero.com` | `https://wallet.superhero.com` |
+| Chat relay | `wss://relay.superhero.chat` | `wss://relay.superhero.chat` |
+
+Contract addresses differ per network too — see [Deployed addresses](/contracts/addresses).
+
+## Who operates what
+
+| Origin | Operator | Evidence |
+| --- | --- | --- |
+| `api.superhero.com`, `wallet.superhero.com`, `relay.superhero.chat` | Superhero | Superhero's own domain; the relay is described in `src/config.ts` as "Superhero's own NIP-29 groups relay" |
+| `mdw.wordcraft.fun` | Superhero | "wordcraft" is Superhero's internal name for the trending/token feature — see `src/features/trending/README.md` |
+| `testnet.api.dev.tokensale.org` | Superhero (testnet deployment) | The testnet counterpart of the Superhero API |
+| `mainnet.aeternity.io`, `testnet.aeternity.io` | æternity Foundation | Public æternity node and middleware hosts |
+| `*.prd.service.aepps.com`, `v7.compiler.aepps.com` | æternity Foundation | Shared æpps infrastructure — governance server, DEX backend, Sophia compiler |
+| `aescan.io`, `testnet.aescan.io` | æLabs | æScan, æternity's blockchain explorer |
+
+## The mainnet node URL: `mdw.wordcraft.fun` vs `mainnet.aeternity.io`
+
+The two Superhero codebases point at different mainnet nodes:
+
+| Consumer | Node | Middleware |
+| --- | --- | --- |
+| Web app (`src/config.ts`) | `https://mdw.wordcraft.fun` | `https://mdw.wordcraft.fun/mdw` |
+| Agent skill (`scripts/*.mjs`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw/v3` |
+
+**They are the same API, on two different hosts.** Both expose the æternity node HTTP API at
+`/v3/...` and the middleware at `/mdw/v3/...`, which you can read off the call sites directly:
+
+```text
+# Web app, node API
+src/features/trending/views/TokenSaleDetails.tsx
+    GET  <NODE_URL>/v3/transactions/<txHash>?int-as-string=false
+
+# Web app, middleware
+src/hooks/useTransactionStatus.ts
+    GET  <MIDDLEWARE_URL>/v3/transactions/<hash>
+
+# Agent skill, node API
+scripts/superhero-name.mjs
+    GET  https://mainnet.aeternity.io/v3/headers/top
+
+# Agent skill, middleware
+scripts/superhero-name.mjs
+    GET  https://mainnet.aeternity.io/mdw/v3/names?owned_by=ak_...
+```
+
+So `mdw.wordcraft.fun` is a Superhero-operated deployment of the standard æternity node plus
+middleware, and `mainnet.aeternity.io` is the Foundation's public one. Neither is more canonical
+than the other for reading chain state — both serve `ae_mainnet`, and a transaction submitted
+through one is visible through the other. What differs is who you depend on for uptime:
+
+- **The web app depends on Superhero's own node**, so a Foundation outage does not take the app
+  down, and Superhero can size the node for its own traffic.
+- **The agent skill depends on the Foundation's public node**, which needs no coordination with
+  Superhero ops but is a shared resource.
+
+Two practical consequences:
+
+1. **The browser can only reach allowlisted origins.** `server/lib/csp.cjs` hardcodes
+   `https://mdw.wordcraft.fun` and `https://testnet.aeternity.io` in the CSP `connect-src`
+   allowlist. It also folds the runtime `NODE_URL` and `MIDDLEWARE_URL` env values into the same
+   directive, precisely "so connect-src self-adjusts to whatever origins the running container
+   is pointed at". Repointing a deployment therefore works, but a hand-edited client-side URL
+   will be blocked by the header.
+2. **Nothing enforces agreement between the two codebases.** If you need them to match, set
+   `NODE_URL` and `MIDDLEWARE_URL` on the deployment, or edit the `NODE_URL` constant at the top
+   of each agent-skill script.
+
+If you are writing your own integration, either host works. Pick the Foundation's node unless
+you have a reason to prefer Superhero's.
+
+## API version paths are not uniform
+
+Even within the web app, the middleware is called at two different versions:
+
+| Call | Path |
+| --- | --- |
+| Transaction status (`useTransactionStatus.ts`) | `/v3/transactions/...` |
+| AEX-9 account balances (`useAccountBalances.ts`) | `/v2/aex9/account-balances/...` |
+| Owned names (`superhero-name.mjs`) | `/v3/names?owned_by=...` |
+
+Do not assume a single version prefix. Check the call site.
+
+## Read more
+
+- [Node & middleware API](/api-reference/node-and-middleware) — the endpoints above, with request and response shapes.
+- [Deployed addresses](/contracts/addresses) — the per-network contract addresses that pair with these endpoints.
+- [Testnet](/getting-started/testnet) — running against `ae_uat` end to end.
+- [Explorers](/aeternity/explorers) — verifying what these endpoints return.
+- [æternity node API reference](https://api-docs.aeternity.io/) — the node HTTP API served at `/v3`.
+- [ae_mdw middleware](https://github.com/aeternity/ae_mdw) — what is served under `/mdw`, and its OpenAPI spec.
+
+## Open questions
+
+- No rate limits or uptime commitments are documented for any of these hosts in either
+  repository. Treat both public nodes as best-effort and back off on failure.
+- `NETWORKS.ae_mainnet` in `src/config.ts` carries `disabled: true`. The flag is copied into
+  `INetwork` by `src/utils/constants.ts` but no code in `src/` reads
+  `CURRENT_NETWORK.disabled`, so its intended effect — probably hiding mainnet from a network
+  switcher that no longer exists — is unverified. Do not read it as "mainnet is off".
+- Whether `mdw.wordcraft.fun` runs the same node and middleware versions as
+  `mainnet.aeternity.io` is not recorded anywhere. A `GET /v3/status` against each would settle
+  it; that request could not be made from this environment.

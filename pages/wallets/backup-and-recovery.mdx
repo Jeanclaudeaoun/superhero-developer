@@ -1,0 +1,157 @@
+---
+title: "Backup & Recovery"
+description: "What to write down, how to verify it, and an explicit list of what cannot be recovered."
+---
+
+# Backup & Recovery
+
+Read this before you put value in an account, not after. Superhero accounts are self-sovereign:
+there is no password reset, no support ticket that restores access, and no company that holds a copy
+of your key. What you can recover is exactly what you personally kept.
+
+## The one-minute version
+
+| You use | Back up | Keep it |
+| --- | --- | --- |
+| Superhero Wallet (extension, mobile or web) | The seed phrase it showed you at setup | Offline, on paper or metal, in two places |
+| Built-in wallet created **from a phrase** | The 12 words, plus the recovery code | Offline; the code is not a substitute for the words |
+| Built-in wallet created **from a passkey** | Confirm your passkey **syncs**; keep the recovery code | Sync is the backup; the code only helps on this device |
+| An agent key (`AE_PRIVATE_KEY`) | The secret key string | Offline, never in git, never in a log |
+
+## Backing up a seed phrase
+
+1. **Write it down by hand.** Screenshots go into photo backups and cloud sync; a text file goes
+   into whatever indexes your disk. Neither is a place for a seed phrase.
+2. **Copy it exactly** — all 12 or 24 words, in order, lowercase. BIP39 words are lowercase English
+   and the phrase carries a checksum, so a wrong or transposed word is usually caught on import
+   rather than silently producing a different empty wallet.
+3. **Verify it.** In Superhero's built-in wallet, the create-from-phrase path makes you re-enter the
+   words before a vault is created, and it records the timestamp of that verified backup in the vault
+   record. A backup you have never read back is not yet a backup.
+4. **Store two copies in different physical places.** The failure you are insuring against is fire
+   and flood as much as theft.
+5. **Never type it into anything but the wallet.** No support agent, no "validator", no airdrop
+   checker will ever need it. See [Security Best Practices](/wallets/security).
+
+What the phrase is worth: it is a standard BIP39 phrase on the standard æternity derivation path
+(`m/44'/457'/<index>'/0'/0'`, SLIP-0010 ed25519). The same phrase produces byte-identical addresses
+in the Superhero Wallet extension, the native app, and Superhero's built-in wallet. You are not
+locked into any one of them.
+
+## Backing up the built-in wallet
+
+The built-in wallet has three unlock factors and they are **not interchangeable as backups**. This
+is the distinction people get wrong.
+
+| Factor | Unlocks on this device | Restores on a new device |
+| --- | --- | --- |
+| Passphrase | Yes | **No** |
+| Recovery code | Yes | **No** |
+| Syncing passkey (on a passkey-created wallet) | Yes | **Yes** |
+| Device-bound passkey (on a passkey-created wallet) | Yes | No |
+| Passkey on a **phrase-created** wallet | Yes | **No** |
+| The written recovery phrase | — | **Yes, anywhere** |
+
+The reason is structural. The passphrase and the recovery code each derive a key-encryption key;
+that key unwraps a data-encryption key that lives inside this device's encrypted vault record. No
+record, nothing to unwrap. Only two things reconstruct a seed from scratch: the written phrase, and
+— for a wallet created by the passkey path — the passkey itself, because that seed is *derived* from
+the passkey's PRF output at a fixed public salt rather than stored next to it.
+
+So:
+
+- **Phrase-created built-in wallet** — the 12 words are your only portable backup. The recovery code
+  is a same-device fallback for a forgotten passphrase or a broken passkey. Keep both; do not treat
+  the code as a replacement for the words.
+- **Passkey-created built-in wallet** — the passkey *is* the backup, but only if it syncs. Confirm
+  it landed in iCloud Keychain or Google Password Manager. There is no phrase reveal or export
+  screen in the app today, so a device-bound credential like Windows Hello leaves **no other copy of
+  the seed at all**. Still enroll the recovery code: it is the only factor that survives a passkey
+  rekey.
+
+## Recovering on a new device
+
+### Superhero Wallet (extension, mobile, web)
+
+Install it, choose **Import Wallet**, and enter your seed phrase. The wallet restores your accounts
+and their derived keys.
+
+### Superhero's built-in wallet, from a recovery phrase
+
+Open the installed Superhero app (import is offered in the installed PWA only — a browser tab offers
+Connect instead), choose to import an existing wallet, and paste the phrase. It is normalized and
+validated against the BIP39 wordlist and checksum before anything is stored, then sealed under a new
+passphrase factor on the new device.
+
+### Superhero's built-in wallet, from a passkey
+
+Choose **"Restore a wallet you created with a passkey."** This runs a *discoverable* WebAuthn
+assertion — no stored credential id, because that is exactly what is being rebuilt — derives the
+wallet the credential implies, and then **shows you the derived address before saving anything.**
+
+The confirm screen also checks that address for on-chain activity, and that check matters:
+
+- **"This account has on-chain activity"** — it looks like a genuine restore. Confirm.
+- **"No on-chain activity"** — stop. You most likely selected a passkey belonging to a
+  *phrase-created* wallet. Evaluating that credential at the seed salt derives a valid but entirely
+  empty different wallet. Confirming would persist the wrong one and then block your correct import
+  with "a vault already exists".
+- **"Couldn't check on-chain activity"** — the node was unreachable. This is advisory only and is
+  never a block; judge by the address itself.
+
+### An agent key
+
+There is no derivation to redo — the secret key is the account. Re-export it and you are back:
+
+```bash
+export AE_PRIVATE_KEY=<your_secret_key>
+node scripts/superhero-wallet.mjs address
+node scripts/superhero-wallet.mjs balance
+```
+
+## What cannot be recovered
+
+Plainly, with no hedging:
+
+- **A lost seed phrase with no other factor.** Nobody can reconstruct it. Not Superhero, not
+  æternity, not the wallet developers.
+- **A built-in wallet whose vault was deleted**, if your only factors were a passphrase and a
+  recovery code. Clearing site data for superhero.com deletes the IndexedDB vault; Safari's
+  Intelligent Tracking Prevention can evict it after about seven days of no interaction. Neither the
+  passphrase nor the code opens anything afterwards.
+- **A passkey-created wallet whose device-bound passkey is gone**, if the credential never synced.
+  There is no export screen to have used.
+- **Funds sent to a wrong address.** Transactions are final; there is no reversal.
+- **A private key that was logged, pasted into a chat, or committed to git.** Treat it as
+  compromised from that moment and move the funds to a fresh account.
+
+The one common loss that *is* recoverable: the built-in wallet's cleartext manifest — your address
+list — living in local storage. If that is cleared while the encrypted vault survives, unlock once
+and the app re-derives your addresses from index 0 upward.
+
+## A backup routine that actually holds
+
+- Write the phrase down and read it back **before** funding the account.
+- Store two copies in two places.
+- Store the recovery code separately from the phrase — different failure, different hiding place.
+- If you rely on a passkey, verify it is present on a *second* device before you trust it as a
+  backup.
+- Do a restore drill once: import into a second wallet and confirm the first address matches. A
+  backup you have never tested is a hypothesis.
+
+## Read more
+
+- [The Built-In Wallet](/wallets/built-in-wallet) — why the factors behave the way the table above says they do.
+- [Security Best Practices](/wallets/security) — how to keep the backup you just made from being stolen.
+- [Troubleshooting](/wallets/troubleshooting) — the symptoms of a vault that is gone, and how to tell them apart.
+- [Create an Account](/getting-started/create-account) — the flow that produced whatever you are backing up.
+- [Superhero Wallet](https://wallet.superhero.com/) — the hosted wallet you can import a phrase into with no install.
+
+## Open questions
+
+- Does Superhero Wallet (the standalone extension and app) support exporting a per-account private
+  key in addition to the seed phrase? Its FAQ copy says private keys can be viewed and backed up,
+  but the exact screen path was not verified against the wallet's own repository.
+- Is there a supported way to rotate the built-in wallet's passphrase without erasing and recreating
+  the vault? `vault-record.ts` supports adding and removing factors, but no passphrase-change flow
+  was found in the onboarding component.

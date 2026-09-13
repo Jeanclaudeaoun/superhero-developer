@@ -1,0 +1,278 @@
+---
+title: "API Conventions"
+description: "Pagination, ordering, errors, units and authentication — the contract every api.superhero.com endpoint shares."
+---
+
+# API Conventions
+
+Everything on `api.superhero.com` is a plain JSON REST API. This page pins down the parts that
+repeat across every endpoint — base URLs, pagination, the shared query parameters, units, error
+bodies and the signature-based write flow — so the endpoint pages can stay short.
+
+The facts here are taken from the Superhero web app: `src/config.ts`, the hand-written client in
+`src/api/backend.ts`, and the OpenAPI-generated client under `src/api/generated/`. Where the
+repositories do not settle a question, it is listed under [Open questions](#open-questions)
+rather than guessed.
+
+## Base URLs
+
+| Network | Base URL | Chain id |
+| --- | --- | --- |
+| Mainnet | `https://api.superhero.com` | `ae_mainnet` |
+| Testnet | `https://testnet.api.dev.tokensale.org` | `ae_uat` |
+
+Both hosts serve the same paths. The web app sets the base once at startup and every request —
+hand-written or generated — goes through it:
+
+```ts
+// src/main.tsx
+OpenAPI.BASE = (CONFIG.SUPERHERO_API_URL || 'https://api.superhero.com').replace(/\/$/, '');
+```
+
+Every path in this reference is relative to that base and begins with `/api/`. The only versioned
+prefix in the whole surface is `/api/v2/mdw/*` (the indexed chain mirror — see
+[Node & Middleware](/api-reference/node-and-middleware)).
+
+## Authentication
+
+**Reads need no credentials.** The generated client ships with `TOKEN`, `USERNAME`, `PASSWORD`
+and `HEADERS` all `undefined` and `WITH_CREDENTIALS: false`, and nothing in the app ever sets
+them. No API key, no bearer token, no cookie, no session — for everything the generated client
+covers. A bare `curl` gets the same bytes the web app gets:
+
+```bash
+curl -s "https://api.superhero.com/api/tokens?limit=3&order_by=market_cap&order_direction=DESC"
+```
+
+**Writes are authenticated by wallet signature, not by a credential.** There is no login
+endpoint and no token to store. Every mutating flow is the same three steps:
+
+1. `POST` a challenge endpoint with your `ak_...` address. It returns a `nonce` (or
+   `verification_token`) plus a human-readable `message` and an expiry.
+2. Sign `message` with the private key for that address (the wallet's `signMessage`).
+3. `POST` the submit endpoint with the nonce, the signature and the value you are claiming.
+
+The server verifies the signature against the address in the request, so possession of the key
+*is* the authorization. Endpoints that use this pattern:
+
+| Flow | Challenge | Submit |
+| --- | --- | --- |
+| Link an X handle | `POST /api/address-links/x/claim` | `POST /api/address-links/x/submit` |
+| Link a bio | `POST /api/address-links/bio/claim` | `POST /api/address-links/bio/submit` |
+| Link a website | `POST /api/address-links/site/claim` | `POST /api/address-links/site/submit` |
+| Set a preferred `.chain` name | `POST /api/address-links/prefered-aens-name/claim` | `POST /api/address-links/prefered-aens-name/submit` |
+| Link a Nostr key | `POST /api/address-links/nostr/claim` | `POST /api/address-links/nostr/submit` |
+| Sponsored `.chain` registration | `POST /api/profile/chain-name/challenge` | `POST /api/profile/chain-name/claim` |
+| X-posting reward rescan | `POST /api/profile/x-posting-reward/recheck-challenge` | `POST /api/profile/{address}/x-posting-reward/recheck` |
+| Push-notification device | `POST /api/notifications/devices/challenge` | `POST /api/notifications/devices` |
+| Notification preferences | `POST /api/notifications/preferences/challenge` | `POST /api/notifications/{address}/preferences` |
+
+Each `claim` flow has a matching `unclaim` and `unclaim/submit` pair that reverses it, signed the
+same way. See [Profile](/api-reference/profile) for the exact bodies.
+
+**One subsystem does issue a bearer token.** The notification feed trades a single wallet
+signature for a session token, and then uses it as a normal `Authorization: Bearer` header:
+
+```text
+POST /api/notifications/{address}/feed/challenge   ->  { nonce }
+sign the message                                   ->  signature
+POST /api/notifications/{address}/feed/session     ->  { token, expiresAt }
+GET  /api/notifications/{address}/feed?limit=50    ->  Authorization: Bearer {token}
+```
+
+The token is cached in `localStorage` until 30 seconds before `expiresAt` (the client falls back
+to a six-day lifetime if the timestamp will not parse), so the user signs once rather than on
+every page load. `GET /api/notifications/web-push/vapid-public-key` is explicitly a public route
+and needs no token. This is the only session-based authentication anywhere in the API.
+
+**One endpoint uses a shared secret.** `PATCH /api/dex/tokens/{address}/listed` is documented in
+the generated client as *"Requires an API key (x-api-key header or Bearer token)"*. It is an
+operator endpoint; the key is not in any public repository.
+
+**Two endpoints are unauthenticated writes.** `POST /api/trending-tags` (ingest from an external
+provider) and `POST /api/affiliations` (generate invite codes) declare no credential in the
+generated client. Treat that as undocumented rather than as an invitation.
+
+## Pagination
+
+Most list endpoints return an envelope of `items` plus `meta`:
+
+```json
+{
+  "items": [],
+  "meta": {
+    "currentPage": 1,
+    "itemCount": 20,
+    "itemsPerPage": 20,
+    "totalItems": 4213,
+    "totalPages": 211
+  }
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `currentPage` | number | The page just returned (1-based) |
+| `itemCount` | number | Records in this response |
+| `itemsPerPage` | number | The effective page size |
+| `totalItems` | number | Total matching records |
+| `totalPages` | number | Total pages at this page size |
+
+Pass `page` (1-based) and `limit` to walk it. **`limit` is capped at 100.** Three independent
+comments in the web app state this for `/api/accounts/{address}/tokens`,
+`/api/tokens/{address}/holders` and `/api/dex/pairs`, and no call site in either repository ever
+requests more. Assume 100 everywhere and page rather than asking for more.
+
+### Four shapes that are not this envelope
+
+Do not write a generic paginator that assumes `items` everywhere.
+
+| Endpoint | Shape |
+| --- | --- |
+| `GET /api/tokens/{address}/history` | A bare JSON array. Still takes `page` and `limit`; you have reached the end when a page comes back empty. |
+| `GET /api/accounts/{address}/portfolio/history` | A bare JSON array of snapshots, bounded by `startDate` / `endDate` / `interval` rather than by pages. |
+| `GET /api/accounts/leaderboard` | `items` plus a different `meta`: `page`, `limit`, `totalItems`, `totalPages`, `window`, `sortBy`, `sortDir`, and `timeFilter`. Note `page`, not `currentPage`. |
+| `GET /api/feed` | Keyset pagination: `items` plus `next_cursor`. Pass the cursor back as `cursor`; there is no page number. |
+
+The analytics series endpoints also return bare arrays, and the totals endpoints return a scalar
+or a small object — see [Analytics](/api-reference/analytics).
+
+## Shared query parameters
+
+| Parameter | Applies to | Notes |
+| --- | --- | --- |
+| `page` | list endpoints | 1-based |
+| `limit` | list endpoints | capped at 100 |
+| `order_by` | most list endpoints | Enum per endpoint; the value set is not shared |
+| `order_direction` | most list endpoints | `ASC` or `DESC` |
+| `search` | tokens, posts, topics, accounts, DEX tokens, DEX pairs | Substring match, server-side |
+| `convertTo` | price/history endpoints | See below |
+| `interval` | history endpoints | Seconds, not a keyword |
+| `includes` | `/api/transactions` | Currently only `token`, which inlines the token object |
+
+### Casing is not consistent — check per endpoint
+
+Query keys are mostly snake_case, with real exceptions. Getting this wrong silently returns the
+unfiltered result rather than an error, so it is worth a look:
+
+| Spelling | Used by |
+| --- | --- |
+| `start_date` / `end_date` | all `/api/analytics/*`, `GET /api/tokens/{address}/transactions`, `/api/bcl-affiliation/analytics*` |
+| `startDate` / `endDate` | `/api/accounts/leaderboard`, all `/api/accounts/{address}/portfolio/*` |
+| `from_date` / `to_date` | `GET /api/dex/transactions` |
+| `convertTo` | every endpoint that takes it, on both sides of the divide |
+| `sortBy` / `sortDir` | `/api/accounts/leaderboard` only — everything else uses `order_by` / `order_direction` |
+
+### Currency conversion
+
+Endpoints that accept `convertTo` take one of: `ae` (default), `usd`, `eur`, `aud`, `brl`, `cad`,
+`chf`, `gbp`, `xau`. The same nine keys make up the `PriceDto` object that the API returns
+wherever a value has a price:
+
+```json
+{ "ae": 0.0421, "usd": 0.0013, "eur": 0.0011, "aud": 0.002,
+  "brl": 0.0071, "cad": 0.0018, "chf": 0.001, "gbp": 0.00097, "xau": 0.0000004 }
+```
+
+Live AE fiat rates come from `GET /api/coins/aeternity/rates`, which returns a flat map of
+lowercase currency code to number.
+
+## Units
+
+This is the single easiest thing to get wrong, and the API mixes two conventions in the same
+object. The rule, read off how the web app formats each field:
+
+| Field family | Unit | Conversion |
+| --- | --- | --- |
+| `price`, `sell_price`, and every `PriceDto` (`price_data`, `sell_price_data`, `spent_amount_data`, `balance_data`, performance `current` / `high` / `low`) | **AE** — already whole units | none |
+| `market_cap`, `market_cap_data`, `dao_balance` | **aettos** | divide by 1e18 |
+| `total_supply`, holder `balance`, transaction `volume` | **token base units** | divide by 10 raised to `decimals` (18 for every token the factory mints) |
+
+The evidence: `price_data.ae` is passed straight into the formatter, while `market_cap_data` is
+passed with the app's `bignumber` flag that runs `toAe()` on it first, and `total_supply` is
+rendered as `Decimal.from(toAe(token.total_supply))`. A holder's share is computed as
+`balance / total_supply`, and their balance is displayed as
+`balance / 10 ** parseInt(token.decimals)`.
+
+Note also that `decimals` is a **string** in `TokenDto`, not a number. Parse it before using it
+as an exponent. Most numeric token fields are strings for the same reason: they are big integers
+that do not survive a `double`.
+
+## Errors
+
+Failures are ordinary HTTP status codes with a JSON body. The web app's error handler reads
+`message` first, then `error`, then falls back to the raw body text:
+
+```ts
+// src/api/backend.ts
+const json = JSON.parse(body);
+errorMessage = json.message || json.error || `Request failed with status ${res.status}`;
+```
+
+That is the NestJS default envelope — expect `statusCode`, `message` and `error` keys. The
+generated client throws an `ApiError` carrying `url`, `status`, `statusText`, `body` and the
+original request.
+
+| Status | When you will see it |
+| --- | --- |
+| `400` | Invalid parameters. Documented case: requesting `convertTo` as a fiat currency on `GET /api/dex/tokens/{address}/history` for a token with no WAE-quoted pool. |
+| `404` | Unknown token, post, account or name. |
+| `429` | Only one documented case: `POST /api/profile/{address}/x-posting-reward/recheck` enforces a once-per-24h cap and returns a body carrying `nextAllowedAt`. |
+
+A successful response with no body is possible: the app's client returns `null` when
+`content-length` is `0` or the `content-type` is not JSON, rather than failing.
+
+### Caching and staleness
+
+`GET /api/accounts/leaderboard` is documented as cached for up to 60 seconds — the
+`meta.timeFilter.start` and `meta.timeFilter.end` it reports are the times the cache entry was
+filled, not the time of your request. No other endpoint declares a cache window in the client.
+The web app polls rather than assuming freshness: 30 seconds for owned tokens, 30 seconds for
+block height, 5 seconds while waiting on a transaction.
+
+### Timeouts
+
+The web app allows a request 90 seconds before aborting it, specifically because portfolio
+history over a long date range is slow. Its DEX helper uses 8 seconds. Budget accordingly: a
+wide `startDate`/`endDate` on `/api/accounts/{address}/portfolio/history` is the slowest call in
+the API.
+
+## Robustness notes for integrators
+
+- **Field aliases exist.** The web app normalises transaction records because the same value has
+  appeared under more than one key: `address` falls back to `account`, `price_data` falls back to
+  `unit_price` then `buy_price`, and `spent_amount_data` falls back to `amount`. The agent skill's
+  scripts read the older spellings. Read defensively on `/api/transactions`.
+- **List responses have been seen as `data` as well as `items`.** Every agent-skill script uses
+  `data.items || data.data || []`. Mirror that if you want the same tolerance.
+- **Trailing slashes are stripped** from the base URL by every client in the repo; do not rely on
+  a redirect.
+
+## Read more
+
+- [API Reference](/api-reference) — the full endpoint index, grouped by resource
+- [Tokens API](/api-reference/tokens) — the `TokenDto` these unit rules apply to, field by field
+- [Accounts API](/api-reference/accounts) — the portfolio and leaderboard endpoints with the camelCase date parameters
+- [Profile API](/api-reference/profile) — the challenge/signature write flow end to end
+- [Node & Middleware](/api-reference/node-and-middleware) — what to do when the REST API does not have the data
+- [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
+
+## Open questions
+
+- **What is the server-enforced maximum `limit`?** Three source comments say 100 and no caller
+  exceeds it, but no endpoint declares it in the OpenAPI client and the behaviour of `limit=500`
+  (clamped, 400, or honoured) is untested. Settle it by requesting `limit=101` against
+  `https://api.superhero.com/api/tokens` and reading `meta.itemsPerPage`.
+- **Are there rate limits on read endpoints?** The only documented limit anywhere in either
+  repository is the 24-hour cap on the X-posting-reward rescan. No `Retry-After`, `X-RateLimit-*`
+  or 429 handling exists for any read path in the web app, which suggests reads are unthrottled —
+  but that is an inference from absence, not a documented guarantee. Confirm with the API
+  operators before running a high-volume poller.
+- **What is the CORS policy?** The browser app calls the API cross-origin from
+  `https://superhero.com`, so `Access-Control-Allow-Origin` must permit at least that origin; the
+  full allowlist is server-side and not in these repositories.
+- **Is there a versioning or deprecation policy?** The generated client carries
+  `VERSION: '1.0'`, but no path (other than `/api/v2/mdw/*`) is versioned and no endpoint returns
+  a deprecation header. Several endpoints are marked `@deprecated` in the client
+  (`GET /api/contracts`, the `window` parameter on `/api/posts/popular`, the `points` and
+  `maxCandidates` parameters on the leaderboard) with no removal date given.

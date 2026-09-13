@@ -1,0 +1,230 @@
+---
+title: "CommunityFactory"
+description: "The contract that deploys every community, registers collections and mints ProtocolDAO tokens."
+---
+
+# CommunityFactory
+
+`CommunityFactory.aes` is the entry point to the whole token system. It holds the registry of
+collections, deploys the four contracts that make up a community in a single transaction,
+mints ProtocolDAO tokens on every buy, and is the canonical place to look up the shared
+bonding curve and affiliation treasury addresses.
+
+It is deployed once per network and reused for every collection and community after that.
+Mainnet `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`, testnet
+`ct_vLKrYRCthfViqUuWFKGYgz7kxhvrsdAoKhZPXqzxcaEFRkZy1`.
+
+The ACI is `superhero-agent-skill/contracts/CommunityFactory.aci.json`. Because the compiler
+inlines every referenced contract, that one file also carries `DAO`, `DAOVote`,
+`CommunityManagement`, `AffiliationTreasury`, `VoteSubjects`, `Frac` and `FungibleTokenFull`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `(protocol_token_name: string) => CommunityFactory.state` | stateful |
+| `create_collection` | `(collection_name: string, allowed_name_length: int, allowed_name_chars: list(CommunityFactory.allowedNameChars)) => string` | stateful, payable |
+| `create_community` | `(collection_name: string, name: string, initial_buy_count: int, is_private: bool, meta_info: CommunityManagement.meta_info) => tuple(DAO, TokenSale, CommunityManagement)` | stateful, payable |
+| `mint_protocol_dao_token` | `(buy_value: int, receiver: address) => unit` | stateful |
+| `has_community` | `(collection_name: string, name: string) => bool` | — |
+| `get_token_sale` | `(collection_name: string, name: string) => TokenSale` | — |
+| `token_contract` | `(collection_name: string, name: string) => FungibleTokenFull` | — |
+| `get_community_management` | `(token_sale: TokenSale) => CommunityManagement` | — |
+| `token_sale_registry` | `(collection_name: string) => CommunityFactory.token_sale_registry` | — |
+| `community_management` | `() => CommunityFactory.community_management` | — |
+| `allowed_name_length` | `(collection_name: string) => int` | — |
+| `allowed_name_chars` | `(collection_name: string) => list(CommunityFactory.allowedNameChars)` | — |
+| `bonding_curve` | `() => BondingCurve` | — |
+| `affiliation_treasury` | `() => AffiliationTreasury` | — |
+| `protocol_dao_token` | `() => FungibleTokenFull` | — |
+| `fee_percentage` | `() => int` | — |
+| `fee_precision` | `() => int` | — |
+| `factory_type` | `() => string` | — |
+| `version` | `() => int` | — |
+| `get_state` | `() => CommunityFactory.state` | — |
+
+## Types
+
+```sophia
+type token_sale_registry  = map(string, TokenSale)
+type known_token_sales    = Set.set(address)
+type community_management = map(TokenSale, CommunityManagement)
+type collection_registry  = map(string, collection_data)
+
+datatype allowedNameChars =
+    SingleChar(int)              // one allowed Unicode code point
+  | CharRangeFromTo(int, int)    // an inclusive code point range
+
+record collection_data =
+  { allowed_name_chars  : list(allowedNameChars)
+  , allowed_name_length : int
+  , token_sale_registry : token_sale_registry }
+
+record state =
+  { collection_registry  : collection_registry
+  , known_token_sales    : known_token_sales
+  , community_management : community_management
+  , affiliation_treasury : AffiliationTreasury
+  , bonding_curve        : BondingCurve
+  , protocol_dao_token   : FungibleTokenFull }
+```
+
+`allowedNameChars` values are **Unicode code points as integers**, not characters.
+`CharRangeFromTo(65, 90)` is `A-Z`; `CharRangeFromTo(48, 57)` is `0-9`; `SingleChar(45)` is a
+single dash. That is how the global WORDS collection expresses "uppercase A-Z, digits, and
+dash". Decoded in JavaScript, each entry is a one-key object:
+
+```javascript
+const chars = await factory.allowed_name_chars(collectionId).then((r) => r.decodedResult);
+// [ { CharRangeFromTo: [ 65n, 90n ] }, { CharRangeFromTo: [ 48n, 57n ] }, { SingleChar: [ 45n ] } ]
+```
+
+`CommunityManagement.meta_info` is simply `map(string, string)` — free-form key/value
+metadata with no schema enforced on chain. The Superhero app writes four keys when it creates
+a token (`superhero/src/features/trending/views/CreateTokenView.tsx`):
+
+| Key | Value written by the app |
+| --- | --- |
+| `collection` | the collection slug, e.g. `word` |
+| `description` | free text, rendered on the token page |
+| `website` | a URL |
+| `twitter` | an X handle or URL |
+
+Every one of those is optional and the contract validates none of them. Pass a `Map`, not an
+object — an empty `new Map()` is valid, and that is what the agent skill's
+`superhero-token-create.mjs` sends.
+
+## Events
+
+```sophia
+datatype event =
+    CreateCommunity(string, DAO, TokenSale, CommunityManagement)
+                 // name,  dao, sale,      community management
+  | CreateCollection(string, address)
+                 // collection id, creator
+```
+
+`CreateCommunity` is the single best source for the three per-community addresses — capture
+it instead of making three follow-up reads.
+
+## Creating a collection
+
+`create_collection` registers a naming namespace. Two things about it are easy to get wrong.
+
+**It costs exactly 555 AE, and the AE is burned.** The public Sophia source requires
+`Call.value == 555 * (10 ^ 18)` and aborts with `COLLECTION_CREATION_DONATION_MISMATCH`
+otherwise, then spends the full amount to
+`ak_11111111111111111111111111111111273Yts`, the æternity burn address. Nobody receives it.
+
+**The stored collection id is not the name you passed.** The contract concatenates the name,
+a dash, and the caller's address:
+
+```text
+create_collection("WORDS", ...) called by ak_alice...
+  → stored as "WORDS-ak_alice..."
+```
+
+That returned string is the id every later call must use. It is also why collection ids in
+the Superhero API are typed as `${string}-${Encoded.AccountAddress}`. Creating a collection
+whose name already exists aborts with `collection_ALREADY_EXISTS`.
+
+## Creating a community
+
+`create_community` is the transaction that brings a token into existence. In one call it:
+
+1. Looks up the collection and validates the name against its length and character rules.
+2. Deploys a `CommunityManagement` contract with the caller as the initial moderator, a
+   minimum token threshold of `10 ^ 18` — one whole token — and your `is_private` and
+   `meta_info`.
+3. Deploys a `DAO`.
+4. Deploys the community's AEX-9 token and an `AffiliationBondingCurveTokenSale` over it,
+   pointing at the shared bonding curve and affiliation treasury.
+5. Registers the sale in the collection's `token_sale_registry` and in `known_token_sales`.
+6. Optionally executes an initial buy of `initial_buy_count` tokens with the attached AE.
+7. Emits `CreateCommunity`.
+
+It returns the three addresses as a tuple, decoded in JavaScript as an array:
+
+```javascript
+const result = await factory.create_community(
+  collectionId,
+  'MYTOKEN',
+  initialBuyTokenDecimals,   // string, in token base units
+  false,                     // is_private
+  new Map(),                 // meta_info
+  { amount: initialBuyPriceAetto },
+);
+
+const [daoAddress, tokenSaleAddress, communityManagementAddress] = result.decodedResult;
+```
+
+### What `initial_buy_count` is denominated in
+
+`initial_buy_count` is a **token count in base units**, not an AE amount. Community tokens use
+18 decimals, so buying 5 whole tokens means passing `5 * 10^18`.
+
+To go the other way — "I want to spend 0.1 AE" — you have to invert the bonding curve. The
+agent skill does it in two steps, and this is the pattern to copy:
+
+```javascript
+// 1. Estimate a token count from an AE amount with client-side curve math.
+const tokenCount = calculateTokensFromAE(buyAe);            // numeric integration
+const decimals = await bondingCurve.supported_decimals().then((r) => r.decodedResult);
+const initialBuyTokenDecimals = tokenCount
+  .multipliedBy(new BigNumber(10).pow(Number(decimals)))
+  .toFixed(0);
+
+// 2. Ask the chain for the exact price of that count, then add a buffer.
+const onChainPrice = await bondingCurve
+  .calculate_buy_price(0n, BigInt(initialBuyTokenDecimals))
+  .then((r) => r.decodedResult);
+
+const amount = new BigNumber(onChainPrice.toString())
+  .multipliedBy(1.05)                       // 5% buffer
+  .toFixed(0, BigNumber.ROUND_CEIL);
+```
+
+The client-side estimate only picks a count; the chain always sets the price. Pass
+`0n` as the supply to `calculate_buy_price` because a brand-new community starts at zero
+supply. Overpayment is refunded by the sale contract, so the buffer is safe.
+
+Pass `initial_buy_count` as `0` and attach no AE to create a token with zero supply.
+
+## Minting ProtocolDAO tokens
+
+`mint_protocol_dao_token(buy_value, receiver)` is called by a sale contract during every buy,
+not by users. The factory checks the caller:
+
+```text
+require(Set.member(Call.caller, state.known_token_sales), "NOT_KNOWN_TOKEN_SALE")
+state.protocol_dao_token.mint(receiver, buy_value * protocol_dao_token_multiplier)
+```
+
+That membership check is what stops an arbitrary contract minting protocol tokens: only sales
+the factory itself deployed are in `known_token_sales`. The multiplier is 1,000 per the
+whitepaper and the app's `PROTOCOL_DAO_TOKEN_AE_RATIO` constant, so a 1 AE buy mints 1,000
+ProtocolDAO tokens to the buyer.
+
+The sale skips the mint when the caller is the factory, which is the case during a
+`create_community` initial buy — the source comments this as reentrancy avoidance. An initial
+buy at creation therefore does **not** mint ProtocolDAO tokens.
+
+## Open questions
+
+- **The live values of `fee_percentage()` and `fee_precision()`.** These are reads on the
+  deployed factory and no node was reachable while this page was written. The Superhero app
+  divides one by the other to get a fraction (`createCommunity.ts`), so expect something like
+  `500 / 100000 = 0.5%`, but confirm on chain before quoting it.
+- **The exact `protocol_dao_token_multiplier` constant in the contract.** The value 1,000 is
+  taken from the whitepaper and from `PROTOCOL_DAO_TOKEN_AE_RATIO` in the app. The Sophia
+  constant itself was not read.
+- **What `factory_type()` returns.** Present in the ACI, value not verified.
+
+## Read more
+
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the sale contract this factory deploys
+- [CommunityManagement](/contracts/community-management) — the `meta_info` map and moderator model
+- [Collections and naming](/tokens/collections-and-naming) — the naming rules from a user's point of view
+- [Create a token from the CLI](/tokens/create-from-cli) — a working end-to-end creation flow
+- [Deployed Addresses](/contracts/addresses) — factory addresses and runtime resolution
+- [Create a token on superhero.com](https://superhero.com/trends/create) — the app flow this contract backs

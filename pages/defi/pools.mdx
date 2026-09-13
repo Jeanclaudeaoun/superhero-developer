@@ -1,0 +1,220 @@
+---
+title: "Liquidity Pools"
+description: "Provide liquidity, earn the 0.3% swap fee, value your position, and understand impermanent loss with real numbers."
+---
+
+# Liquidity Pools
+
+Providing liquidity means depositing both sides of a pair into a pool and receiving LP tokens
+that represent your share of it. In exchange you earn a cut of the 0.3% fee on every swap
+that routes through your pool. You also take on impermanent loss, which this page works
+through with actual numbers rather than hand-waving.
+
+Manage positions at `https://superhero.com/defi/pool`.
+
+## The page
+
+`/defi/pool` puts the add or remove form on the left and your positions on the right, with
+three summary tiles above them:
+
+| Tile | Source |
+| --- | --- |
+| Positions | Count of pools where you hold LP tokens |
+| Total Value | Sum of each position's USD value |
+| Fees Earned | **Hardcoded to `$0.00` in this build.** It is not computing anything. |
+
+Do not read the Fees Earned tile as "you have earned nothing". Fees are not paid out
+separately in a constant-product AMM — they stay in the pool and inflate the value of every
+LP token. Your accrued fees are already inside the Total Value figure. The tile is simply not
+wired up.
+
+## Adding liquidity
+
+1. Open `/defi/pool` and connect your wallet.
+2. Pick the two tokens. Native `AE` is selectable; the app routes AE pairs through the
+   WAE address behind the scenes.
+3. Enter an amount. If the pool exists, the form previews the current ratio in both
+   directions, your estimated pool share, and the LP tokens you would mint.
+4. Approve each AEX-9 token for the router if prompted, then confirm the add transaction.
+
+**Ratio matters.** For an existing pool the app compares your two amounts against the current
+reserve ratio. If they differ by more than **1%** it blocks with a ratio-mismatch message and
+offers the optimal counter-amount for each side. A constant-product pool only accepts
+proportional deposits — any excess on one side is either refunded or, in a naive
+implementation, effectively donated. Take the suggestion.
+
+The LP tokens you receive follow the standard constant-product formula:
+
+```text
+lpMinted = totalSupply × min( amountA / reserveA , amountB / reserveB )
+yourShare = lpMinted / totalSupply × 100
+```
+
+The `min` is why an off-ratio deposit wastes the larger side: the smaller ratio sets the
+mint, and the surplus buys you nothing.
+
+The client also passes `MINIMUM_LIQUIDITY = 1000` as the `minLiquidity` argument on every
+add. That mirrors the Uniswap-V2-style minimum-liquidity floor the first provider into a
+brand-new pool forfeits permanently, which is what prevents the pool from being drained to a
+zero-supply state. For a pool that already exists it is simply a lower bound on the mint.
+
+Minimum amounts are your desired amounts minus your slippage tolerance, clamped to at least
+one aetto. The deadline is `Date.now()` plus your configured minutes, in milliseconds.
+
+### Router entrypoints
+
+| Pair type | Entrypoint |
+| --- | --- |
+| Token + token | `add_liquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin, to, minLiquidity, deadline)` |
+| Token + native AE | `add_liquidity_ae(token, amountTokenDesired, amountTokenMin, amountAeMin, to, minLiquidity, deadline)` with the AE attached as call value |
+
+## Valuing a position
+
+An LP token is a claim on a fraction of both reserves. LP tokens carry **18 decimals**. To
+value a position, or to predict what a removal will return:
+
+```text
+amountA_out = liquidity × reserveA / totalSupply
+amountB_out = liquidity × reserveB / totalSupply
+```
+
+That is exactly what the remove form computes before submitting, reading `reserveA`,
+`reserveB` and `totalSupply` from the pair contract and then subtracting your slippage
+tolerance to derive the minimum amounts it will accept.
+
+Because reserves grow as fees accumulate while total supply does not, the same LP balance
+redeems for more tokens over time. That growth *is* your fee income.
+
+## Removing liquidity
+
+1. Press **Remove** on a position card. The form opens on the left.
+2. Choose how much to withdraw. A full removal uses your raw on-chain LP balance rather than
+   a re-parsed decimal string, to avoid leaving dust behind from rounding.
+3. Approve the **LP token** for the router — removal needs an allowance on the pair contract
+   itself, not on the two underlying tokens.
+4. Confirm.
+
+| Pair type | Entrypoint |
+| --- | --- |
+| Token + token | `remove_liquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, to, deadline)` |
+| Token + native AE | `remove_liquidity_ae(token, liquidity, amountTokenMin, amountAeMin, to, deadline)` |
+
+Slippage above 100% or below 0 is rejected client-side on both add and remove.
+
+## Impermanent loss, with numbers
+
+Impermanent loss is the gap between what your deposit is worth inside a pool and what the
+same tokens would have been worth if you had simply held them. It appears whenever the
+*relative* price of the two assets moves, and it is a loss against holding, not an absolute
+loss — the pool can still be up in dollar terms while underperforming a wallet.
+
+### Why it happens
+
+A constant-product pool holds reserves `x` and `y` with `x × y = k`. The pool quotes a price
+of `y / x`. When the market price moves away from that, arbitrageurs trade against the pool
+until the two match again. They do that by taking the asset that appreciated and leaving the
+one that did not. **Your pool always ends up holding more of the loser and less of the
+winner.**
+
+### A worked example
+
+You are the only provider in a WAE/USDC pool.
+
+```text
+Deposit
+  1,000 WAE and 100 USDC          (1 WAE = 0.10 USDC)
+  k = 1,000 × 100 = 100,000
+  Position value = 100 + 100 = 200 USDC
+
+WAE doubles: the market now prices 1 WAE = 0.20 USDC.
+Arbitrage pushes the pool to the same price, holding k constant:
+
+  price = y / x = 0.20   →   y = 0.20x
+  x × 0.20x = 100,000    →   x² = 500,000   →   x = 707.11 WAE
+  y = 0.20 × 707.11      →   y = 141.42 USDC
+
+Position value in the pool
+  707.11 WAE × 0.20  =  141.42 USDC
+  plus              +   141.42 USDC
+                    =   282.84 USDC
+
+Had you simply held
+  1,000 WAE × 0.20  =   200.00 USDC
+  plus 100 USDC     +   100.00 USDC
+                    =   300.00 USDC
+
+Impermanent loss  =  282.84 − 300.00  =  −17.16 USDC
+                  =  −5.72% against holding
+```
+
+You went in with 1,000 WAE and came out with 707 — the pool sold your appreciating asset all
+the way up. You did end up with more USDC, but not enough to compensate.
+
+### The general formula
+
+For a 50/50 constant-product pool, with `d` the ratio by which the relative price changed:
+
+```text
+IL = 2 × sqrt(d) / (1 + d) − 1
+
+d = 1.00  (no change)   →    0.00%
+d = 1.25                →   −0.62%
+d = 1.50                →   −2.02%
+d = 2.00  (2× move)     →   −5.72%
+d = 4.00  (4× move)     →  −20.00%
+d = 5.00                →  −25.46%
+```
+
+Three properties worth remembering:
+
+- **It is symmetric in log-price.** A halving and a doubling produce the same −5.72%.
+- **It is never positive.** Any relative price change underperforms holding.
+- **It is "impermanent" only while you stay in.** If the price returns to where you entered,
+  the gap closes. Withdraw at a divergent price and the loss is realised permanently.
+
+### Fees are the other side of the trade
+
+Impermanent loss is the cost of providing liquidity; the 0.3% swap fee is the revenue. A pool
+with heavy volume and a stable price ratio is profitable. A pool with thin volume and a
+volatile ratio is not. Before committing, look at the pair's volume against its price
+movement on [the pool explorer](/defi/explore).
+
+## Risks beyond impermanent loss
+
+- **Thin pools are a trap in both directions.** If you are the only meaningful provider, your
+  position is what everyone trades against, and you absorb the full price impact of every
+  large swap.
+- **Both assets are exposed.** You hold two tokens, not one. A community token that goes to
+  zero takes your pool share with it, however well the other side performed.
+- **LP tokens are just AEX-9 tokens.** Losing them, or granting an allowance to the wrong
+  contract, loses the position.
+- **DEX prices are not bonding-curve prices.** A token's DEX pool can quote something very
+  different from its curve price, and nothing arbitrages the two automatically. See
+  [the comparison on the DeFi overview](/defi).
+- **Smart contract risk is real.** The contracts were audited by QuviQ in April 2022, which
+  reduces but does not eliminate it.
+
+## Open questions
+
+- **Is the Fees Earned tile planned, or abandoned?** It is a literal `$0.00` in the current
+  build with no computation behind it.
+- **Where does a per-position USD value come from?** The positions hook exposes `valueUsd`
+  per position, but which price source backs it — the DEX indexer, an oracle, or a
+  derived route price — is not visible in the client.
+- **Is the 0.3% fee split further?** æternity's documentation says the exchange has no
+  platform fee beyond the liquidity-provider reward. Whether the pair contract carries a
+  protocol-fee switch of the kind Uniswap V2 has is a question for the pair contract.
+
+## Read more
+
+- [Swapping](/defi/swap) — the trades your pool earns fees from, and where price impact
+  comes from.
+- [Wrapped AE](/defi/wrapped-ae) — why an "AE pool" is really a WAE pool.
+- [Exploring the DEX](/defi/explore) — check a pair's depth and volume before providing.
+- [Token risks](/tokens/risks) — the risks of the underlying assets you would be pooling.
+- [Provide liquidity on superhero.com](https://superhero.com/defi/pool) — the live add and
+  remove forms.
+- [What is impermanent loss? (Uniswap Labs)](https://support.uniswap.org/hc/en-us/articles/20904453751693-What-is-Impermanent-Loss)
+  — the canonical explainer for the same mechanism on a constant-product AMM.
+- [dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) — the pair and router
+  contracts, and the audit.

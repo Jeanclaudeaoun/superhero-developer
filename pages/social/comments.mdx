@@ -1,0 +1,134 @@
+---
+title: "Comments"
+description: "Comments are posts too — here is how the threading works."
+---
+
+# Comments
+
+A comment on Superhero is a post. Same contract, same entrypoint, same permanence — the only
+difference is a marker in the `media` list naming the parent. That one convention gives you
+arbitrarily deep threads with no threading support in the contract at all. This page documents
+the convention, how the client walks it, and how to read and write comments from the API and
+the CLI.
+
+## The convention
+
+A comment is a `post_without_tip` call whose **first media entry** is the literal string
+`comment:` followed by the parent post's id:
+
+```text
+title = "Great post!"
+media = ["comment:3903_v3"]
+```
+
+Any further media entries after the marker are the comment's own attachments. Nothing else
+distinguishes a comment from a post: the contract records the same `tip_meta` with the author,
+text and timestamp, and returns a new `tip_id` that is itself a valid parent for further
+replies.
+
+Because the parent is just a string in the post body, a comment is as permanent and as
+unremovable as any other post. Deleting a parent is impossible, so a thread can never be
+orphaned.
+
+## How the client reads it
+
+The parser is deliberately forgiving. It scans the `media` array first and then walks
+`tx_args` recursively, looking for the pattern `comment:` or `comment/` followed by a run of
+non-whitespace characters, and normalizes whatever it finds to the `_v3` suffix form. So a
+parent recorded as `3903`, `3903_v3` or `comment/3903` all resolve to `3903_v3`.
+
+Practical consequence for writers: emit `comment:` plus the id with the `_v3` suffix and you
+match both the app and the CLI. Readers should not assume that is the only form on chain.
+
+## Threading and depth
+
+Nothing limits nesting. `/post/:slug` resolves the post, extracts its parent id, fetches that
+post, extracts *its* parent, and repeats — building the full ancestor chain oldest-first before
+rendering. The walk is bounded by a visited set and a hard safety limit of 100 hops, so a
+malformed cycle terminates instead of hanging the page.
+
+The page then renders ancestors above the target post and scrolls the target into the centre of
+the viewport. That is why a notification about a reply opens the **comment**, with its parents
+above it, rather than the parent post the recipient already knows about.
+
+Direct replies are fetched separately: `GET /api/posts/{id}/comments` with `order_direction`
+set to `ASC`, 50 per page, draining a few pages automatically so short threads render fully
+without scrolling. Each reply carries its own `total_comments`, so the UI can show a reply count
+without fetching the subtree.
+
+## Routes
+
+| Route | Behaviour |
+| --- | --- |
+| `/post/:slug` | The canonical post or comment page, with its ancestor chain |
+| `/post/:slug/comment/:id` | Legacy; redirects to `/post/` plus the comment id |
+
+Post ids are stored with a `_v3` suffix and every in-app link strips it, so the legacy redirect
+and the notification deep-link share one helper rather than two copies of the rule. A link
+built from a raw API id still works — the resolver re-adds the suffix.
+
+## Reading comments from the API
+
+```text
+GET /api/posts/{id}/comments?order_direction=ASC&limit=50&page=1
+```
+
+| Parameter | Values |
+| --- | --- |
+| `id` | The parent post id, with the `_v3` suffix |
+| `order_direction` | `ASC` or `DESC` |
+| `limit`, `page` | Standard pagination; the response carries `items` and `meta` |
+
+Reading needs no wallet and no signature.
+
+## From the command line
+
+```bash
+node scripts/superhero-comment.mjs post <post_id> "<content>"
+node scripts/superhero-comment.mjs get <post_id>
+node scripts/superhero-comment.mjs get <post_id> 50 2   # limit, page
+```
+
+`post` builds `media` as a single `comment:` entry and calls `post_without_tip` — it does not
+attach any other media. It needs `AE_PRIVATE_KEY` and posts to mainnet. The output is JSON:
+
+```json
+{
+  "success": true,
+  "comment_post_id": "3910",
+  "parent_post_id": "3903",
+  "content": "Great post!",
+  "tx_hash": "th_..."
+}
+```
+
+`get` is a plain read against `https://api.superhero.com/api/posts/<id>/comments` and needs no
+wallet. Like the posting script, `comment_post_id` is the bare integer — add `_v3` before you
+use it as an API id or as a parent for a further reply.
+
+The agent skill quotes roughly 0.00001 AE in gas for a comment, the same as a post.
+
+## Limits
+
+The web composer applies the same 280-character limit to replies as to posts, and offers the
+same emoji, GIF and image attachments. The contract applies no limit of its own.
+
+## Open questions
+
+- **Does anything validate the parent id?** The contract stores the `media` list verbatim, so
+  a comment can name a parent that does not exist. How the indexer treats such a post — a
+  top-level post, an orphan comment, or dropped — is not documented.
+- **Is `comment/` as a separator ever written, or only tolerated?** The client's parser accepts
+  it, which suggests it exists on chain, but no writer in either repository emits it.
+- **Are media attachments after the marker rendered on comments?** The web composer allows
+  them and the contract stores them; whether every comment surface renders them is not stated.
+
+## Read more
+
+- [Posting](/social/posting) — the entrypoint, the ids, and the content conventions comments
+  share.
+- [The Feed](/social/feed) — where comment counts feed into the popular ranking.
+- [Notifications](/social/notifications) — a reply is the `post-comment` notification type.
+- [The Tipping contract](/contracts/tipping) — the contract reference.
+- [Posts API](/api-reference/posts) — the endpoint-level reference for posts and comments.
+- [Superhero](https://superhero.com/) — open any post to reply to it.

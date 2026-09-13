@@ -1,0 +1,177 @@
+---
+title: "Exploring the DEX"
+description: "Browse every token, pool and transaction on the exchange, and the /api/dex endpoints behind the three views."
+---
+
+# Exploring the DEX
+
+The Explore section is the DEX's read-only side: every token the exchange indexes, every
+pair, and every transaction that has hit the router. Use it to check a pair's depth before
+swapping, to find which pools a token is in, or to trace a specific transaction.
+
+Everything on these pages comes from the DEX indexer over `/api/dex/*`, not from the chain
+directly. That matters for freshness — see the open questions.
+
+## The three views
+
+| View | Route | Answers |
+| --- | --- | --- |
+| Tokens | `/defi/explore/tokens` | What can I trade, and how liquid is it? |
+| Pools | `/defi/explore/pools` | Which pairs exist, and how busy are they? |
+| Transactions | `/defi/explore/transactions` | What has actually been traded, by whom? |
+
+Token and pool rows link to detail pages at `/defi/explore/tokens/<address>` and
+`/defi/explore/pools/<address>`.
+
+## Explore Tokens
+
+Lists the tokens the DEX indexes, as a table on desktop and cards on mobile. Ten per page,
+default ordering **30-day volume, descending**.
+
+Sortable columns, which map straight onto the endpoint's `order_by` values:
+
+| Sort key | Meaning |
+| --- | --- |
+| `pairs_count` | How many pools this token is in |
+| `price` | Current price |
+| `tvl` | Total value locked across its pools |
+| `24hchange`, `7dchange`, `30dchange` | Price change over the window |
+| `24hvolume`, `7dvolume`, `30dvolume` | Traded volume over the window |
+| `name`, `symbol` | Alphabetical |
+| `created_at` | Listing age |
+
+Clicking a column you are already sorting by flips the direction; clicking a new one resets
+to descending. There is a free-text search, and each row carries **Swap** and **Add** actions
+that jump into the swap form or the add-liquidity form with that token pre-selected.
+
+```text
+GET /api/dex/tokens
+    ?order_by=<sort key>&order_direction=ASC|DESC
+    &listed=<true or false>&search=<text>&page=<n>&limit=<n>
+```
+
+The `listed` parameter filters to only listed or only unlisted tokens; omitting it returns
+everything. The web UI does not expose that filter, so the explorer shows both.
+
+Detail and analytics endpoints for a single token:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/dex/tokens/<address>` | The token record |
+| `GET /api/dex/tokens/<address>/price` | Current price |
+| `GET /api/dex/tokens/<address>/price/analysis` | Price with liquidity analysis |
+| `GET /api/dex/tokens/<address>/summary` | Aggregated summary |
+| `GET /api/dex/tokens/<address>/history` | Historical series |
+
+## Explore Pools
+
+Lists every pair. Search is by token name or symbol. Sorting is narrower than on tokens —
+only two keys:
+
+| Sort key | Meaning |
+| --- | --- |
+| `transactions_count` | Busiest pools first |
+| `created_at` | Newest pools first |
+
+Arriving with a `?tokenAddress=` query parameter filters to pools containing that token,
+which is how the token detail page links through to "pools for this token".
+
+```text
+GET /api/dex/pairs
+    ?order_by=transactions_count|created_at&order_direction=ASC|DESC
+    &token_address=<ct_...>&search=<text>&page=<n>&limit=<n>
+```
+
+The pool detail page at `/defi/explore/pools/<address>` composes four calls' worth of data
+into a header, a stats overview, current reserves, a candlestick chart, pool composition and
+a recent-transactions table:
+
+| Endpoint | Feeds |
+| --- | --- |
+| `GET /api/dex/pairs/<address>` | Header, reserves, composition |
+| `GET /api/dex/pairs/<address>/summary` | The stats overview |
+| `GET /api/dex/pairs/<address>/history` | Chart data, paginated |
+| `GET /api/dex/pairs/<address>/preview` | Compact preview payload |
+
+Two more pair lookups exist for routing work:
+`GET /api/dex/pairs/from/<from_token>/to/<to_token>` resolves a direct pair, and adding
+`/providers` to it finds the pairs that could serve those two tokens.
+
+## Explore Transactions
+
+A filterable feed of DEX transactions. Three filters, combinable:
+
+- **Transaction type** — one of the eleven router functions, or All.
+- **Pair address** — a `ct_` pair contract.
+- **Account address** — trace one wallet's activity.
+
+The type filter covers every router entrypoint that mutates a pool:
+
+| Group | Types |
+| --- | --- |
+| Swaps | `swap_exact_tokens_for_tokens`, `swap_tokens_for_exact_tokens`, `swap_exact_ae_for_tokens`, `swap_exact_tokens_for_ae`, `swap_tokens_for_exact_ae`, `swap_ae_for_exact_tokens` |
+| Liquidity | `add_liquidity`, `add_liquidity_ae`, `remove_liquidity`, `remove_liquidity_ae` |
+
+Reading the type tells you the shape of the trade without opening it: an `exact_tokens_for`
+variant means the trader fixed their input, a `tokens_for_exact` variant means they fixed
+their output, and an `_ae` suffix means native AE was on one side and the router wrapped it.
+
+```text
+GET /api/dex/transactions
+    ?order_by=created_at|tx_type&order_direction=ASC|DESC
+    &tx_type=<function name>&pair_address=<ct_...>&account_address=<ak_...>
+    &token_address=<ct_...>&from_date=<ISO-8601>&to_date=<ISO-8601>
+    &page=<n>&limit=<n>
+```
+
+The date filters are inclusive on both ends and are not exposed in the UI. Single lookups:
+`GET /api/dex/transactions/<txHash>` and
+`GET /api/dex/transactions/pair/<pairAddress>`.
+
+## DEX tokens are not bonding-curve tokens
+
+This is the single most common confusion, and the explorer makes it easy to fall into because
+both kinds of asset are "tokens on Superhero".
+
+| | Community token | DEX token |
+| --- | --- | --- |
+| Listed at | `/trends/tokens` | `/defi/explore/tokens` |
+| API | `/api/tokens` | `/api/dex/tokens` |
+| Price comes from | The exponential bonding curve | Pool reserve ratios |
+| "Volume" means | Buys and sells against the curve | Swaps through pools |
+| "TVL" means | Not applicable — the curve holds a reserve | Value locked in pools containing this token |
+| Has a DAO and a treasury | Yes | Only if it is also a community token |
+
+A community token **can** appear in both places, if somebody created a pool for it. When it
+does, the two listings show genuinely different prices for the same asset, because they are
+different markets. Neither is "wrong" and nothing arbitrages them automatically. Check which
+explorer you are looking at before comparing numbers.
+
+See [the full comparison](/defi) on the DeFi overview.
+
+## Open questions
+
+- **How fresh is the indexer?** Every view reads from `/api/dex/*` rather than the chain. The
+  swap router marks route pairs as `synchronized` or not, which implies the indexer can lag,
+  but no staleness figure or refresh cadence is published in the client.
+- **What determines a token's "listed" status?** The endpoint exposes a `listed` filter and a
+  `POST /api/dex/tokens/<address>/listed` setter, so listing is curated — but by whom, and on
+  what criteria, is a backend policy.
+- **What exactly do `tvl` and the volume figures cover?** They are sort keys and rendered
+  columns; the aggregation window boundaries and whether they are denominated in USD or AE at
+  the point of aggregation are defined server-side.
+- **Does the transaction feed include failed transactions?** Nothing in the client filters on
+  success, and the endpoint exposes no such parameter.
+
+## Read more
+
+- [Swapping](/defi/swap) — use the explorer to pick a pair, then trade it here.
+- [Liquidity Pools](/defi/pools) — check a pool's depth and volume here before providing.
+- [DEX API](/api-reference/dex) — the full REST reference for these endpoints.
+- [Bonding curves](/tokens/bonding-curve) — the other market, and why its prices differ.
+- [Explore DEX tokens on superhero.com](https://superhero.com/defi/explore/tokens) — the live
+  token table.
+- [Explore DEX pools on superhero.com](https://superhero.com/defi/explore/pools) — the live
+  pair list.
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the bonding-curve
+  listing, for comparison.

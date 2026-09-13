@@ -1,0 +1,52 @@
+---
+title: "Identity"
+description: "SuperheroID: decentralized identity linking your wallet, chain names and social accounts."
+---
+
+# Identity
+
+Your identity on Superhero is your æternity address plus whatever you choose to attach to it.
+The `ProfileRegistry.aes` contract holds profiles and public names on-chain, so there is no
+account system to be locked out of and no operator who can revoke your handle. Everything else
+— avatars, bios, linked X handles — hangs off that address through signed, verifiable links.
+
+## The shape of an identity
+
+| Layer | What it is | Where it lives |
+| --- | --- | --- |
+| Address | `ak_…` public key derived from your seed | The æternity chain; you hold the key |
+| Chain name | An AENS `.chain` name pointed at your address | AENS, a protocol-level name system |
+| Custom name | A self-declared handle claimed in the registry | `ProfileRegistry.aes` |
+| X name | An X handle bound to your address by attestation | `ProfileRegistry.aes` plus a backend signer |
+| Profile fields | Fullname, bio, avatar URL, website, Nostr key | Registry state and the Superhero API |
+
+A name is never the identity. Resolution always ends at an address, and the three name types
+differ only in how much evidence backs them. Read [Names](/identity/names) before you assume a
+displayed handle means anything.
+
+## In this section
+
+- [SuperheroID](/identity/superhero-id) — the product-level story: what SuperheroID links, what
+  is on-chain, and how much of the W3C DID claim is substantiated today.
+- [Profile Registry](/identity/profile-registry) — the contract reference: data model,
+  entrypoints, events, and the full state tree.
+- [Names: Custom, Chain and X](/identity/names) — the precedence rules, the conflict resolution,
+  and the auto-rename that can take your handle away.
+- [Chain Names (AENS)](/identity/chain-names) — registering, pointing, extending and losing a
+  `.chain` name, including the sponsored free claim.
+- [Verifying Your X Account](/identity/x-verification) — the OAuth plus attestation flow,
+  documented precisely enough to reimplement.
+- [Profiles & Accounts](/identity/profiles) — what an account page shows, which fields are
+  editable, and how each edit is authorised.
+- [DIDs and the W3C Standard](/identity/did-standard) — how the SuperheroID model maps onto
+  W3C DID Core, and where the mapping is incomplete.
+
+## Read more
+
+- [On-chain social](/concepts/on-chain-social) — why identity, content and money share one
+  address on Superhero.
+- [The ProfileRegistry contract](/contracts/profile-registry) — the contract-layer view of the
+  same registry.
+- [Accounts and keys](/aeternity/accounts-and-keys) — where an `ak_` address comes from.
+- [The Superhero whitepaper](https://superhero.com/whitepaper) — the "Superhero Onchain ID"
+  section is the primary source for this whole section.

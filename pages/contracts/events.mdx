@@ -1,0 +1,381 @@
+---
+title: "Contract Events"
+description: "Every event emitted by the Superhero contracts, its topic hash, and how to index them."
+---
+
+# Contract Events
+
+Every state change worth watching in Superhero emits an event. This page is the complete
+cross-contract catalogue: the event names, their argument types, the Blake2b topic hash the
+middleware indexes them by, and how to read them from a call, from the middleware, or from a
+live subscription.
+
+Unless noted, every declaration here is taken from a `datatype event` block in a vendored ACI
+or in the public Sophia source. The one exception is the ProfileRegistry group, which comes
+from whitepaper prose — see the note in that section.
+
+## How an æternity event is encoded
+
+A Sophia `Chain.event` produces a log entry with a `topics` array and a `data` field:
+
+| Slot | Contents |
+| --- | --- |
+| `topics[0]` | The **Blake2b-256 hash of the event constructor name**, as a big integer. This is implicit — it is not one of the declared arguments. |
+| `topics[1..]` | The word-sized arguments in declaration order: `address`, `int`, `bool`, contract references. |
+| `data` | A single `string` argument, if the event declares one. Empty otherwise. |
+
+So `Mint(address, int)` produces three topics — the name hash, the account, and the value —
+and empty data, which is exactly how the Superhero backend reads it: it filters logs on
+`topics[0] === MINT_TOPIC` and takes the amount from `topics[2]`.
+
+`PostWithoutTipReceived(address, string)` produces two topics — the name hash and the author —
+and puts the title in `data`.
+
+The name hash is what the middleware's event filter matches on, and it is derivable offline:
+
+```javascript
+import { blake2b } from 'blakejs';   // or any Blake2b-256 implementation
+
+function eventTopic(name) {
+  const digest = blake2b(new TextEncoder().encode(name), undefined, 32);
+  return BigInt('0x' + Buffer.from(digest).toString('hex')).toString();
+}
+
+eventTopic('Mint');
+// '97248968993606906149864095761415446114204891017168990930824289305879066770211'
+```
+
+```python
+import hashlib
+def event_topic(name):
+    return int.from_bytes(hashlib.blake2b(name.encode(), digest_size=32).digest(), 'big')
+```
+
+Every hash in the tables below was computed this way. Four of them are independently
+confirmed: `superhero-com/superhero-api` hardcodes `BUY_TOPIC`, `SELL_TOPIC`, `MINT_TOPIC` and
+a fourth constant that matches `PriceChange` exactly, and all four agree with the values here.
+
+## The catalogue
+
+### Tipping v3
+
+```sophia
+datatype event = PostWithoutTipReceived(address, string)
+                                     // author,  title
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `PostWithoutTipReceived` | `83408474105809356723083641835082858468110713825767194599189017517019994517159` |
+
+### FungibleTokenFull (AEX-9)
+
+Emitted by every community token and by the ProtocolDAO token.
+
+```sophia
+datatype event =
+    Transfer(address, address, int)    // from, to, value
+  | Allowance(address, address, int)   // owner, spender, value
+  | Burn(address, int)                 // account, value
+  | Mint(address, int)                 // account, value
+  | Swap(address, int)                 // account, value
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `Transfer` | `15485047184846566156736396069994907050875216973023180189891727495730853981167` |
+| `Allowance` | `6675387653529534352993899574763440621350730065146058041830673378811230846814` |
+| `Burn` | `59519329313588602299792785325724171247065768738621522936987157301332531057158` |
+| `Mint` | `97248968993606906149864095761415446114204891017168990930824289305879066770211` |
+| `Swap` | `87152034236714252806392310986442524876185493856990839672979346500071310270671` |
+
+### CommunityFactory
+
+```sophia
+datatype event =
+    CreateCommunity(string, DAO, TokenSale, CommunityManagement)
+                 // name,  dao, sale,      community management
+  | CreateCollection(string, address)
+                 // collection id, creator
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `CreateCommunity` | `9838227481037218045844062460739435620538960633417016110994140287779986845610` |
+| `CreateCollection` | `106451687811681430585235988806070705060981919041452525929915952793933471156443` |
+
+`CreateCommunity` is the single most useful event in the system for an indexer: one log entry
+gives you a new community's name and all three of its contract addresses.
+
+### AffiliationBondingCurveTokenSale
+
+```sophia
+datatype event =
+    Buy(int, int, int)        // total_price, affiliation_amount, total_supply
+  | Sell(int, int)            // return, total_supply
+  | PriceChange(int, int)     // previous_price, next_price
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `Buy` | `103347481884921461187458933603797704361973189016747204637339841427224784760666` |
+| `Sell` | `23104635772480053538972224151762463181492989144154121566848232077119925570281` |
+| `PriceChange` | `3577134775049335318224940963029268892731434609492265317583808375263764302639` |
+
+The traded token **count** is not in any of these. The Sophia source says so explicitly —
+"count can be read from call args". Get it from the transaction arguments or from the paired
+`Mint` / `Burn` event on the token contract.
+
+### DAO
+
+```sophia
+datatype event =
+    VoteAdded(DAOVote, int)            // vote contract, seq id
+  | AppliedVoteSubject(DAOVote, int)   // vote contract, seq id
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `VoteAdded` | `100296888931796761370418720901301074287492180349358028295003277292737336490649` |
+| `AppliedVoteSubject` | `72866934355761804726444456354278340374976688824060458404971668592903548128404` |
+
+### DAOVote
+
+```sophia
+datatype event =
+    Vote(address, vote_option, amount)         // voter, true/false, token amount
+  | RevokeVote(address, vote_option, amount)
+  | Withdraw(address, amount)
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `Vote` | `3422073428777010606992960824915966491300503610863485918227821198825793135961` |
+| `RevokeVote` | `83222614123280176911522716292168996389183038060406855328029912685286369361264` |
+| `Withdraw` | `89825458176832345744835925400658672867758610710629241958369772151454881664788` |
+
+### CommunityManagement
+
+```sophia
+datatype event =
+    ChangeMinimumTokenThreshold(int)
+  | AddModerator(address)
+  | DeleteModerator(address)
+  | MuteUserId(string)
+  | UnmuteUserId(string)
+  | SetOwner(address)
+  | ChangedMetaInfo
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `ChangeMinimumTokenThreshold` | `71578671910977488503419808990837217417694473612503180034663459223810642793586` |
+| `AddModerator` | `115131966880940069348371790178778275850537803171988368912071335019991121363194` |
+| `DeleteModerator` | `28432919713377478169071233854505714891370181428193334591987710567744262357475` |
+| `MuteUserId` | `51220346771549649907734624848411076224948906304928622313163133052569138244628` |
+| `UnmuteUserId` | `32619416189561909869442741682283648234239856393886722913381508002231322933440` |
+| `SetOwner` | `80172520537876076408879795471180066494402217313047416830773036978865332514568` |
+| `ChangedMetaInfo` | `10335050073377245413811954146980376891356632402160017070530938091573150368814` |
+
+`MuteUserId` and `UnmuteUserId` carry their `string` in `data`, not in a topic.
+`ChangedMetaInfo` has no arguments at all — one topic, empty data. On seeing it, re-read
+`meta_info()` to find out what changed.
+
+### AffiliationTreasury
+
+```sophia
+datatype event =
+    UserInvited(address, address)                  // invitee, inviter
+  | RewardAdded(address, int)                      // user, added amount
+  | Withdrawn(address, int)                        // user, reward amount
+  | InvitationRegistered(address, address, int)    // caller, invitation_address, amount
+  | InvitationRedeemed(address, address, address)
+  | InvitationRevoked(address, address)
+  | RecordSaleTransaction(address, int)
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `UserInvited` | `111644451749685844410136074618417092744982231416455402956868241779009497576281` |
+| `RewardAdded` | `40473986023626367572251206730832917387195974458170320818930437034380042534511` |
+| `Withdrawn` | `86610342368312941386442396018534288058023538473615206361475788933815984716359` |
+| `InvitationRegistered` | `30889086819116421264520881404320781915167317994181425690778894381176657165624` |
+| `InvitationRedeemed` | `10590405277933974134328487384997411406441716171794087792891317803724026813033` |
+| `InvitationRevoked` | `44587635821633064715474581091143067134350953963411449550976976484602513073608` |
+| `RecordSaleTransaction` | `77117783428530384567038756067996288780218798482299224958129404253908571047664` |
+
+The argument comments for the first four are from the Sophia source. The last three have no
+source comment that was read — infer their meanings from the corresponding entrypoints with
+care.
+
+### Registry (governance)
+
+```sophia
+datatype event =
+    AddPoll(Poll, int)              // poll contract, poll id
+  | Delegation(address, address)    // delegator, delegatee
+  | RevokeDelegation(address)       // delegator
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `AddPoll` | `69968208931283917191037310555274301179410603918657205619094461743485685844988` |
+| `Delegation` | `14580878786288789199221148111503981453451669266552314083691591254671693950172` |
+| `RevokeDelegation` | `113744386600267958484688809658370302768997764629220755764047327050672141400668` |
+
+### Poll (governance)
+
+```sophia
+datatype event =
+    Vote(address, address, int)
+  | RevokeVote(address, address)
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `Vote` | `3422073428777010606992960824915966491300503610863485918227821198825793135961` |
+| `RevokeVote` | `83222614123280176911522716292168996389183038060406855328029912685286369361264` |
+
+### ProfileRegistry (unverified)
+
+These six come from whitepaper prose, not from a `datatype event` declaration — the
+ProfileRegistry ACI is not vendored and the source is not public. The **names** are quoted
+directly, so the topic hashes are correct if the names are; the argument types are not
+confirmed.
+
+```text
+ProfileUpdated(address, string)
+CustomNameUpdated(address, string)
+ChainNameUpdated(address, string)
+XNameUpdated(address, string)
+DisplaySourceUpdated(address, string)
+CustomNameAutoRenamed(address, string)
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `ProfileUpdated` | `2193902817997146508453588827401107702564784388436046708803266657166241975598` |
+| `CustomNameUpdated` | `43180269317927787360584002022575102258482501175184300001939859316295490694229` |
+| `ChainNameUpdated` | `51976118940190576314632712747296805528449851134181658902729090720961178652361` |
+| `XNameUpdated` | `102737851428136177149252650839259503579601646078559842031293659660334615221567` |
+| `DisplaySourceUpdated` | `7338532342952087637938054343617424262371583376362818042741488473563297773553` |
+| `CustomNameAutoRenamed` | `2771584453438996579114269772704308199817582707257896297661521584288093302696` |
+
+## Name collisions — filter by contract, always
+
+The topic hash is computed from the **name alone**. It carries no contract identity and no
+argument types. Three names collide across the suite:
+
+| Name | Emitted by | Arguments |
+| --- | --- | --- |
+| `Vote` | `DAOVote` | `(address, bool, int)` |
+| `Vote` | `Poll` | `(address, address, int)` |
+| `RevokeVote` | `DAOVote` | `(address, bool, int)` |
+| `RevokeVote` | `Poll` | `(address, address)` |
+| `AddModerator` / `DeleteModerator` / `ChangeMinimumTokenThreshold` | `CommunityManagement` events | also `VoteSubjects.subject` constructor names |
+
+A `Vote` log from a governance poll and a `Vote` log from a community DAO are
+**indistinguishable by topic hash** and have different argument shapes. An indexer that
+matches on `topics[0]` alone and then decodes positionally will silently mis-parse one of
+them.
+
+Filter on the emitting contract address first, then decode. The same discipline applies within
+a single transaction: a token buy emits `Mint` twice, from two different token contracts.
+
+## Reading events from a call you made
+
+The SDK decodes them for you against the ACI:
+
+```javascript
+const result = await sale.buy(count, { amount, omitUnknown: true });
+
+for (const e of result.decodedEvents) {
+  console.log(e.name, e.contract.address, e.args);
+}
+```
+
+`decodedEvents` covers events from **every** contract the call touched, so a buy gives you the
+sale's `Buy` and `PriceChange` plus both `Mint` events. Match on `e.contract.address` to tell
+the community token's mint from the ProtocolDAO token's:
+
+```javascript
+const tokenMint = result.decodedEvents.find(
+  (e) => e.name === 'Mint' && e.contract.address === tokenAddress,
+);
+```
+
+## Reading events from the middleware
+
+For transactions you did not submit, query the middleware's contract log index. The Superhero
+backend uses this exact endpoint:
+
+```text
+GET {middlewareUrl}/v3/contracts/logs?contract_id={ct_...}&tx_hash={th_...}&limit=100
+```
+
+| Network | Middleware base URL |
+| --- | --- |
+| Mainnet | `https://mainnet.aeternity.io/mdw` |
+| Testnet | `https://testnet.aeternity.io/mdw` |
+
+Drop `tx_hash` to get a contract's full log history, paged. Each entry carries `topics` as an
+array of big-integer strings and `data` as the string payload, so matching is a string compare
+against the hashes above:
+
+```javascript
+const MINT_TOPIC = '97248968993606906149864095761415446114204891017168990930824289305879066770211';
+
+const res = await fetch(
+  `https://mainnet.aeternity.io/mdw/v3/contracts/logs?contract_id=${saleAddress}&limit=100`,
+);
+const { data } = await res.json();
+
+const mints = data.filter((log) => log.topics?.[0] === MINT_TOPIC);
+for (const log of mints) {
+  console.log('account topic:', log.topics[1], 'value:', log.topics[2]);
+}
+```
+
+Two operational notes, both learned the hard way in the Superhero backend:
+
+- **Paginate.** The response carries a `next` field with a relative path. Follow it until it
+  is absent; do not assume one page is the whole history.
+- **Logs lag the transaction.** A transaction hash is available the moment it is mined, but
+  the middleware has not necessarily indexed its *logs* yet, so a `tx_hash`-filtered query can
+  return an empty list for a transaction that definitely emitted events. Retry, or reconcile in
+  a later catch-up pass. The Superhero backend carries a source comment about exactly this
+  failure mode.
+
+## Live subscriptions
+
+The middleware exposes a WebSocket interface for subscribing to chain activity — key blocks,
+micro blocks, and objects such as a particular contract — so an indexer does not have to poll
+`/v3/contracts/logs`. The Superhero API in turn republishes decoded activity on its own
+WebSocket channels (`token-created`, `token-updated`, `token-transaction`, `token-history`),
+which is usually the easier integration if you only care about tokens.
+
+## Open questions
+
+- **The exact middleware query parameter for filtering by event name.** The æternity protocol
+  documentation states that the middleware accepts a base32hex-encoded Blake2b hash of the
+  event constructor name as an event filter, but the parameter name and encoding were not
+  confirmed against a live middleware. The `contract_id` + `tx_hash` form above is verified
+  from working Superhero backend code; client-side filtering on `topics[0]` always works.
+- **The exact middleware WebSocket subscribe payload.** The interface is documented as
+  supporting key blocks, micro blocks and object subscriptions, but the precise JSON message
+  shape was not read. See the
+  [ae_mdw repository](https://github.com/aeternity/ae_mdw) for the current WebSocket docs.
+- **Argument meanings for `InvitationRedeemed`, `InvitationRevoked` and
+  `RecordSaleTransaction`.** Types are known from the ACI; no source comment naming the
+  arguments was read.
+- **Whether the ProfileRegistry event names are exactly as the whitepaper spells them.** The
+  hashes above are only correct if they are. No ACI or source was available to confirm.
+
+## Read more
+
+- [Calling Contracts](/contracts/calling-contracts) — `decodedEvents` in context, plus reverts and gas
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — where the four events of a buy come from
+- [Node and middleware API](/api-reference/node-and-middleware) — the middleware endpoints in full
+- [WebSocket API](/api-reference/websocket) — the Superhero API's own real-time channels
+- [æternity contract events specification](https://github.com/aeternity/protocol/blob/master/contracts/events.md) — the topic and data encoding rules
+- [ae_mdw](https://github.com/aeternity/ae_mdw) — the middleware, including its WebSocket interface

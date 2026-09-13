@@ -1,0 +1,216 @@
+---
+title: "FungibleTokenFull (AEX-9)"
+description: "The fungible token implementation behind every community token and the ProtocolDAO token."
+---
+
+# FungibleTokenFull (AEX-9)
+
+`FungibleTokenFull.aes` is the AEX-9 implementation every Superhero token uses — each
+community's token and the ProtocolDAO token alike. It is the æternity fungible token
+reference implementation with the allowance, mintable, burnable and swappable extensions.
+
+There is no single address. Community tokens are deployed by the factory and resolved with
+`factory.token_contract(collection_name, name)` or `sale.token_contract()`. The ProtocolDAO
+token is at `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` on mainnet, or from
+`factory.protocol_dao_token()`.
+
+The ACI is `superhero-agent-skill/contracts/FungibleTokenFull.aci.json`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `(name: string, decimals: int, symbol: string, initial_owner_balance: option(int)) => state` | — |
+| `transfer` | `(to_account: address, value: int) => unit` | stateful |
+| `transfer_allowance` | `(from_account: address, to_account: address, value: int) => unit` | stateful |
+| `create_allowance` | `(for_account: address, value: int) => unit` | stateful |
+| `change_allowance` | `(for_account: address, value_change: int) => unit` | stateful |
+| `reset_allowance` | `(for_account: address) => unit` | stateful |
+| `mint` | `(account: address, value: int) => unit` | stateful |
+| `burn` | `(value: int) => unit` | stateful |
+| `balance` | `(account: address) => option(int)` | — |
+| `balances` | `() => FungibleTokenFull.balances` | — |
+| `allowance` | `(allowance_accounts: FungibleTokenFull.allowance_accounts) => option(int)` | — |
+| `allowance_for_caller` | `(from_account: address) => option(int)` | — |
+| `allowances` | `() => FungibleTokenFull.allowances` | — |
+| `meta_info` | `() => FungibleTokenFull.meta_info` | — |
+| `total_supply` | `() => int` | — |
+| `owner` | `() => address` | — |
+| `aex9_extensions` | `() => list(string)` | — |
+| `swap` | `() => unit` | stateful |
+| `swapped` | `() => map(address, int)` | — |
+| `check_swap` | `(account: address) => int` | stateful |
+
+## Types
+
+```sophia
+record meta_info =
+  { name     : string
+  , symbol   : string
+  , decimals : int }
+
+record allowance_accounts =
+  { from_account : address     // the owner of the tokens
+  , for_account  : address }   // the spender
+
+type balances   = map(address, int)
+type allowances = map(allowance_accounts, int)
+
+record state =
+  { owner        : address
+  , total_supply : int
+  , balances     : balances
+  , meta_info    : meta_info
+  , allowances   : allowances
+  , swapped      : map(address, int) }
+```
+
+`allowance` takes the `allowance_accounts` record as a **single argument**, not two
+addresses — pass an object with exactly those two field names:
+
+```javascript
+const current = await token
+  .allowance({ from_account: 'ak_owner...', for_account: 'ak_spender...' })
+  .then((r) => r.decodedResult);
+```
+
+## Events
+
+```sophia
+datatype event =
+    Transfer(address, address, int)     // from, to, value
+  | Allowance(address, address, int)    // owner, spender, value
+  | Burn(address, int)                  // account, value
+  | Mint(address, int)                  // account, value
+  | Swap(address, int)                  // account, value
+```
+
+These are the standard AEX-9 events. A single token buy produces a `Mint` on the community
+token *and* a `Mint` on the ProtocolDAO token, in the same transaction — see
+[Events](/contracts/events) for how to tell them apart.
+
+## Decimals
+
+Superhero community tokens are created with **18 decimals**. The value is not a guess: the
+Superhero app passes `18n` explicitly when converting an initial buy count
+(`superhero/src/features/trending/libs/createCommunity.ts`), and the bonding curve's
+`decimals` constant is `10 ^ 18`.
+
+So one whole token is `1000000000000000000` base units, the same scale as AE itself. Every
+`value`, `count` and `amount` in these contracts is in base units.
+
+Do not hardcode it anyway. Read `meta_info()` and use the `decimals` field — the ProtocolDAO
+token and any future collection could differ:
+
+```javascript
+const meta = await token.meta_info().then((r) => r.decodedResult);
+const whole = new BigNumber(rawBalance.toString()).shiftedBy(-Number(meta.decimals));
+```
+
+## The allowance model
+
+Two Superhero flows require an allowance before they will work:
+
+| Flow | Grant the allowance to |
+| --- | --- |
+| Selling tokens back to the bonding curve | the **sale** contract address, `ct_` rewritten to `ak_` |
+| Voting in a community DAO | the **vote** contract address, `ct_` rewritten to `ak_` |
+
+The `ct_` to `ak_` rewrite is real and required. A contract's account identity uses the `ak_`
+prefix over the same key bytes, and that is the address that appears as `for_account`:
+
+```javascript
+const forAccount = saleAddress.replaceAll('ct_', 'ak_');
+```
+
+Three entrypoints manage the value, and they are not interchangeable:
+
+| Entrypoint | Semantics | When to use it |
+| --- | --- | --- |
+| `create_allowance(for_account, value)` | Creates a new allowance entry. | First time granting to this spender |
+| `change_allowance(for_account, value_change)` | Adds a **delta** to an existing allowance. The delta may be negative. | Adjusting an existing allowance |
+| `reset_allowance(for_account)` | Sets it to zero. | Revoking |
+
+The correct pattern, straight from the agent skill's `superhero-token-swap.mjs`:
+
+```javascript
+const existing = await token
+  .allowance({ from_account: aeSdk.address, for_account: forAccount })
+  .then((r) => r.decodedResult)
+  .catch(() => undefined);
+
+if (existing === undefined) {
+  await token.create_allowance(forAccount, amount);
+} else {
+  const delta = new BigNumber(amount).minus(existing.toString()).toFixed();
+  await token.change_allowance(forAccount, delta);
+}
+```
+
+`allowance` returns `option(int)`, so a never-granted allowance decodes to `undefined`. The
+`.catch(() => undefined)` guards the case where the contract aborts on a missing entry rather
+than returning `None`.
+
+`allowance_for_caller(from_account)` is the same read from the spender's side — useful when
+the spender wants to check what it may move without knowing its own address twice over.
+
+## Mint and burn
+
+`mint` and `burn` are how supply tracks the bonding curve:
+
+- **Buy** → the sale contract calls `mint(buyer, count)`. Supply goes up.
+- **Sell** → the sale contract pulls your tokens with `transfer_allowance` and calls `burn`.
+  Supply goes down.
+
+Both are owner-gated. For a community token the owner is the sale contract, so you cannot mint
+yourself tokens — the only way to increase supply is to pay the curve. This is what makes
+`total_supply()` a trustworthy input to a price calculation.
+
+## The swap extension
+
+`swap`, `swapped` and `check_swap` come from the AEX-9 swappable extension. They exist to
+migrate balances from an older token contract into a newer one: `swap()` credits the caller
+based on their balance in the predecessor and records the amount in the `swapped` map.
+
+Whether any Superhero community token has actually used this path is not determined — see
+Open questions. For a token created by the factory today, `swapped` is empty and these
+entrypoints are inert.
+
+`aex9_extensions()` returns the list of extension names this contract implements. Call it
+rather than assuming; it is the standard's own discovery mechanism.
+
+## Reading balances
+
+| Read | Returns | Note |
+| --- | --- | --- |
+| `balance(account)` | `option(int)` | `undefined` when the account has never held the token, **not** zero |
+| `balances()` | `map(address, int)` | Every holder. Large on popular tokens — prefer the middleware |
+| `total_supply()` | `int` | The input to every bonding curve price call |
+
+For holder lists and balances at scale, query the middleware's AEX-9 endpoints
+(`/v3/aex9/<contract address>`) rather than calling `balances()`, which returns the entire map
+in one response.
+
+## Open questions
+
+- **Which extensions `aex9_extensions()` actually reports.** The ACI shows the swap
+  entrypoints are present, but the returned list was not read from a deployed contract.
+- **Whether `swap` is used in production.** No Superhero token migration was found in either
+  repository. Check `swapped()` on a deployed community token; a non-empty map means it was
+  used.
+- **Whether `change_allowance` reverts on a negative result.** The ACI allows a negative
+  `value_change`; what happens when the delta would drive the allowance below zero was not
+  read from source.
+- **Whether `create_allowance` aborts when an allowance already exists.** The agent skill
+  branches on existence and calls `change_allowance` instead, which implies it does, but the
+  `require` itself was not read. The branch above is correct either way.
+
+## Read more
+
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the contract that mints and burns these tokens
+- [DAOVote](/contracts/dao-vote) — the other flow that needs an allowance
+- [Calling Contracts](/contracts/calling-contracts) — SDK setup and the full allowance example
+- [AEX-9 tokens in your wallet](/wallets/aex9-tokens) — the same token from a holder's point of view
+- [AEX standards](/aeternity/aex-standards) — where AEX-9 sits among the æternity standards
+- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the standard itself
+- [aeternity-fungible-token](https://github.com/aeternity/aeternity-fungible-token) — the reference implementation this contract is based on

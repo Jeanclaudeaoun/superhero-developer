@@ -1,0 +1,126 @@
+---
+title: "Claiming Rewards"
+description: "Which Superhero rewards arrive automatically, which need a transaction you sign, and what the failures mean."
+---
+
+# Claiming Rewards
+
+Three different things on Superhero are called "claiming a reward", and they behave
+completely differently. One is automatic, one is a contract call you sign, and one is signed
+by a throwaway key embedded in an invite link. This page separates them and lists the errors
+you will actually see.
+
+## The three payout paths
+
+| Reward | How it reaches you | Who signs | Gas |
+| --- | --- | --- | --- |
+| X posting rewards | Sent automatically to your connected wallet after a successful scan | Nobody — the backend pays out | None for you |
+| Affiliate rewards | You press **Collect rewards**, which calls `withdraw()` on the AffiliationTreasury | You | Yes, an ordinary æternity transaction fee |
+| An invite link's AE gift | You open the link and press **Claim reward** | The invite's one-time key, not your wallet | Covered by the `redemption_fee_cover` the inviter funded |
+
+## X posting rewards — nothing to claim
+
+There is no claim button for the [Superhero Rewards Program](/rewards/rewards-program).
+Press **Check rewards** on `/trends/invite`, sign the ownership challenge with your wallet,
+and the backend scans and pays. The earnings banner confirms it: rewards "have been sent
+automatically to your connected wallet".
+
+What can go wrong:
+
+- **The button is greyed out with a countdown.** The recheck is rate-limited. The status
+  response carries `next_check_allowed_at`; a submit past the cap returns HTTP 429 and the
+  scan is skipped entirely. Wait for the countdown and try again.
+- **The check succeeds but nothing arrives.** A recheck that returns HTTP 200 can still
+  carry an `error` string — below the follower minimum, the X identity was already rewarded
+  on a different address, or the payout transaction itself failed. The card shows that
+  string in a red banner. It is the real reason; read it rather than retrying blindly.
+- **You rejected the signature.** The client swallows wallet rejections silently and leaves
+  the state unchanged. Press the button again and approve the signature request.
+
+## Affiliate rewards — the withdraw call
+
+Affiliate rewards accrue in the `AffiliationTreasury` contract as your invitees trade. They
+sit there until you withdraw them.
+
+**The gate:** four direct invitees must each have spent at least 10 AE, cumulatively, in
+token sales. The Collect Rewards card reads this live from the contract, shows a progress bar
+out of four, and lists each invitee's spend against the 10 AE threshold.
+
+To withdraw:
+
+1. Open `https://superhero.com/trends/invite` and connect the wallet that created the
+   invites. Rewards accrue to the inviter address, not to any other account.
+2. Scroll to **Collect your rewards**. The card shows **Available Rewards** — the value of
+   `get_accumulated_rewards(<your address>)`, converted from aettos.
+3. If the progress bar reads 4/4 and the balance is above zero, the button is enabled. Press
+   **Collect rewards** and confirm the transaction in your wallet. It calls `withdraw()`.
+
+Button states and what they mean:
+
+| Button reads | Meaning |
+| --- | --- |
+| Not eligible yet | Fewer than four invitees have crossed 10 AE |
+| No rewards yet | Threshold reached, but `get_accumulated_rewards` returns zero |
+| Collect rewards | Eligible; the call will go through |
+| Withdrawing... | Transaction submitted, waiting on the wallet and the chain |
+
+Contract errors the card translates for you:
+
+- `MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED` and `MINIMUM_OF_4_ACCOUNTS_SHALL_BUY` both render
+  as "you need 4 direct invitees who each spent at least 10 AE in token sales". If you see
+  this while the bar shows 4/4, the on-chain state disagrees with the cached UI — reload.
+- A `Key does not exist` or `Maps:` error from `get_unique_invitee` means the contract has no
+  entry for your address yet. The card treats that as zero progress, not as a failure. It is
+  the normal state for an account that has never invited anyone.
+
+## An invite link's AE gift — claimed by the link, not by you
+
+When someone opens an invite link, the app reads `invite_code` out of the URL fragment,
+reconstructs a one-time account from the secret it contains, and shows a claim card with the
+funded amount and who sent it.
+
+Pressing **Claim reward** calls `redeem_invitation_code(<your wallet address>)` **signed by
+the invite's one-time key**, not by your wallet. That is why the inviter funds a
+`redemption_fee_cover` alongside the gift: the throwaway account needs enough AE to pay for
+its own redemption transaction. Your wallet only has to be connected so the contract knows
+where to send the AE and whom to attach to the affiliation tree.
+
+Errors you may hit:
+
+| Error | What happened |
+| --- | --- |
+| `ALREADY_REDEEMED` | The link was already claimed. The card also detects this up front by reading the third field of `get_invitation_code`. |
+| `INVITEE_ALREADY_REGISTERED` | Your wallet address is already attached to an inviter. One account can only be invited once. |
+| `Trying to call undefined function` | You are on the wrong network — the treasury at that address does not exist on the network your wallet is set to. |
+| A message mentioning `Secret key` | The secret in the link is in a format the SDK cannot load. The link is malformed or truncated. |
+
+If you are the **inviter** and you open your own link, the card switches to **Revoke
+invitation** instead of Claim, and calls `revoke_invitation_code` with your own wallet.
+
+## Open questions
+
+- **Does the FAQ's "claim banner" refer to something else?** The FAQ describes a claim banner
+  appearing on the Rewards page once a milestone completes, with a claim button and a gas
+  fee. The current rewards UI pays X posting rewards automatically with no such banner; the
+  only claim banner in the app is the invite-link card described above. Either the FAQ
+  predates the automatic payout, or a milestone claim flow exists that is not in this build.
+  Settling it needs the deployed backend, not the web app.
+- **Do unclaimed rewards expire?** Nothing in the client sets a deadline on accumulated
+  affiliate rewards or on an unclaimed invite link. The contract's payout-period accounting
+  (see [The Affiliation System](/rewards/affiliation)) is the place to check, and the ACI
+  alone does not answer it.
+- **What happens to the AE in a revoked link?** The CLI help calls revoke "reclaim funds",
+  which implies the gift returns to the inviter, but neither the ACI nor the client confirms
+  whether the `redemption_fee_cover` portion comes back with it.
+
+## Read more
+
+- [Superhero Rewards Program](/rewards/rewards-program) — the milestones that trigger the
+  automatic payouts.
+- [The Affiliation System](/rewards/affiliation) — what `withdraw()` is paying out and how it
+  accrued.
+- [Invite Links](/rewards/invite-links) — creating and revoking the links whose gifts are
+  claimed here.
+- [AE and gas](/aeternity/ae-and-gas) — why the withdraw call costs a fee and how fees work.
+- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — the page with both
+  the Collect Rewards card and the Check rewards button.

@@ -1,0 +1,157 @@
+---
+title: "Deployed Addresses"
+description: "Every contract address Superhero uses, per network, and how each one was verified."
+---
+
+# Deployed Addresses
+
+Every address on this page is a deployed contract on æternity mainnet (`ae_mainnet`) or
+testnet (`ae_uat`). Addresses were read from source files on **13 September 2026**; the
+verification column says which file each one came from. None of them were confirmed against a
+live node — see [Open questions](#open-questions).
+
+Per-community contracts (token, sale, DAO, community management) are **not** listed here.
+They are deployed by the factory and discovered per token — resolve them at runtime, as
+described under [Reading addresses at runtime](#reading-addresses-at-runtime).
+
+## Mainnet (`ae_mainnet`)
+
+| Contract | Address | Verified from |
+| --- | --- | --- |
+| CommunityFactory | `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` | `superhero-agent-skill/scripts/superhero-token-create.mjs`; `bcl-contracts/README.md`; `superhero-api/src/configs/contracts.ts` |
+| AffiliationTreasury | `ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ` | `superhero-api/src/configs/contracts.ts` (`affiliation_address`); `superhero/src/utils/constants.ts` (`INVITATIONS_CONTRACT`) |
+| ProtocolDAO token (AEX-9) | `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` | `superhero-api/src/configs/contracts.ts` (`bctsl_aex9_address`) |
+| Tipping v3 | `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` | `superhero/src/config.ts` (`CONTRACT_V3_ADDRESS`) |
+| Governance registry | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` | `superhero/src/config.ts` (`GOVERNANCE_CONTRACT_ADDRESS`) |
+| DEX factory | `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` | `superhero/src/config.ts` (`DEX_FACTORY`) |
+| DEX router | `ct_azbNZ1XrPjXfqBqbAh1ffLNTQ1sbnuUDFvJrXjYz7JQA1saQ3` | `superhero/src/config.ts` (`DEX_ROUTER`) |
+| WAE (wrapped AE) | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` | `superhero/src/config.ts` (`DEX_WAE`) |
+| aeETH | `ct_ryTY1mxqjCjq1yBn9i6HDaCSdA6thXUFZTA84EMzbWd1SLKdh` | `superhero/src/config.ts` (`DEX_AEETH`) |
+
+The mainnet factory was deployed at key block height **1089546**, per
+`deployed_at_block_height` in `superhero-api/src/configs/contracts.ts`. That is the height an
+indexer should start from when backfilling factory events.
+
+## Testnet (`ae_uat`)
+
+| Contract | Address | Verified from |
+| --- | --- | --- |
+| CommunityFactory | `ct_vLKrYRCthfViqUuWFKGYgz7kxhvrsdAoKhZPXqzxcaEFRkZy1` | `superhero-api/src/configs/contracts.ts` (`BCL_FACTORY[NETWORK_ID_TESTNET]`) |
+| AffiliationTreasury | `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK` | `superhero-api/src/configs/contracts.ts` (`affiliation_address`) |
+| ProtocolDAO token (AEX-9) | `ct_2cyV58CrBwi2k4kvP3mN517C1NH21zfxxYmaAyb41GXdXSsRvN` | `superhero-api/src/configs/contracts.ts` (`bctsl_aex9_address`) |
+| Tipping v3 | `ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW` | `superhero/src/config.ts` (`CONTRACT_V3_ADDRESS`) |
+| Governance registry | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` | `superhero/src/config.ts` (`GOVERNANCE_CONTRACT_ADDRESS`) |
+| DEX factory | `ct_NhbxN8wg8NLkGuzwRNDQhMDKSKBwDAQgxQawK7tkigi2aC7i9` | `superhero/src/config.ts` (`DEX_FACTORY`) |
+| DEX router | `ct_MLXQEP12MBn99HL6WDaiTqDbG4bJQ3Q9Bzr57oLfvEkghvpFb` | `superhero/src/config.ts` (`DEX_ROUTER`) |
+| WAE (wrapped AE) | `ct_JDp175ruWd7mQggeHewSLS1PFXt9AzThCDaFedxon8mF8xTRF` | `superhero/src/config.ts` (`DEX_WAE`) |
+| aeETH | `ct_WVqAvLQpvZCgBg4faZLXA1YBj43Fxj91D33Z8K7pFsY8YCofv` | `superhero/src/config.ts` (`DEX_AEETH`) |
+
+The testnet factory was deployed at key block height **1097291**.
+
+## Reading addresses at runtime
+
+Hardcoding the factory address is the wrong default. The Superhero web app never does it: it
+fetches the active factory schema from the API and initialises the contract from whatever
+address comes back (`superhero/src/hooks/useCommunityFactory.ts`). Everything else hangs off
+the factory, so one lookup resolves the whole graph.
+
+### Step 1 — get the factory address from the API
+
+```bash
+# mainnet
+curl -s https://api.superhero.com/api/factory
+
+# testnet
+curl -s https://testnet.api.dev.tokensale.org/api/factory
+```
+
+The response is a community factory schema. The fields the Superhero backend declares for it
+(`superhero-api/src/utils/types.ts`) are:
+
+```text
+address                   ct_... the CommunityFactory
+deployed_at_block_height  int, the key block the factory was deployed at
+bctsl_aex9_address        ct_... the ProtocolDAO token
+affiliation_address       ct_... the AffiliationTreasury
+collections               map of collection id -> collection data
+```
+
+Collection ids have the shape `<name>-<creator address>`, for example `WORDS-ak_...`. That is
+not cosmetic: `create_collection` concatenates the submitted name, a dash, and the caller's
+address before storing it, so the id you pass to `create_community` must be the full
+concatenated string, not the bare name.
+
+### Step 2 — or read them straight off the factory
+
+Every shared address is an entrypoint on the factory, so you can resolve them on chain
+without trusting the API at all:
+
+```javascript
+import { AeSdk, Node, Contract } from '@aeternity/aepp-sdk';
+import fs from 'fs';
+
+const aeSdk = new AeSdk({
+  nodes: [{ name: 'mainnet', instance: new Node('https://mainnet.aeternity.io') }],
+});
+
+const factory = await Contract.initialize({
+  aci: JSON.parse(fs.readFileSync('./contracts/CommunityFactory.aci.json', 'utf8')),
+  address: 'ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN',
+  onNode: aeSdk.api,
+});
+
+const treasury   = await factory.affiliation_treasury().then((r) => r.decodedResult);
+const daoToken   = await factory.protocol_dao_token().then((r) => r.decodedResult);
+const curve      = await factory.bonding_curve().then((r) => r.decodedResult);
+
+console.log({ treasury, daoToken, curve });
+```
+
+`affiliation_treasury()`, `protocol_dao_token()` and `bonding_curve()` are all plain
+non-stateful reads, so they cost nothing and need no account. This is the pattern the agent
+skill uses: `superhero-invite.mjs` resolves the treasury through
+`factory.affiliation_treasury()` rather than hardcoding it.
+
+### Step 3 — resolve per-community contracts
+
+Given a collection id and a token name:
+
+| Entrypoint | Returns |
+| --- | --- |
+| `get_token_sale(collection_name, name)` | the `AffiliationBondingCurveTokenSale` address |
+| `token_contract(collection_name, name)` | the community's AEX-9 token address |
+| `get_community_management(token_sale)` | the `CommunityManagement` address |
+| `has_community(collection_name, name)` | whether the name is taken |
+
+The DAO is not exposed by a factory getter. Read it from the sale contract's state
+(`get_state().dao_contract`), or capture all three addresses from the `CreateCommunity` event,
+which carries the DAO, the sale and the community management contract.
+
+If you already have a sale address, `GET /api/tokens/<sale address>` returns the same set of
+addresses without any chain calls.
+
+## Open questions
+
+- **Where is the ProfileRegistry deployed?** No address for `ProfileRegistry.aes` appears in
+  `superhero/src/config.ts`, anywhere else in the Superhero web app, in the agent skill, or in
+  a public `superhero-com` repository. The Superhero backend's ProfileRegistry indexer was
+  removed when profile linkage moved to an `AddressLink` contract, whose address is supplied
+  by the deployment-time environment variable `ADDRESS_LINK_CONTRACT_ADDRESS` and is not
+  committed. Ask the Superhero backend operators for the deployed ProfileRegistry address, or
+  read `ADDRESS_LINK_CONTRACT_ADDRESS` from a running `superhero-api` deployment.
+- **Are these addresses still current on chain?** Outbound network access was blocked while
+  this page was written, so no address here was confirmed against a node or against
+  `GET /api/contracts`. Before relying on one, re-read it from `GET /api/factory` for the
+  factory-owned addresses, or from `superhero/src/config.ts` on the deployed build for the
+  rest.
+- **Is there a testnet DEX/WAE difference?** The DEX addresses come from `src/config.ts` and
+  are marked `disabled: true` on the mainnet network definition in that file. What that flag
+  disables is not documented in the repository.
+
+## Read more
+
+- [Calling Contracts](/contracts/calling-contracts) — how to turn one of these addresses into a working contract instance
+- [CommunityFactory](/contracts/community-factory) — the entrypoints used above to resolve addresses
+- [Networks](/aeternity/networks) — node, middleware and explorer endpoints for both networks
+- [Factory and contracts API](/api-reference/factory-and-contracts) — the REST endpoints that serve the factory schema
+- [aeScan block explorer](https://aescan.io) — paste any address here to inspect its state and calls

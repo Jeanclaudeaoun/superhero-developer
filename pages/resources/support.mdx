@@ -1,0 +1,134 @@
+---
+title: "Support"
+description: "Where to get help, and how to report a bug that can actually be acted on."
+---
+
+# Support
+
+Most Superhero problems are one of three things: a transaction that did not do what you expected, a
+client that is showing stale data, or a wallet that will not connect. Diagnose which one you have
+first — it decides where the report goes — then file it with enough detail that someone can
+reproduce it without asking you questions.
+
+## Triage first
+
+Work down this list before filing anything. Each step rules out a whole class of problem.
+
+| Check | How | What it tells you |
+| --- | --- | --- |
+| Did the transaction land? | Look the hash up on [aescan.io](https://aescan.io) (testnet: [testnet.aescan.io](https://testnet.aescan.io)) | If the chain has it and succeeded, the problem is display, not execution |
+| Is the backend up? | The status panel in the app footer | The backend indicator goes red when the API has not answered for 60 seconds. A red indicator explains missing feeds, charts and token data |
+| Is your device online? | Same panel, blockchain indicator | Driven by the browser's own online state |
+| Is it the indexer lagging? | Compare the token page against the contract | Chain state is authoritative; the API can be behind it by a short interval |
+| Is it your wallet? | Try a different surface — extension, the app's built-in wallet, or `wallet.superhero.com` | Narrows a signing failure to one wallet |
+
+If the chain shows your transaction as successful and the app disagrees, it is a client or indexer
+bug and worth reporting. If the chain shows it reverted, the error is on-chain — a slippage floor
+you crossed, a missing allowance, an insufficient balance — and
+[Troubleshooting](/wallets/troubleshooting) is the better starting point.
+
+## Where to report
+
+| What | Where |
+| --- | --- |
+| Bug or feedback about the web app, mobile apps or PWA | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues) |
+| Bug in the AI agent skill — scripts, guides, ACIs | [github.com/superhero-com/superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) |
+| Privacy, data-protection or legal questions | `superherowallet@protonmail.com` |
+| Errors in this documentation | See [How to Contribute](/contributing/how-to-contribute) |
+
+The GitHub issue tracker is not a fallback — it is the app's own support path. The "Send Feedback"
+button in the footer and the in-app feedback control both open
+`https://github.com/superhero-com/superhero/issues` directly.
+
+The `superherowallet@protonmail.com` address is given in both the
+[terms of use](https://superhero.com/terms) ("For any additional questions, please contact the
+Superhero.com team at …") and the [privacy policy](https://superhero.com/privacy), which names it as
+the contact for data-subject requests and for questions about the policy. Note that anything you
+send there is off-chain data you volunteered, and the privacy policy processes it on a consent basis
+and retains it "until the questions have been answered … or, in any other case, until withdrawal of
+consent."
+
+## What to include
+
+The FAQ's own answer sets the minimum: "Include the token name, your address, the tx hash, and what
+happened." Expand it into this, and your report will be actionable on the first read.
+
+**Always:**
+
+- **What you expected, and what happened instead.** One sentence each. This is the single most
+  useful line in any report.
+- **The transaction hash**, if a transaction was involved — even a failed one. Without it nobody can
+  see what the chain did.
+- **Your account address** (`ak_…`). It is public on-chain already; including it costs you nothing
+  and saves a round trip.
+- **The network.** Mainnet or testnet. They behave differently and have different contract addresses.
+- **The exact URL** you were on, including the token symbol or post ID in the path.
+- **Surface and version.** Web browser and version, or iOS/Android app, or PWA, or the agent skill.
+
+**For a trading problem, add:**
+
+- The **token name and its sale address** (`ct_…`).
+- The **amount** you entered and the **quote** the trade card showed.
+- Your **slippage setting** — the default is 1% in the token trade card, 5% on the DEX, and 3% in the
+  agent CLI, and a reverted sell is very often a slippage floor doing its job.
+- Whether the **allowance step** succeeded, if you were selling. A sell is two transactions; report
+  both hashes.
+
+**For a posting problem, add:**
+
+- The **post ID** (the `…_v3` form) or the parent post ID if it was a comment.
+- Whether the post appeared on-chain. Check the transaction before assuming it was lost — an indexer
+  delay looks identical to a failed post in the feed.
+
+**For an agent problem, add:**
+
+- The **script and subcommand** you ran, and the JSON it printed. Every script emits structured JSON
+  on success and a prefixed error on failure.
+- The **runtime** driving the skill.
+- **Never** include `AE_PRIVATE_KEY`, a mnemonic, or an unclaimed invite link. Invite links carry a
+  one-time secret; pasting one into a public issue hands it to whoever reads it first.
+
+## Do not post these anywhere
+
+- Your **private key** or **secret key**, in any form, to anyone, for any reason. No Superhero
+  process ever needs it. Anyone asking is attacking you.
+- Your **mnemonic** or seed phrase.
+- **Unclaimed invite links.**
+- Screenshots that show any of the above, including a wallet's reveal screen.
+
+Support can always be given from a public address and a transaction hash. If a "support agent"
+insists otherwise, that is the tell.
+
+## Security disclosure
+
+If you have found a vulnerability in a contract, the app or the skill, disclose it privately first —
+do not open a public GitHub issue describing an exploitable bug in a live contract that holds user
+funds. The repositories do not publish a dedicated security contact or a `SECURITY.md`, so the only
+address these sources support is `superherowallet@protonmail.com`. See the open questions below, and
+[Security Model](/contracts/security) for what the protocol already defends against.
+
+## Read more
+
+- [Troubleshooting](/wallets/troubleshooting) — the wallet and connection problems that account for most reports.
+- [Risks](/tokens/risks) — losses that are working as designed rather than bugs.
+- [Explorers](/aeternity/explorers) — how to read a transaction before reporting it.
+- [Fees & Slippage](/tokens/fees-and-slippage) — why a sell reverts, and how to stop it happening again.
+- [FAQ](/concepts/faq) — the 23 canonical answers, plus developer and agent questions.
+- [Report a bug](https://github.com/superhero-com/superhero/issues) — the app's own issue tracker.
+- [Agent skill repository](https://github.com/superhero-com/superhero-agent-skill) — for skill bugs.
+- [æScan](https://aescan.io) — look your transaction up before you file.
+
+## Open questions
+
+- **What are the "official channels listed in the app"?** The FAQ's support answer points at them,
+  but no community or social channel — no Discord, Telegram group, X account, forum or support
+  address — appears anywhere in the web app, the locale files or the agent skill. The only outbound
+  social references in the codebase are share-to-X and share-to-Telegram intents for content you
+  post, which are not Superhero accounts. Until a channel can be confirmed from an official source,
+  **treat any Discord or Telegram invite claiming to be Superhero support as unverified**, and use
+  the GitHub tracker and the email address above. See [Official Links](/resources/links).
+- **Is there a security disclosure policy or bug bounty?** No `SECURITY.md`, no dedicated security
+  address and no bounty programme appears in either repository. Whether the protonmail address is
+  monitored for security reports is not established by these sources.
+- **Is there a response-time expectation?** None is published. The GitHub tracker is public, so its
+  history is the only available signal.

@@ -1,0 +1,278 @@
+---
+title: "Where the Money Goes"
+description: "The exact split of every AE spent on a community token buy — and what comes back on a sell."
+---
+
+# Where the Money Goes
+
+Every AE that enters a community token trade ends up in one of four places: the bonding curve
+reserve, the community's DAO treasury, the affiliation chain, or the network as gas. This page
+accounts for all of it, on both sides of a trade, and says exactly which figures are specified and
+which are derived.
+
+## The buy side
+
+On every community-token **buy**:
+
+```text
+Buyer pays AE
+  ├── 99.0%  → Bonding curve reserve (redeemable by sellers)
+  ├──  0.5%  → Community DAO treasury (governed by token holders)
+  └──  0.5%  → Affiliation system
+                ├── 0.300% → Level 1 referrer
+                ├── 0.125% → Level 2 referrer
+                ├── 0.050% → Level 3 referrer
+                └── 0.025% → Level 4 referrer
+                (if no referrer: burned)
+
+Buyer also receives:
+  └── ProtocolDAO tokens = 1,000 × AE value of the buy
+```
+
+The 1% total spread is the difference between the buy curve and the sell curve. It is not
+charged as a separate fee — it is built into the two curves. See
+[Bonding Curves](/tokens/bonding-curve) for the math.
+
+## How those percentages arise
+
+The rounded figures above are the whitepaper's. The underlying arithmetic is cleaner, and knowing it
+is what lets you reconcile a quote against a receipt.
+
+Write `C` for the **curve cost** of the slice you are buying — the integral of the buy curve from the
+current supply to the supply after your purchase:
+
+```text
+C = integral of buy(x) dx, from supply to supply + amount
+    where buy(x) = 0.001 * e^(0.00000001 * x) - 0.0009999
+```
+
+The base bonding curve defines the sell curve as `sell(x) = buy(x) * 0.995`, which is the 0.5% that
+funds the DAO. The affiliation sale contract then adds its own 0.5% **on top of** the curve price —
+the whitepaper calls it "an additional 0.5% affiliation fee thus the total spread between buy and
+sell price is 1%", and the app's own estimator implements it literally as
+`calculateBuyPriceWithAffiliationFee = calculateBuyPrice * 1.005`
+(`superhero/src/utils/bondingCurve.ts`).
+
+So the buyer's gross is `1.005 * C`, and it splits exactly:
+
+| Destination | Amount | Share of what the buyer pays |
+| --- | --- | --- |
+| Bonding curve reserve | `0.995 * C` | 99.005% |
+| Community DAO treasury | `0.005 * C` | 0.4975% |
+| Affiliation chain (or burned) | `0.005 * C` | 0.4975% |
+| **Total** | `1.005 * C` | 100% |
+
+`0.995 + 0.005 + 0.005 = 1.005`, with no remainder. The whitepaper's 99.0 / 0.5 / 0.5 is that same
+split rounded to one decimal place.
+
+The four affiliation levels are percentages **of the transaction value**, not of the fee, which is
+why they sum to the 0.5% rather than to 100%.
+
+## The sell side
+
+Selling is not the buy flow in reverse, and the differences matter.
+
+**It is two transactions, not one.** AEX-9 has no transfer-from without prior approval, so you first
+grant the sale contract an allowance over your tokens, then call sell:
+
+```text
+1. create_allowance(sale_account, count)      on the community AEX-9 token
+   (or change_allowance(sale_account, delta) if an allowance already exists)
+
+2. sell(count, minimal_return_required)       on the token sale contract
+```
+
+`minimal_return_required` is your slippage floor: if the curve has moved against you between quote
+and execution, the call reverts rather than paying out less. Both the web app
+(`useTokenTrade.ts`, shown as a two-step progress indicator) and the agent CLI
+(`scripts/superhero-token-swap.mjs`) do exactly this. Note that the allowance is granted to the
+sale contract's address rewritten from `ct_` to `ak_` form.
+
+**The payout is the sell-curve integral.** Quote it before you sign with the read-only
+`sell_return(count)` entrypoint on the sale contract:
+
+```text
+return = integral of sell(x) dx, from supply - amount to supply
+       = 0.995 * (integral of buy(x) dx over the same interval)
+```
+
+**Nothing is deducted at sell time.** This is the part that surprises people, so state it directly:
+
+| Destination on a sell | Amount |
+| --- | --- |
+| Seller | the full `sell_return(count)` payout |
+| Community DAO treasury | nothing |
+| Affiliation chain | nothing |
+| ProtocolDAO tokens minted | none |
+
+The 0.5% "missing" relative to the buy curve is not a sell fee. It was already taken when those
+tokens were bought. The reserve is built up at `0.995 * C` per buy, which is exactly the sell-curve
+integral over the same slice, so the reserve at supply `S` is always `integral of sell(x) from 0 to
+S` — precisely enough to redeem the entire supply and no more. That is the solvency guarantee the
+whitepaper describes as "selling back the entire supply to the curve is always possible, as the
+necessary funds are maintained in reserve."
+
+**Your tokens are burned.** The whitepaper's token-economics table lists community token issuance as
+"Minted on buy, burned on sell via bonding curve", and the web app confirms it by reading the token
+contract's `Burn` event out of the sell receipt to display the amount you sold.
+
+**Evidence for this accounting.** The sell-side entrypoint surface in
+`AffiliationBondingCurveTokenSale.aci.json` — the ACI shipped with the agent skill, and the basis of
+[the contract reference](/contracts/token-sale) — is:
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `sell_return` | `sell_return(count: int) -> int` | Read-only quote |
+| `sell` | `sell(count: int, minimal_return_required: int) -> int` | Stateful, **not** payable, returns the AE paid out |
+| `price` | `price(count: int) -> int` | The buy-side counterpart |
+| `buy` | `buy(count: int) -> unit` | Stateful, payable |
+| `buy_with_affiliation` | `buy_with_affiliation(count: int, affiliation_rewardee: address) -> unit` | Stateful, payable |
+
+There is a `buy_with_affiliation` and there is **no** `sell_with_affiliation`: the ACI provides no
+way to attribute a referrer to a sale, which is why no referral reward can accrue on one. Likewise
+the only factory entrypoint the sale can reach is
+`ICommunityFactory.mint_protocol_dao_token(int, address)`, and the whitepaper scopes its use to
+buys — "The factory issues protocol DAO tokens during buy transactions."
+
+The sale contract emits `Buy(int, int, int)`, `Sell(int, int)` and `PriceChange(int, int)`. The web
+app reads `Sell` argument 0 as the AE returned to the seller, and the token contract's `Burn`
+argument 1 as the token count destroyed.
+
+## A worked example
+
+A token at supply zero. You buy a slice worth **10 AE of curve cost**, which on this curve is about
+**1,400,993 tokens**.
+
+| Line | Amount |
+| --- | --- |
+| Curve cost `C` | 10.000 AE |
+| Affiliation fee added on top (0.5% of `C`) | 0.050 AE |
+| **You send** | **10.050 AE** (plus gas) |
+| → bonding curve reserve | 9.950 AE |
+| → community DAO treasury | 0.050 AE |
+| → affiliation chain | 0.050 AE |
+| You receive | ≈ 1,400,993 tokens |
+
+If your buy is attributed to a referrer, that 0.050 AE splits down the invite chain:
+
+| Level | Rate on the 10 AE transaction value | Amount |
+| --- | --- | --- |
+| 1 | 0.300% | 0.0300 AE |
+| 2 | 0.125% | 0.0125 AE |
+| 3 | 0.050% | 0.0050 AE |
+| 4 | 0.025% | 0.0025 AE |
+| **Total** | **0.500%** | **0.0500 AE** |
+
+A level that does not exist — nobody invited your inviter — contributes nothing to anyone.
+
+Now sell all 1,400,993 tokens straight back, before anyone else trades:
+
+| Line | Amount |
+| --- | --- |
+| Curve value of the slice | 10.000 AE |
+| Sell curve factor | × 0.995 |
+| **You receive** | **9.950 AE** (minus gas, on two transactions) |
+
+Round trip: you paid 10.050 AE and got back 9.950 AE. The 0.100 AE difference is **0.995% of what
+you sent** — the 1% spread, all of it collected on the way in. Gas is extra, and a sell costs two
+transactions' worth of it.
+
+## Slippage
+
+None of the figures above account for other people trading between your quote and your transaction.
+That is what slippage protection is for, and the three clients default differently:
+
+| Client | Default tolerance | Mechanism |
+| --- | --- | --- |
+| Web app, community token trade card | 1% | Stored as `tokenTrade:slippage`, editable in the trade card |
+| Web app, DEX swap | 5% | Stored as `dex:slippage` |
+| Agent CLI (`superhero-token-swap.mjs`) | 3% | Buy sends `price * 1.03`; sell passes `sell_return * 0.97` as `minimal_return_required` |
+
+On a buy, the tolerance is the extra AE you are willing to attach; unused AE is not spent on tokens
+you did not get, but you should still treat the tolerance as a ceiling on your cost. On a sell it is
+a hard floor: the transaction reverts rather than executing below it. See
+[Fees & Slippage](/tokens/fees-and-slippage).
+
+## Gas
+
+Gas is a separate line item paid to the network in AE, never to Superhero, and never recoverable.
+Count transactions, not trades:
+
+| Action | Transactions |
+| --- | --- |
+| Post or comment | 1 |
+| Buy a token | 1 |
+| **Sell a token** | **2** — allowance, then sell |
+| Create a token | 1 (deploys token, curve, sale, DAO and management contracts together) |
+| Open a DAO vote | 1, plus a **555 AE** payment to the DAO |
+| Create a governance poll | 2 — deploy, then register |
+| Claim rewards | 1; the FAQ notes "a small gas fee applies" |
+
+The only concrete gas figure in either repository is the agent skill's estimate of about
+**0.00001 AE per post**. No measured figure exists for trades — see the open questions below.
+
+## What "burned" means
+
+When a buyer has no inviter, the whitepaper says the affiliation portion is burned: "transaction
+fees from unaffiliated purchases are burned", and the security section explains the intent — "with
+unaffiliated fees burned rather than accumulated, eliminating extraction vectors for unclaimed
+funds."
+
+Functionally, that means the 0.5% is **not** redirected to the DAO, **not** kept by the operator,
+and **not** parked in the treasury for some future claimant. Nobody can withdraw it. The
+`AffiliationTreasury` accrues rewards per payout period per address and pays them out through
+`withdraw()`; an unaffiliated buyer has no entry in the affiliation tree, so no address ever becomes
+entitled to that amount. The precise on-chain mechanism is not visible in the ACI — see the open
+questions.
+
+## ProtocolDAO tokens
+
+Every buy also mints ProtocolDAO tokens to the buyer — a separate platform-wide AEX-9 token, not the
+community token you bought. The whitepaper specifies **1,000× the AE value of the buy**, issued to
+the buyer's address at the time of purchase, with governance functionality explicitly "not yet
+implemented."
+
+You can see them in a buy receipt: the transaction carries two `Mint` events, one on the community
+token and one on a different contract address, and the app labels the second as your protocol
+reward.
+
+Note a discrepancy worth knowing before you reconcile a number: the app's trade confirmation screen
+does **not** display 1,000× the AE amount. It displays
+`(1 - PROTOCOL_DAO_AFFILIATION_FEE) * PROTOCOL_DAO_TOKEN_AE_RATIO * aeValue`, with
+`PROTOCOL_DAO_AFFILIATION_FEE = 0.05` and `PROTOCOL_DAO_TOKEN_AE_RATIO = 1000`
+(`superhero/src/utils/constants.ts`) — that is **950× the AE amount**. For a 10 AE buy the
+whitepaper implies 10,000 ProtocolDAO tokens and the confirmation screen shows 9,500. The
+authoritative number is whatever the factory actually mints, visible as the second `Mint` event on
+your own transaction.
+
+## Read more
+
+- [Bonding Curves](/tokens/bonding-curve) — the integral, the entrypoints, and how a quote is built.
+- [Fees & Slippage](/tokens/fees-and-slippage) — the practical guide to setting tolerance before you trade.
+- [The Affiliation System](/rewards/affiliation) — how the four-level chain is recorded and how payouts are claimed.
+- [The Treasury](/dao/treasury) — what happens to the DAO's 0.5% once it arrives.
+- [ProtocolDAO Token](/dao/protocol-dao) — what the platform token is for, and what it is not yet.
+- [Buy or sell on superhero.com](https://superhero.com/trends/tokens) — the live token list and trade cards.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the "Token Economics Summary" and "Value Flow Diagram" this page derives from.
+
+## Open questions
+
+- **Does the contract's `price(count)` entrypoint already include the 0.5% affiliation fee, or is it
+  the bare curve integral?** The app's client-side estimator keeps them separate and multiplies by
+  1.005 itself; the agent CLI sends `price * 1.03`, which covers the fee either way, so neither
+  client disambiguates it. The ACI gives signatures, not bodies. Reading `AffiliationBondingCurveTokenSale.aes`
+  or comparing `price(n)` against the AE actually debited on a mainnet buy would settle it.
+- **How is an unaffiliated buyer's 0.5% burned, mechanically?** The whitepaper states the outcome,
+  but no entrypoint in `AffiliationTreasury.aci.json` corresponds to a burn and AE is not an AEX-9
+  token. Whether it is sent to an unspendable address, retained by a contract with no withdrawal
+  path, or simply never transferred out of the sale contract is not determinable from the ACIs.
+- **Why does the app show 950× rather than 1,000× for ProtocolDAO rewards?** The constant is named
+  `PROTOCOL_DAO_AFFILIATION_FEE` and set to `0.05` (5%), which matches neither the 0.5% affiliation
+  fee nor the 1% total spread. Settling this needs the factory's `mint_protocol_dao_token`
+  implementation or a decoded `Mint` event from a real buy.
+- **What are the real gas costs of a buy, a sell and a token creation?** Neither repository states
+  one. Each is visible as the transaction fee on an individual transaction in
+  [æScan](https://aescan.io), but no representative figure can be quoted from these sources.
+- **What are the exact argument orders of `Buy(int, int, int)` and `Sell(int, int)`?** The ACI gives
+  types only. The web app reads `Buy` argument 0 and `Sell` argument 0 as AE amounts; the meaning of
+  the remaining arguments is not established anywhere in these repositories.

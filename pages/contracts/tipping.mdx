@@ -1,0 +1,164 @@
+---
+title: "Tipping v3"
+description: "The post registry contract: data model, direct and delegated posting."
+---
+
+# Tipping v3
+
+`Tipping.aes` is the content layer. Every post published through Superhero is a row in this
+contract's state, keyed by an increasing integer and attributed to an æternity address. Once
+mined, a post cannot be edited or deleted by anyone, including Superhero — moderation happens
+at the application layer, not here.
+
+Despite the name, the vendored v3 ACI exposes **only posting**. There are no tipping
+entrypoints in it. See [Open questions](#open-questions).
+
+Mainnet address `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb`, testnet
+`ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW`. The ACI is
+`superhero-agent-skill/contracts/Tipping_v3.aci.json`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `() => Tipping.state` | — |
+| `post_without_tip` | `(title: string, media: list(string)) => int` | stateful |
+| `post_without_tip_sig` | `(title: string, media: list(string), author: address, sig: signature) => int` | stateful |
+| `get_state` | `() => Tipping.state` | — |
+
+Both posting entrypoints return the new `tip_id`. Neither is payable, so a post costs only
+the transaction fee and gas — the agent skill quotes roughly 0.00001 AE.
+
+## Types
+
+The ACI declares four types. `tip` is a variant with a single constructor, which is why every
+post is a `PostWithoutTip` even though the type is named `tip`.
+
+```sophia
+type tip_id = int
+
+record tip_meta =
+  { sender    : address    // the author, as recorded on chain
+  , title     : string     // the post text
+  , timestamp : int }      // Chain.timestamp at the moment of posting, in ms
+
+datatype tip = PostWithoutTip(tip_meta, list(string))
+                             //         ^ the media list
+
+record state =
+  { tips    : map(tip_id, tip)
+  , version : string }      // currently "v3"
+```
+
+Reading a post back through `get_state()` gives you a `Map` of `tip_id` to a variant object.
+In JavaScript a decoded entry looks like:
+
+```javascript
+const state = await tipping.get_state().then((r) => r.decodedResult);
+const post = state.tips.get(42n);
+// post = { PostWithoutTip: [ { sender, title, timestamp }, [ 'https://...' ] ] }
+const [meta, media] = post.PostWithoutTip;
+```
+
+`get_state()` returns **every post ever made**. On mainnet that is a large response. For
+anything other than a one-off inspection, read posts from the Superhero API or from the
+middleware's event log instead.
+
+## Event
+
+```sophia
+datatype event = PostWithoutTipReceived(address, string)
+                                     // author,  title
+```
+
+One event per successful post, from either entrypoint. Indexers subscribe to it rather than
+polling `get_state()`. Its middleware topic hash is in the
+[event catalogue](/contracts/events).
+
+Note that the event carries the title but **not** the media list and **not** the `tip_id`.
+To reconstruct a full post from an event you need the call arguments or a `get_state()` read.
+
+## Direct posting
+
+`post_without_tip` records `Call.caller` as the author. This is the path a connected wallet
+takes, and the one the agent skill's `superhero-post.mjs` uses:
+
+```javascript
+import { AeSdk, Node, MemoryAccount, Contract } from '@aeternity/aepp-sdk';
+import fs from 'fs';
+
+const aeSdk = new AeSdk({
+  nodes: [{ name: 'mainnet', instance: new Node('https://mainnet.aeternity.io') }],
+  accounts: [new MemoryAccount(process.env.AE_PRIVATE_KEY)],
+});
+
+const tipping = await Contract.initialize({
+  aci: JSON.parse(fs.readFileSync('./contracts/Tipping_v3.aci.json', 'utf8')),
+  address: 'ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb',
+  onAccount: aeSdk,
+  onNode: aeSdk.api,
+});
+
+const result = await tipping.post_without_tip(
+  'Hello from the contract layer',
+  ['https://example.com/image.png'],
+);
+
+console.log('tip_id:', result.decodedResult.toString());
+console.log('tx:', result.hash);
+```
+
+`media` is a plain array of strings. The contract does not validate or interpret them —
+they are opaque references that the frontend renders as links or embeds.
+
+## Delegated posting
+
+`post_without_tip_sig` lets any account submit a post on behalf of an author who signed it
+off chain. This is how gasless posting works: the user signs a message in their wallet, a
+relayer pays the fee, and the on-chain record still attributes the post to the signer.
+
+The contract verifies the signature like this, per the whitepaper's description of the
+contract:
+
+```text
+1. Concatenate the title and the media entries into a single string.
+2. Blake2b-hash that string.
+3. Prepend the æternity signed-message prefix — "aeternity Signed Message:\n"
+   with a fixed 28-byte header — producing a 60-byte payload.
+4. Blake2b-hash the prefixed payload again.
+5. Verify the resulting digest against `sig` and `author` with Crypto.verify_sig.
+```
+
+The signed-message prefix is what stops a signature harvested from another æternity protocol
+context being replayed as a post.
+
+If you are building a relayer, the risk to understand is that `post_without_tip_sig` carries
+no nonce and no expiry. A signature that verifies once verifies forever, so a captured
+signature can be resubmitted to duplicate the post. Guard against that off chain, at the
+relayer, by tracking which signatures you have already submitted.
+
+## Open questions
+
+- **Where are the tipping entrypoints?** The vendored v3 ACI contains only `init`,
+  `post_without_tip`, `post_without_tip_sig` and `get_state`. The whitepaper's "Posting &
+  Tipping" section likewise describes only the posting mechanisms. Tips shown in the Superhero
+  UI are served by `GET /api/tips/*` on the Superhero backend, so either tipping moved off
+  this contract entirely or it lives in a v1/v2 Tipping contract that is not vendored. Settle
+  it by diffing the deployed bytecode at
+  `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` against the vendored ACI, or by
+  asking for the `Tipping.aes` source.
+- **Exact byte layout of the 28-byte prefix header.** The whitepaper states the prefix and
+  the resulting 60-byte payload length but not the header's bytes. To reimplement signing
+  from scratch you need the exact constant; read it from the deployed contract source or from
+  an SDK message-signing helper.
+- **Is `title` length-limited on chain?** No limit appears in the ACI. If one exists it is
+  enforced by the compiler-level string handling or by the frontend, not by a visible
+  `require`.
+
+## Read more
+
+- [Posting](/social/posting) — what posting looks like from the app, and what the API adds on top
+- [Delegated posting](/social/delegated-posting) — the relayer flow end to end
+- [Events](/contracts/events) — the topic hash for `PostWithoutTipReceived` and how to subscribe
+- [Calling Contracts](/contracts/calling-contracts) — SDK setup, gas, and reading revert reasons
+- [Post on superhero.com](https://superhero.com) — the app itself

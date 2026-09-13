@@ -1,0 +1,116 @@
+---
+title: "Choosing a Wallet"
+description: "Which wallet to use on which surface, compared on custody, recovery and agent suitability."
+---
+
+# Choosing a Wallet
+
+There are four ways to hold an æternity account for Superhero, and they differ less in what they can
+do than in where the key sits and what gets you back in. Pick by surface and by recovery model, not
+by feature list — all four end up holding the same kind of `ak_...` account on the same derivation
+path.
+
+## Comparison
+
+| | Browser extension | Mobile app | Web wallet | Built-in wallet | Raw key (agent) |
+| --- | --- | --- | --- | --- | --- |
+| Product | Superhero Wallet | Superhero Wallet | `wallet.superhero.com` | Superhero app itself | Your own process |
+| Custody | Yours, in the extension | Yours, on the device | Yours, in a hosted page | Yours, in this browser's storage | Yours, in an env var |
+| Platforms | Chrome, Brave, Opera, Firefox | iOS, Android | Any browser | Any browser; signing installed in the installed PWA | Anywhere Node runs |
+| Install needed | Yes | Yes | No | No | No |
+| Unlocks with | Wallet password | Password or biometrics | Wallet password | Passkey, passphrase or recovery code | Nothing — the key is live |
+| Portable backup | Seed phrase | Seed phrase | Seed phrase | Seed phrase, or a syncing passkey | The secret key |
+| Multi-chain | Yes | Yes | Yes | æternity only | æternity only |
+| Good for agents | No | No | No | No | **Yes** |
+
+## Pick by who you are
+
+### You are trying Superhero for the first time, on a phone
+
+Use the **Superhero app's built-in wallet**, or install the **Superhero Wallet mobile app**. The
+built-in wallet is the shortest path: tap "Continue with passkey", approve with Face ID or a
+fingerprint, and you have an account. Make sure your passkey syncs — on a passkey-created wallet the
+passkey *is* your backup, and there is no phrase export screen in the app.
+
+### You are trying Superhero for the first time, on a desktop
+
+Install the **browser extension**. Desktop web signing needs it; a desktop browser tab does not
+install the in-page signer. The extension also gives you the multi-chain wallet, an address book and
+`.chain` name management in one place.
+
+### You trade actively and hold real value
+
+Use the **extension** (desktop) or the **mobile app**, with a written seed phrase stored offline in
+two places. You want a wallet whose backup is portable and whose storage does not live in a place a
+browser can evict.
+
+### You want to try the app without installing anything
+
+Use the **built-in wallet** created from a passkey, or the **web wallet** at
+`wallet.superhero.com`. Both work with zero install. Both have caveats worth reading first —
+[The Built-In Wallet](/wallets/built-in-wallet) and [Web Wallet](/wallets/web-wallet).
+
+### You are building or running an agent
+
+Use a **raw key in an environment variable**, in a dedicated account funded with a capped amount.
+Every other option on this page requires a human to approve each signature, which is the opposite of
+what an agent needs. Generate one with:
+
+```bash
+node scripts/superhero-wallet.mjs generate
+export AE_PRIVATE_KEY=<the_key_it_printed>
+```
+
+Then read [Agent Safety](/agents/safety) and the agent-key section of
+[Wallet Security](/wallets/security) before funding it.
+
+### You already have an æternity account
+
+Connect it. Any of the three Superhero Wallet surfaces will import your existing seed phrase, and
+superhero.com will connect to it. Do **not** paste an existing phrase into the built-in wallet in a
+browser tab — that option is deliberately not offered there, precisely because Connect is the right
+answer when the key already lives somewhere.
+
+## The thing that actually differs: recovery
+
+Everything else on the comparison table is convenience. This is not.
+
+| Wallet | What gets you back in on a new device |
+| --- | --- |
+| Extension, mobile, web wallet | The seed phrase. Nothing else. |
+| Built-in wallet from a phrase | The seed phrase. Its passphrase and recovery code are **same-device only**. |
+| Built-in wallet from a passkey | The passkey — **only if it syncs**. The recovery code is same-device only. |
+| Raw agent key | The secret key string. |
+
+The built-in wallet's storage is also evictable in a way an installed wallet's is not: clearing site
+data deletes the encrypted vault, and Safari's tracking prevention can evict it after about seven
+days of no interaction. That is survivable with a written phrase or a syncing passkey and fatal
+without either. [Backup & Recovery](/wallets/backup-and-recovery) has the full matrix.
+
+## You can use more than one
+
+These are not exclusive, and mixing them is normal:
+
+- A hardware-ish setup: the extension for real value, the built-in wallet for a small hot balance
+  you use for posting and tipping.
+- A phone and a desktop on the **same** seed phrase — the derivation path is identical, so the same
+  words give you the same addresses everywhere.
+- A separate agent account entirely, which is the recommended pattern rather than an optional one.
+
+## Read more
+
+- [Browser Extension](/wallets/superhero-wallet-extension) — install and first run on desktop.
+- [Mobile App](/wallets/superhero-wallet-mobile) — the native apps and the PWA install path.
+- [The Built-In Wallet](/wallets/built-in-wallet) — how the in-app vault works, in detail.
+- [Backup & Recovery](/wallets/backup-and-recovery) — the recovery table above, expanded and explained.
+- [Connecting a Wallet](/wallets/connecting) — what happens after you have chosen one.
+- [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet's own documentation.
+
+## Open questions
+
+- Does Superhero Wallet support a hardware wallet (Ledger) for æternity accounts specifically? The
+  wallet's own FAQ copy mentions importing accounts from a cold wallet or Ledger and cold signing via
+  AirGap, but neither was verified against the wallet's repository or tested on an æternity account.
+- Which browsers does the extension currently ship for? The app links Chrome Web Store and Firefox
+  Add-ons listings, and search results mention Brave and Opera; the authoritative current list belongs
+  to the wallet project rather than this repository.

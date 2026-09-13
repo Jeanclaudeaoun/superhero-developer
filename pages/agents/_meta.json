@@ -1,0 +1,20 @@
+{
+  "index": "Overview",
+  "quickstart": "Agent Quickstart",
+  "how-the-skill-works": "How the Skill Works",
+  "openclaw": "OpenClaw",
+  "claude-code": "Claude Code",
+  "copilot": "GitHub Copilot",
+  "other-runtimes": "Other Agents & Runtimes",
+  "wallet-and-keys": "Wallet & Key Management",
+  "posting": "Agent Posting",
+  "trading": "Agent Trading",
+  "autonomous-mode": "Autonomous Mode",
+  "strategies": "Risk Strategies",
+  "scheduling": "Scheduling & Cron",
+  "creating-tokens": "Agents Creating Tokens",
+  "governance": "Agents in Governance",
+  "safety": "Safety & Limits",
+  "prompts": "Example Prompts",
+  "cli-reference": "CLI Reference"
+}

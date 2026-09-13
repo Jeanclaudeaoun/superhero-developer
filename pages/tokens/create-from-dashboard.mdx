@@ -1,0 +1,187 @@
+---
+title: "Create a Token from the Dashboard"
+description: "Launch a community token from superhero.com: every field, both input modes, and what the transaction actually does."
+---
+
+# Create a Token from the Dashboard
+
+Token creation lives at **[superhero.com/trends/create](https://superhero.com/trends/create)**. You
+type a name, optionally decide how much of your own token to buy at launch, and sign one
+transaction. Behind the form, `CommunityFactory.create_community` deploys the token, the curve, the
+sale contract, the DAO and the community management contract together, and executes your initial buy
+in the same transaction.
+
+You deploy from your own wallet. Superhero facilitates the form; it does not hold the keys, own the
+contract, or take a cut beyond the protocol fees described below.
+
+## Before you start
+
+| Requirement | Detail |
+| --- | --- |
+| A connected wallet | The submit button is replaced by Connect Wallet until one is connected |
+| AE for gas | A small amount; the agent-skill guide budgets about 0.001 AE for the creation gas |
+| AE for the initial buy | Optional. Zero is allowed and creates the token with zero supply |
+| A name no one has taken | Checked live as you type |
+
+## The name field
+
+The name is the token's identity, its symbol, and its URL — `/trends/tokens/YOURNAME`. It is also
+the only field in this form you cannot change later.
+
+**Normalisation happens on every keystroke.** The input applies
+`value.toUpperCase().replace(/ /g, '-')`, so `my token` becomes `MY-TOKEN` as you type. The field is
+capped at 20 characters by the input itself, and the counter under it shows your position against
+that cap. Collections carry their own casing rules — the English collection accepts `A–Z`, the
+Russian one accepts `А–Я` — and uppercasing is what makes a typed name detectable at all.
+
+One exception: while an IME composition is active — typing Chinese through pinyin, for example — the
+input holds intermediate Latin text that belongs to no collection. Normalisation and the
+"unsupported" verdict are both suspended until the composition commits, so the field does not fight
+you mid-word.
+
+### The collection chip
+
+To the right of the name, a chip names the collection your token will be created in. It is derived
+from the characters you typed, not chosen up front:
+
+1. Every collection in the factory schema publishes an `allowed_name_chars` rule set. The app turns each into a regular expression and tests your name against all of them.
+2. **No collection matches** → a red **Unsupported** badge appears and the submit button is disabled. A name no collection accepts would only fail on-chain, so the UI refuses it first.
+3. **Exactly one matches** → a green chip names it, and there is nothing to choose.
+4. **More than one matches** → the chip becomes a dropdown. Every collection allows `-`, so a name like `A-B` legitimately fits several; English is preferred by default.
+
+The chip shows the human label, not the on-chain id: the `WORDS` collection is displayed as
+**English**. See [Collections & Naming Rules](/tokens/collections-and-naming) for the full rules.
+
+### The availability check
+
+400 ms after you stop typing, the app searches the token index for an exact name match. Three
+outcomes:
+
+| Indicator | Meaning |
+| --- | --- |
+| Spinner | The lookup is in flight |
+| Green tick | Available — you can submit |
+| Red cross | Taken. A **Trading live** panel appears with the existing token's price and holder count, and a **BUY TOKEN** button that takes you to its page instead |
+
+When the name is taken, the initial-buy section and the submit button are dimmed and disabled. This
+check is an index lookup, not a chain read, so it is fast but not authoritative — the factory's
+`has_community` check on-chain is what actually rejects a duplicate, and a name claimed seconds
+before yours will fail at signing time with `NAME_ALREADY_REGISTERED`.
+
+## The initial buy — two input modes
+
+The section under the name is a pre-buy: tokens minted to you as part of the creation transaction,
+at the very start of the curve, before anyone else can buy. The link on the right toggles between
+two ways of expressing the same thing.
+
+### Mode 1 — Amount to spend (AE)
+
+You type an AE figure; the app tells you how many tokens that buys. It solves the curve backwards by
+bisection (`calculateTokensFromAE`), always from a starting supply of zero. Quick-pick buttons offer
+1, 10, 100, 500 and 100,000 AE. At the launch supply those correspond to:
+
+| AE spent | Tokens received (approx.) | Average price paid (AE) | Spot price after the buy (AE) |
+| --- | --- | --- | --- |
+| 1 | 437,014 | 2.29e-6 | 4.48e-6 |
+| 10 | 1,400,993 | 7.14e-6 | 1.42e-5 |
+| 100 | 4,429,280 | 2.26e-5 | 4.54e-5 |
+| 500 | 9,826,562 | 5.09e-5 | 1.03e-4 |
+| 100,000 | 114,613,982 | 8.72e-4 | 2.15e-3 |
+
+### Mode 2 — Tokens to buy
+
+You type a token count; the app tells you what it costs, labelled *(incl. fees)*. The estimate uses
+`calculateBuyPriceWithAffiliationFee`, which is the curve integral multiplied by 1.005 — the 0.5%
+affiliation fee. Quick-pick buttons offer 500K, 1M, 5M, 10M and 100M tokens:
+
+| Tokens | Curve cost (AE) | Displayed cost incl. 0.5% fee (AE) |
+| --- | --- | --- |
+| 500,000 | 1.302086 | 1.308596 |
+| 1,000,000 | 5.116708 | 5.142292 |
+| 5,000,000 | 127.609638 | 128.247686 |
+| 10,000,000 | 518.091808 | 520.682267 |
+| 100,000,000 | 71,838.182846 | 72,197.373760 |
+
+Note the asymmetry between the two modes: the AE-mode estimate of tokens received is computed from
+the bare curve and does **not** subtract the affiliation fee, while the token-mode cost estimate does
+add it. Expect the AE mode to hand you very slightly fewer tokens than it promised.
+
+Both estimates are always computed from supply zero, which is correct here — the token does not exist
+yet, so its supply is zero by definition. The same helpers are reused on the trade card of an
+existing token, where they are fed the live supply instead.
+
+## What you sign
+
+One `create_community` call on the factory, with AE attached to cover the initial buy:
+
+```text
+create_community(
+  collection_name,     // the derived collection id, e.g. "WORDS-ak_..."
+  name,                // your uppercase name
+  initial_buy_count,   // token count, in 18-decimal units; 0 for no pre-buy
+  is_private,          // always false from this form
+  meta_info            // a string -> string map
+)  =>  (DAO, TokenSale, CommunityManagement)
+```
+
+The attached amount is estimated by the `bctsl-sdk` helper `estimateInitialBuyPriceAetto`, using the
+fee percentage read from the factory's own `fee_percentage()` and `fee_precision()` entrypoints
+rather than a hardcoded constant.
+
+The form submits with `waitMined: false`: it gets a transaction hash back immediately and navigates
+you to `/trends/tokens/YOURNAME?created=true&txHash=...` while the transaction is still being mined.
+Expect **2–5 minutes** before the token page populates. That is normal — the page will fill in as
+the indexer catches up.
+
+`meta_info` is currently submitted with fixed placeholder values (`collection: "word"` and empty
+description, website and twitter fields); the create form has no inputs for them. The community's
+metadata can be changed afterwards by DAO vote through `CommunityManagement.change_meta_info`.
+
+## What it costs
+
+| Component | Amount |
+| --- | --- |
+| Gas for `create_community` | Small; about 0.001 AE per the agent-skill guide |
+| Initial buy | Whatever you chose, or zero |
+| Affiliation fee on the initial buy | 0.5% of the curve value, included in the attached amount |
+| Ongoing | Nothing. There is no listing fee or rent |
+
+Creating with a zero initial buy is free apart from gas, and leaves the token at supply zero with a
+spot price of `0.0000001 AE`. Anyone, including you, can buy first afterwards.
+
+## When it fails
+
+| Symptom | Cause | What to do |
+| --- | --- | --- |
+| Submit button stays disabled | Name empty, still checking, taken, or matched by no collection | Fix the name; the chip and tick tell you which |
+| `NAME_ALREADY_REGISTERED` after signing | Someone claimed the name between your index check and your transaction | The app re-searches and shows you the existing token's address. Pick another name |
+| "Collection not found" | The factory schema had not loaded when you submitted | Reload the page and retry |
+| "Wallet not connected" / no signature prompt | Wallet session dropped | Reconnect and retry |
+| Nothing on the token page after 5 minutes | Transaction still pending, or it failed | Look up the `txHash` from the URL on [aeScan](https://aescan.io) |
+
+A failed creation costs you gas and nothing else — no partial community is left behind, because the
+whole deployment is one transaction.
+
+## After it is mined
+
+Your token is live and tradeable immediately. Good next steps:
+
+- Open `/trends/tokens/YOURNAME` and check the Info tab for the sale, token, DAO and creator addresses.
+- Post about it — the community feed and the token's chat room are attached to the same page.
+- Read [Reading a Token Page](/tokens/token-page) so you can interpret what happens next.
+
+## Read more
+
+- [Create a Token (CLI)](/tokens/create-from-cli) — the same deployment from a terminal or an agent, with every error path documented
+- [Collections & Naming Rules](/tokens/collections-and-naming) — why a name is rejected, and which collection it lands in
+- [Bonding Curves](/tokens/bonding-curve) — what the launch price means and how fast it moves
+- [Community factory contract](/contracts/community-factory) — `create_community` at the entrypoint level
+- [DAO overview](/dao/overview) — the treasury your token just created, and who controls it
+- [Create a token on superhero.com](https://superhero.com/trends/create) — the live form described on this page
+- [Trending tokens](https://superhero.com/trends/tokens) — check what already exists before you pick a name
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the canonical description of the deployment sequence
+
+## Open questions
+
+- The exact gas cost of `create_community` on mainnet is not documented anywhere in the repositories; the 0.001 AE figure comes from the agent skill's token-creation guide and is described there as approximate. A single mined creation transaction on aeScan would give the real number.
+- Whether any AE attached beyond the actual buy price is refunded to the caller or retained by the sale contract is not determinable from the ACI. This matters for both the dashboard's estimate and the CLI's 5% buffer.

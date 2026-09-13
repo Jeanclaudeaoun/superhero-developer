@@ -1,0 +1,92 @@
+---
+title: "Web Wallet (wallet.superhero.com)"
+description: "Use Superhero Wallet in a browser with no install — and understand what you trade for that."
+---
+
+# Web Wallet (wallet.superhero.com)
+
+`wallet.superhero.com` is Superhero Wallet running as an ordinary web page. Nothing to install,
+nothing to update, works on any browser including ones that cannot run extensions. It is also the
+fallback superhero.com opens automatically when it cannot find a wallet any other way — so you may
+meet it without having chosen it.
+
+## When superhero.com sends you there
+
+The web wallet is the configured wallet endpoint for the whole app (`WALLET_URL` in `src/config.ts`).
+It is reached in two situations:
+
+- **You pressed Connect and no extension answered.** After the detection window expires and if the
+  page is not framed inside a wallet, the app opens the web wallet in a new window.
+- **You are on mobile and the native app did not take over.** The app tries the `superhero://` deep
+  link first and falls back to the web wallet after about 1.5 seconds.
+
+Either way the app passes the action plus `x-success` and `x-cancel` callback URLs, so the wallet can
+return the result to the tab that asked. Signed results come back through `/tx-queue/:id`, described
+in [Connecting a Wallet](/wallets/connecting).
+
+## What you can do there
+
+It is the same wallet as the extension and the mobile app, served differently. That includes the
+things people most often go looking for:
+
+- Create a new wallet, or import one from a seed phrase.
+- Hold and send AE and AEX-9 tokens.
+- Sign transactions requested by superhero.com.
+- **Claim additional `.chain` names.** Superhero sponsors one free name claim per address; further
+  names are claimed directly in Superhero Wallet, and the app's FAQ names the web wallet as one of
+  the three places that works — alongside the extension and the native mobile app.
+
+## What you trade for "no install"
+
+This is the honest part, and it is the reason the extension is the default recommendation on
+desktop.
+
+| | Extension | Web wallet |
+| --- | --- | --- |
+| Code delivery | Installed once, updated through a reviewed store channel | Fetched from the server on every visit |
+| Compromise of the host | Does not change code already installed | Serves you new code immediately |
+| Phishing resistance | You open a pinned browser control | You open a URL, which can be typosquatted |
+| Works without an install | No | Yes |
+
+A hosted wallet is only as trustworthy as the origin serving it, and that trust is re-established
+every single load rather than once at install time. So:
+
+- **Type the domain or use a bookmark.** `wallet.superhero.com`, exactly. Do not reach it from a link
+  in a message.
+- **Check the URL before you enter a seed phrase**, not after.
+- **Prefer the extension on desktop and the native app on mobile** for accounts holding real value.
+  Use the web wallet for convenience, for browsers that cannot run extensions, and for one-off
+  actions.
+- The usual rules still apply in full: nobody legitimate ever asks for your seed phrase, and the
+  phrase is the only thing that restores the account. See
+  [Wallet Security](/wallets/security) and [Backup & Recovery](/wallets/backup-and-recovery).
+
+## Web wallet or built-in wallet?
+
+Both need no install, so the distinction is worth being clear about:
+
+- The **web wallet** is Superhero Wallet on another origin. It holds a multi-chain account and signs
+  for superhero.com across a callback, and its portable backup is a seed phrase.
+- The **built-in wallet** is part of the Superhero app itself, æternity-only, with its encrypted
+  vault in your browser's storage for the superhero.com origin, unlocked by a passkey or passphrase
+  on every signature.
+
+If you want one wallet used by several æpps, take the web wallet. If you want the shortest possible
+path into Superhero on a device you will keep using, take the built-in wallet — after reading what
+its storage does and does not survive in [The Built-In Wallet](/wallets/built-in-wallet).
+
+## Read more
+
+- [Connecting a Wallet](/wallets/connecting) — the fallback chain that lands you on this wallet, and the callback route that brings results back.
+- [Choosing a Wallet](/wallets/choosing-a-wallet) — the full comparison across all four options.
+- [Browser Extension](/wallets/superhero-wallet-extension) — the install-once alternative on desktop.
+- [Claim Your .chain Name](/getting-started/claim-name) — the sponsored claim, and where extra names are claimed.
+- [Superhero Wallet](https://wallet.superhero.com/) — the wallet itself.
+
+## Open questions
+
+- Does the web wallet support the full multi-chain feature set of the extension and native apps
+  (Bitcoin, Ethereum and the rest), or only æternity? The app treats it purely as a signing endpoint
+  and the repository says nothing about its feature parity.
+- Is AirGap cold signing available from the hosted web wallet, or extension- and app-only? The
+  wallet's FAQ copy describes AirGap pairing without naming the surfaces it works on.

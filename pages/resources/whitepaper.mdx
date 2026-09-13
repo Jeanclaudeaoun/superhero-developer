@@ -1,0 +1,96 @@
+---
+title: "Whitepaper"
+description: "The Superhero technical whitepaper, version 0.7 — its sections, and where these docs cover each one."
+---
+
+# Whitepaper
+
+The Superhero technical whitepaper, **version 0.7, February 2026**, is published in-app at
+[superhero.com/whitepaper](https://superhero.com/whitepaper). It is the protocol specification these
+docs are built from: when a number here disagrees with the whitepaper, the whitepaper is the source
+and this site has the bug. Use this page to find the right section fast, and to jump from a section
+to the page that expands it.
+
+The whitepaper renders as Markdown with GitHub-flavoured tables and KaTeX math in the app itself.
+There is no PDF — see the open questions.
+
+## Section map
+
+| Whitepaper section | What it establishes | Covered in these docs at |
+| --- | --- | --- |
+| Abstract | The one-paragraph statement of the whole system | [What is Superhero?](/concepts/what-is-superhero) |
+| Introduction | Why centralised social media misallocates value, and why æternity | [Why æternity](/aeternity/why-aeternity) |
+| Design Principles | The six principles: censorship resistance, self-sovereign identity, transparent economics, composability, incentive alignment, progressive decentralisation | [Core Concepts](/concepts) |
+| Web & Mobile App | The client surfaces and what each offers | [Navigating the App](/getting-started/navigating-the-app) |
+| Superhero Onchain ID | `ProfileRegistry.aes`: profile record, three name types, attestation flow, resolution priority, conflict resolution, display source, events | [SuperheroID](/identity/superhero-id), [Profile Registry](/identity/profile-registry) |
+| Posting & Tipping | `Tipping.aes` v3: the `PostWithoutTip` data model, direct and delegated posting, the signature scheme | [On-Chain Social](/concepts/on-chain-social), [Tipping (v3)](/contracts/tipping) |
+| Community Factory | Collection registry, per-community deployment, naming and uniqueness rules | [CommunityFactory](/contracts/community-factory), [Collections & Naming Rules](/tokens/collections-and-naming) |
+| ProtocolDAO Token | 1,000× issuance on buys, planned staking and governance | [ProtocolDAO Token](/dao/protocol-dao) |
+| Community Management | Moderators, muting, the minimum token threshold for write access | [Moderators & Write Thresholds](/dao/moderators) |
+| DAO and DAO Vote | The six vote subjects, the 555 AE cost, two-week close in key-blocks, 55% approval, 10% quorum, the two-day execution window, `ReplaceableDAO` | [How DAOs Work](/dao/overview), [Proposals & Vote Subjects](/dao/proposals), [Quorum & Thresholds](/dao/quorum-and-thresholds) |
+| Exponential Bonding Curve | The buy and sell functions, the integrals, and the 1% spread | [Bonding Curves](/tokens/bonding-curve) |
+| Affiliation Bonding Curve Token Sale | The four referral levels at 0.300 / 0.125 / 0.050 / 0.025 percent, and burning of unaffiliated fees | [The Affiliation System](/rewards/affiliation), [AffiliationBondingCurveTokenSale](/contracts/token-sale) |
+| System Architecture | On-chain layers, off-chain components, the seven-step deployment sequence | [Architecture Overview](/concepts/architecture) |
+| Security Considerations | Cryptographic integrity, economic security, governance security, auditability | [Security Model](/contracts/security) |
+| Token Economics Summary | The two token types side by side, plus the value flow diagram | [Where the Money Goes](/concepts/value-flow) |
+| Conclusion | The thesis restated | — |
+| Glossary | Twelve core terms | [Glossary](/concepts/glossary) |
+
+## The numbers worth memorising
+
+Every figure below is stated in the whitepaper and used throughout these docs.
+
+| Quantity | Value | Section |
+| --- | --- | --- |
+| Buy curve | `0.001 * e^(0.00000001 * x) - 0.0009999` | Exponential Bonding Curve |
+| Sell curve | buy curve × 0.995 | Exponential Bonding Curve |
+| Total buy-sell spread | 1% — 0.5% to the community DAO, 0.5% to affiliation | Exponential Bonding Curve |
+| Affiliation levels | 0.300%, 0.125%, 0.050%, 0.025% of transaction value | Affiliation Bonding Curve Token Sale |
+| Unaffiliated fees | Burned | Affiliation Bonding Curve Token Sale |
+| ProtocolDAO issuance | 1,000 × the AE value of each buy | ProtocolDAO Token |
+| Cost to open a DAO vote | 555 AE, paid to the DAO | DAO and DAO Vote |
+| Vote duration | Two weeks, measured in key-blocks | DAO and DAO Vote |
+| Approval threshold | 55% of vote stake in favour | DAO and DAO Vote |
+| Quorum | 10% of total token stake participating | DAO and DAO Vote |
+| Execution window after close | Approximately two days | DAO and DAO Vote |
+| Expected supply utilisation | 10–20% of total supply | Exponential Bonding Curve |
+| Contract versions | Tipping `"v3"`, ProfileRegistry `"v1"` | Posting & Tipping, Superhero Onchain ID |
+
+## How to read it
+
+If you are **new to the product**, read Abstract, Introduction and Design Principles, then stop and
+come back to this site — the middle sections assume you know what a bonding curve is.
+
+If you are **building an integration**, the useful sections are Superhero Onchain ID, Posting &
+Tipping, Community Factory, and System Architecture. They describe data models and deployment
+structure; they do not give you entrypoint signatures, which are in the ACIs shipped with the
+[agent skill](https://github.com/superhero-com/superhero-agent-skill) and documented under
+[Smart Contracts](/contracts).
+
+If you are **trying to reconcile a number**, go straight to Exponential Bonding Curve and Token
+Economics Summary, then to [Where the Money Goes](/concepts/value-flow), which works the same
+arithmetic through a concrete trade and flags the places where the app's behaviour and the
+whitepaper's rounding differ.
+
+If you are **assessing risk**, read Security Considerations alongside the honest caveats in
+[Risks](/tokens/risks) and the failure modes in [Attention Markets](/concepts/attention-markets).
+Note the whitepaper's own wording: the contract suite is "designed for independent audit and formal
+verification" — designed for, not audited.
+
+## Read more
+
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the document itself.
+- [Core Concepts](/concepts) — the whitepaper's first half in plain language.
+- [Where the Money Goes](/concepts/value-flow) — the economics sections worked through a real trade.
+- [Smart Contracts](/contracts) — entrypoints and events, which the whitepaper does not list.
+- [Glossary](/concepts/glossary) — the whitepaper's glossary, extended to cover the whole site.
+- [Security Model](/contracts/security) — the Security Considerations section expanded.
+
+## Open questions
+
+- **Is there a downloadable PDF?** The whitepaper is a Markdown string rendered client-side in
+  `src/views/Whitepaper.tsx`. No PDF asset exists in the repository's `public/` directory and no
+  download link appears in the app.
+- **Is there a version history?** The document is labelled "Version 0.7 — February 2026" with no
+  changelog, and versions 0.1 through 0.6 are not published anywhere in these repositories. A reader
+  who needs to know what changed between versions has nothing to compare against.

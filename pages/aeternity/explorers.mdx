@@ -1,0 +1,120 @@
+---
+title: "Block Explorers"
+description: "Verify any transaction, account or contract independently of the Superhero UI."
+---
+
+# Block Explorers
+
+Superhero tells you what happened. An explorer lets you check. Every post, tip, trade and vote
+is a public transaction, so nothing in this application requires you to trust its own interface —
+and when something looks wrong, the explorer is where you find out whether the problem is the
+chain or the app.
+
+| Network | Explorer |
+| --- | --- |
+| Mainnet | `https://aescan.io` |
+| Testnet | `https://testnet.aescan.io` |
+
+These are the values of `EXPLORER_URL` in `src/config.ts`. æScan is built by æLabs and covers
+key blocks, micro blocks, accounts, transactions, contracts, AENS names and AEX-9 tokens.
+
+## The URL shapes
+
+Superhero builds explorer links itself, in `src/utils/address.ts`. The mapping from prefix to
+path is exact, so you can construct any link by hand:
+
+| You have | URL |
+| --- | --- |
+| An account `ak_...` | `https://aescan.io/accounts/ak_...` |
+| A contract `ct_...` | `https://aescan.io/contracts/ct_...` |
+| A transaction `th_...` | `https://aescan.io/transactions/th_...` |
+| A name `nm_...` | `https://aescan.io/names/nm_...` |
+| An oracle `ok_...` | `https://aescan.io/oracles/queries/ok_...` |
+
+`prepareExplorerUrl(hash, explorerUrl)` composes these as
+`explorerUrl + "/" + endpoint + "/" + hash`, and refuses anything that is not one of the five
+prefixes above. Swap the host for `testnet.aescan.io` to look at `ae_uat`.
+
+The app already links out in most places where an identifier is shown: `AddressChip`, the post
+detail view's tip overview, the DEX activity and transaction cards, and the profile view all
+render an explorer link. Follow them rather than retyping a hash.
+
+## Three things worth verifying yourself
+
+### 1. That a transaction actually happened
+
+Paste the `th_` into `aescan.io/transactions/`. Check:
+
+- **Status.** A mined transaction can still have failed. Look for the call result, not just the
+  presence of the transaction.
+- **Block height and micro-block time.** Confirms when, and how deeply buried.
+- **Sender.** Confirms it came from the account you think it did.
+
+If the hash returns nothing, the transaction is not on chain yet. Superhero's own
+`useTransactionStatus.ts` treats a middleware `404` as "still pending" rather than as an error,
+and you should too — wait for a block before concluding anything.
+
+### 2. What a contract call actually did
+
+Open the contract page, `aescan.io/contracts/ct_...`, and look at its call transactions and
+events. æScan decodes the arguments, which is what makes this useful: you can read the actual
+values a call was made with, not just that a call happened.
+
+The same decoded data is available over HTTP if you would rather script it. This is how the
+agent skill reads posts back out of the Tipping contract, in `superhero-read.mjs`:
+
+```bash
+curl "https://mainnet.aeternity.io/mdw/v3/transactions?contract=ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb&account=ak_...&limit=20"
+```
+
+Each returned transaction carries `tx.function` (which entrypoint was called),
+`tx.arguments` (the decoded argument list) and `tx.return` (the decoded result). The script
+filters on `tx.function === 'post_without_tip'` and reads the post text out of
+`tx.arguments[0].value`. If you want to know what a Superhero action really wrote on chain,
+that is the shape of the answer.
+
+### 3. That a token's sale contract is the one the UI claims
+
+This is the check that matters most before you spend money, because "the right token name" and
+"the right contract" are not the same thing.
+
+1. On the token page, copy the sale address (`ct_...`).
+2. Open `aescan.io/contracts/ct_...` and confirm it exists, is a contract, and has the call
+   history a live sale should have.
+3. Cross-check the address against a second source — the Superhero API's factory and token
+   endpoints, or [Deployed addresses](/contracts/addresses) — rather than against the page that
+   showed it to you.
+
+The same technique applies to the platform contracts. The Tipping v3 address in
+`src/config.ts` (`CONTRACT_V3_ADDRESS`) and the `CONTRACT_ADDRESS` constant in the agent skill's
+`superhero-read.mjs` are the same `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` — two
+independently maintained repositories agreeing is a much stronger signal than either one alone.
+
+## What else æScan exposes
+
+Useful for the parts of æternity these docs otherwise skim:
+
+- **AENS.** Active `.chain` names, live auctions and recent registrations — the practical way to
+  watch an auction you are bidding in. See [AENS](/aeternity/aens).
+- **AEX-9 tokens.** Listed and unlisted tokens, with holder lists. See
+  [AEX Standards](/aeternity/aex-standards).
+- **State channels.** Active channels network-wide, which is one way to see for yourself that
+  Superhero opens none. See [State Channels](/aeternity/state-channels).
+- **Network economics.** Circulating supply, burned coins, current block reward.
+
+## Read more
+
+- [Accounts & Keys](/aeternity/accounts-and-keys) — which prefix goes to which explorer path.
+- [Transactions](/tokens/transactions) — what a Superhero trade looks like before you go looking for it.
+- [Node & middleware API](/api-reference/node-and-middleware) — the programmatic version of everything on this page.
+- [Networks & Endpoints](/aeternity/networks) — mainnet versus testnet hosts.
+- [æScan](https://aescan.io/) — the mainnet explorer.
+- [æScan documentation](https://docs.aeternity.com/aeternity-user-tools-and-services/aescan-aeternity-blockchain-explorer) — what the explorer covers, from æternity's docs.
+- [ae_mdw middleware](https://github.com/aeternity/ae_mdw) — the index æScan and the `curl` above both read from.
+
+## Open questions
+
+- These procedures are written from the URL shapes in `src/utils/address.ts` and æScan's
+  documented feature list, not from a session with the live explorer, which could not be reached
+  from this environment. The page names, field labels and exact layout may differ; the URLs and
+  the middleware query are the parts to rely on.

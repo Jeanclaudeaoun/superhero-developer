@@ -1,0 +1,122 @@
+---
+title: "SuperheroID"
+description: "The decentralized identifier that ties your wallet, names and social accounts together."
+---
+
+# SuperheroID
+
+SuperheroID is the name Superhero gives to the identity layer built on `ProfileRegistry.aes`:
+an on-chain profile keyed by your æternity address, with public names and verified social
+links attached to it. This page covers what it actually contains, which parts are on-chain,
+and how much of the marketing claim is substantiated by the code.
+
+## What the product claims
+
+The landing page makes three claims:
+
+> A DID (decentralized identifier) that links your social accounts to your wallet. Your
+> identity is verifiable, portable, and censorship-resistant — following the W3C standard
+> for decentralized identifiers.
+
+- W3C DID standard compliant
+- Links wallet, chain names and X handle
+- Self-sovereign — you control your data
+
+The in-app help text is more concrete, and closer to what the contract does:
+
+> SuperheroID is a decentralized digital identity smart contract that connects all your social
+> accounts to your wallet address. Your SuperheroID Profile will be set up automatically for
+> you after linking your X account.
+
+Two of the three claims hold up directly. The third — W3C compliance — is asserted but not
+specified anywhere in the repositories; see [DIDs and the W3C Standard](/identity/did-standard).
+
+## What it links
+
+| Link | Set by | Verified? | Cleared by |
+| --- | --- | --- | --- |
+| Custom name | `set_custom_name` | No — first come, first served | `clear_custom_name` |
+| Chain name | `set_chain_name` with an AENS name and its expiry | Yes — backed by an AENS claim | `clear_chain_name` |
+| X handle | `set_x_name_with_attestation` | Yes — signed backend attestation | `clear_x_name` |
+| Nostr key | `nostr` profile field, linked through the address-links API | Yes — signed kind-22242 proof event | Nostr unlink flow |
+| Bio, website | Address-link claims signed by the wallet | Ownership only | Matching unlink flow |
+| Display source | `set_display_source` (`Custom`, `Chain` or `X`) | n/a | Change the preference |
+
+Each of these is a separate, independently revocable link. Clearing one releases that name for
+other users to register; it does not touch the others.
+
+## What is on-chain and what is not
+
+The registry is the authority for names, ownership, the display-source preference and the
+used-nonce set. The Superhero API is an index in front of it plus a store for things the
+contract does not model.
+
+| Data | Authority |
+| --- | --- |
+| Name ownership maps, used nonces, contract version | `ProfileRegistry.aes` state |
+| Custom, chain and X names attached to an address | `ProfileRegistry.aes` state |
+| Display-source preference | `ProfileRegistry.aes` state |
+| AENS name registration, pointers, expiry | æternity AENS, not the registry |
+| Posts, comments, tip totals | `Tipping` v3 contract plus the API index |
+| Avatar, cached profile aggregates, leaderboard stats | Superhero API |
+
+The API serves the aggregate at `GET /api/profile/{address}` — `address`, a `profile` object
+(`fullname`, `bio`, `avatarurl`, `username`, `x_username`, `chain_name`, `display_source`,
+`chain_expires_at`) and a resolved `public_name`. It accepts an `includeOnChain` query flag,
+which is the signal that the aggregate is a merge of indexed contract state and off-chain
+fields rather than a pure contract read.
+
+In the current web client `SuperheroApi.getProfile` is stubbed to resolve `null`, and the
+profile surface is served from `GET /api/accounts/{address}` instead, whose `links` object
+carries `x`, `bio`, `site` and `prefered_aens_name`. Treat `/api/profile` as the documented
+shape and `/api/accounts/{address}` as what the app reads today.
+
+## How a third party verifies a claim
+
+Nothing here requires trusting Superhero. To check that an address really controls a handle:
+
+1. **Chain name.** Resolve the `.chain` name through AENS on any æternity node or middleware
+   and confirm its `account_pubkey` pointer equals the address. This is protocol state — the
+   registry only mirrors it, along with the expiry the caller supplied.
+2. **X handle.** Read the registry state and verify the stored attestation against the backend
+   signer's public key configured at contract deployment. The signature scheme is documented
+   step by step in [Verifying Your X Account](/identity/x-verification). This one is only as
+   trustworthy as the signer: it proves Superhero's backend saw a valid X OAuth session, not
+   that X itself endorsed anything.
+3. **Custom name.** There is nothing to verify. A custom name asserts only that the address
+   claimed the name first and has not been displaced.
+4. **Posts.** Authorship is independent of all of the above — a post's `sender` is whichever
+   address signed the transaction, recorded by the `Tipping` contract.
+
+That ladder is the whole trust model. A verified badge in the UI means "a chain name or an X
+attestation resolves", not "this person is who they say they are".
+
+## Where you manage it
+
+In the app, SuperheroID lives behind the **Edit SuperheroID** action on your own profile at
+`https://superhero.com/users/<your address>`. The modal covers the profile fields, the `.chain`
+name selection and the preferred-name link, the website link, and the X connection. Each
+change is a separate signed operation, not one bulk save — a failure part-way through can
+leave the bio linked and the website not.
+
+## Open questions
+
+- **Where is `ProfileRegistry.aes` deployed?** No mainnet or testnet address for the registry
+  appears in `src/config.ts`, the API endpoint inventory, or the vendored contract ACIs — only
+  the Tipping v3 and governance addresses are configured. Settle it from the contracts
+  repository deployment record or by asking the backend for the address it writes to.
+- **Which entrypoint does the address-link submit path actually call?** The client posts a
+  signed claim to `POST /api/address-links/x/submit` and gets a `txHash` back, so the backend
+  relays the on-chain call. Whether that call is `set_x_name_with_attestation` exactly as the
+  whitepaper describes, or a wrapper, is not visible from the client.
+
+## Read more
+
+- [Names: Custom, Chain and X](/identity/names) — the precedence rules that decide which of
+  these links becomes your visible handle.
+- [The ProfileRegistry contract](/identity/profile-registry) — the entrypoints and events
+  behind every link on this page.
+- [Verifying Your X Account](/identity/x-verification) — the attestation flow in full.
+- [DIDs and the W3C Standard](/identity/did-standard) — how far the DID framing goes.
+- [The Superhero whitepaper](https://superhero.com/whitepaper) — "Superhero Onchain ID" is the
+  source for the data model and events.

@@ -1,0 +1,124 @@
+---
+title: "Quorum & Thresholds"
+description: "The exact numbers a proposal must hit to pass and to execute."
+---
+
+# Quorum & Thresholds
+
+Every number that governs a community DAO proposal, in one place, with the arithmetic that
+converts the time periods into key-blocks. Link to this page to settle an argument.
+
+## The numbers
+
+| Rule | Value |
+| --- | --- |
+| Cost to open a vote | 555 AE, paid to the DAO, non-refundable |
+| Who can open a vote | A holder at or above the community's minimum token threshold |
+| Voting period | 2 weeks, measured in key-blocks |
+| Approval threshold | At least 55% of the voted stake in favour |
+| Participation (quorum) | At least 10% of the total token stake |
+| Execution window | Approximately 2 days after the vote closes |
+| Who can execute | Any account, or a script, via `DAO.apply_vote_subject(vote_seq_id)` |
+| Ballot | Binary — in favour or against |
+| Voting power | Linear in tokens staked; tokens are locked while the vote stands |
+
+## The two periods, in key-blocks
+
+æternity separates leader election from transaction production. **Key-blocks** are the
+proof-of-work blocks, targeted at one every **three minutes**; micro-blocks carry the
+transactions and appear about every three seconds between them. Contract heights — including
+`DAOVote.close_height` and `DAO.vote_timeout` — are key-block heights, so the three-minute
+figure is the one to compute with.
+
+```text
+key-blocks per hour  = 60 / 3        =     20
+key-blocks per day   = 20 * 24       =    480
+
+voting period        = 14 * 480      =  6,720 key-blocks
+execution window     =  2 * 480      =    960 key-blocks
+```
+
+So a proposal opened at key-block height `H` closes at roughly `H + 6720`, and must be
+applied before roughly `H + 7680`.
+
+These are targets, not guarantees. Proof-of-work block times vary around the target, so the
+wall-clock length of a two-week vote drifts by hours in either direction. Treat every date
+the app shows for a vote as an estimate: it converts the remaining block count at exactly
+three minutes per block, which is the same arithmetic as above.
+
+Do not use the three-second micro-block figure for these calculations. It is off by a factor
+of sixty and will produce a close height sixty times too far out.
+
+## Are these fixed, or per-community?
+
+**Fixed in the contract.** Every community deployed by the same factory gets the same
+constants. The evidence, from the contract ACI:
+
+| Constant | Evidence |
+| --- | --- |
+| Voting period | `DAOVote.init(metadata, token, author)` takes no close height. `close_height` is state, computed at deployment from a contract constant. |
+| Execution window | `DAO.init(token_sale, factory_address)` takes no timeout. `vote_timeout` is state, set at deployment. |
+| 555 AE, 55%, 10% | Not init parameters, not state fields, and no entrypoint reads or writes them. They are compile-time constants in the Sophia source. |
+
+There is also no governance path to change them. The vote-subject variant is a closed set of
+seven constructors, and none of them touches the cost, the period, the approval threshold or
+the quorum. A community cannot vote itself a shorter voting period or a cheaper proposal fee.
+
+Two qualifications:
+
+- `vote_timeout` is readable per-DAO at runtime with `DAO.vote_timeout()`. It is set at
+  deployment rather than configured, but read it rather than assuming, especially on a DAO
+  you did not deploy.
+- A `ChangeDAO` migration to a different DAO implementation replaces the code that holds these
+  constants. A replacement DAO may use entirely different numbers for votes opened after the
+  migration. See [Replaceable DAOs](/dao/replaceable-dao).
+
+The one number that genuinely is per-community is the **minimum token threshold** — it lives
+in `CommunityManagement.minimum_token_threshold`, is set at community creation, and is
+changed by a `ChangeMinimumTokenThreshold` vote. See
+[Moderators and Write Thresholds](/dao/moderators).
+
+## How the two thresholds interact
+
+They test different denominators, and both must pass.
+
+```text
+approval      = stake_in_favour / (stake_in_favour + stake_against)   >= 0.55
+participation = (stake_in_favour + stake_against) / total_supply      >= 0.10
+```
+
+A worked case. A token with 1,000,000 tokens in supply:
+
+| Outcome | In favour | Against | Approval | Participation | Result |
+| --- | --- | --- | --- | --- | --- |
+| Passes | 80,000 | 40,000 | 66.7% | 12.0% | Both cleared |
+| Fails on approval | 60,000 | 60,000 | 50.0% | 12.0% | Below 55% |
+| Fails on quorum | 40,000 | 0 | 100% | 4.0% | Below 10% |
+| Fails on both | 20,000 | 20,000 | 50.0% | 4.0% | — |
+
+The third row is the one that catches communities out: unanimous support from a small turnout
+is still a failed proposal, and the 555 AE is still spent.
+
+Note that revoking a vote reduces both numerator and denominator. A proposal that is comfortably
+passing can drop below the participation quorum if enough voters on either side revoke before
+the closing height.
+
+## Why each number is what it is
+
+| Number | Purpose |
+| --- | --- |
+| 555 AE to open | Spam resistance. Proposals cost real money, so the proposal queue cannot be flooded and every proposal carries economic commitment. |
+| Two-week period | Enough time for a globally distributed holder base to notice a proposal and act on it. |
+| 55% approval | A supermajority rather than a bare majority, so a proposal that barely splits the community does not move the treasury. |
+| 10% participation | Prevents low-turnout capture: a handful of tokens cannot decide a payout because nobody else was watching. |
+| Two-day execution window | Limits how long a passed but unapplied proposal stays live, so a stale decision cannot be applied months later in a changed context. |
+| Token locking | Prevents the same balance being moved between addresses and voted more than once on the same proposal. |
+
+## Read more
+
+- [Voting](/dao/voting) — how stake is committed, and the allowance and locking mechanics behind these numbers.
+- [How DAOs Work](/dao/overview) — the lifecycle these thresholds gate.
+- [Proposals and Vote Subjects](/dao/proposals) — the closed set that explains why none of these numbers is votable.
+- [The Treasury](/dao/treasury) — where the 555 AE ends up.
+- [Contract security](/contracts/security) — the governance-security reasoning behind the thresholds.
+- [Bitcoin-NG consensus](https://docs.aeternity.com/aeternity-core-concepts/protocol/consensus-mechanisms/next-generation-nakamoto-consensus-bitcoin-ng) — the source for the three-minute key-block and three-second micro-block targets.

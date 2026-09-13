@@ -1,0 +1,205 @@
+---
+title: "DAOVote"
+description: "One proposal, its options, and the token stake locked behind them."
+---
+
+# DAOVote
+
+`DAOVote.aes` is one proposal. A fresh instance is deployed by `DAO.add_vote` for every vote,
+so its address is the proposal's identity. It holds the subject being voted on, the tally, and
+the community tokens voters have locked behind each side.
+
+The ACI lives inside `superhero-agent-skill/contracts/CommunityFactory.aci.json`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `(metadata: DAOVote.metadata, token: FungibleTokenFull, author: address) => DAOVote.state` | — |
+| `vote` | `(option: DAOVote.vote_option, amount: DAOVote.amount) => unit` | stateful |
+| `revoke_vote` | `() => unit` | stateful |
+| `withdraw` | `() => unit` | stateful |
+| `current_vote_state` | `() => DAOVote.vote_state` | — |
+| `final_vote_state` | `() => option(DAOVote.vote_state)` | — |
+| `has_voted` | `(voter: address) => bool` | — |
+| `voted_option` | `(voter: address) => option(DAOVote.vote_option)` | — |
+| `has_withdrawn` | `(voter: address) => option(bool)` | — |
+| `is_closed` | `() => bool` | — |
+| `close_height` | `() => int` | — |
+| `subject` | `() => VoteSubjects.subject` | — |
+| `metadata` | `() => DAOVote.metadata` | — |
+| `token` | `() => FungibleTokenFull` | — |
+| `vote_accounts` | `() => DAOVote.vote_accounts` | — |
+| `version` | `() => int` | — |
+| `get_state` | `() => DAOVote.state` | — |
+
+## Types
+
+```sophia
+type vote_option = bool                  // true = in favour, false = against
+type amount      = int                   // token base units, 18 decimals
+
+type vote_state    = map(vote_option, amount)
+type vote_accounts = map(address, (amount * vote_option * bool))
+                  //                         ^ voted    ^ withdrawn?
+
+record metadata =
+  { subject     : VoteSubjects.subject
+  , description : string
+  , link        : string }
+
+record state =
+  { metadata      : metadata
+  , close_height  : int
+  , create_height : int
+  , vote_state    : vote_state
+  , vote_accounts : vote_accounts
+  , token         : FungibleTokenFull
+  , author        : address }
+```
+
+Two things fall out of these type aliases that the names hide.
+
+**`vote_option` is just `bool`.** There are no multiple-choice votes here — every proposal is
+a yes/no on its subject. Pass `true` to support and `false` to oppose. (This is the opposite
+of æternity governance polls, where `Poll.vote_option` is `map(int, string)` and a poll can
+carry any number of named options. See [Registry and Poll](/contracts/governance-contracts).)
+
+**`amount` is just `int`, in token base units.** Community tokens have 18 decimals, so voting
+with one whole token means passing `10 ** 18`. Your voting weight is the number of tokens you
+lock, not one-address-one-vote.
+
+`vote_accounts` maps each voter to a three-element tuple, decoded in JavaScript as an array:
+
+```javascript
+const accounts = await vote.vote_accounts().then((r) => r.decodedResult);
+const [amount, option, withdrawn] = accounts.get('ak_alice...');
+```
+
+## Events
+
+```sophia
+datatype event =
+    Vote(address, vote_option, amount)
+  | RevokeVote(address, vote_option, amount)
+  | Withdraw(address, amount)
+```
+
+## Close height
+
+The close height is set at deployment, from the public Sophia source:
+
+```text
+close_height = Chain.block_height + (60 / 3) * 24 * 7 * 2
+```
+
+`60 / 3` is one hour in key blocks at a three-minute key block time, so the expression is
+20 × 24 × 7 × 2 = **6,720 key blocks**, about two weeks. Voting is open until the chain
+reaches that height and closed from then on.
+
+Note that this is measured in key blocks, not in wall-clock time. If block production slows,
+the vote stays open longer in real time.
+
+## The allowance you need before voting
+
+`vote` locks your tokens in the vote contract by pulling them with the AEX-9 allowance
+mechanism. You must grant that allowance on the **token** contract first, to the vote
+contract's address rewritten from `ct_` to `ak_`:
+
+```javascript
+const forAccount = voteAddress.replaceAll('ct_', 'ak_');
+const amount = new BigNumber(10).shiftedBy(18).toFixed(0);   // 10 whole tokens
+
+const existing = await token
+  .allowance({ from_account: aeSdk.address, for_account: forAccount })
+  .then((r) => r.decodedResult)
+  .catch(() => undefined);
+
+if (existing === undefined) {
+  await token.create_allowance(forAccount, amount);
+} else {
+  const delta = new BigNumber(amount).minus(existing.toString()).toFixed();
+  await token.change_allowance(forAccount, delta);
+}
+
+await vote.vote(true, amount, { omitUnknown: true });
+```
+
+`allowance` returns `option(int)`, so a never-granted allowance decodes to `undefined` and
+needs `create_allowance`; an existing one is adjusted with `change_allowance`, which takes a
+**delta**. Forgetting this is the single most common reason a `vote` call reverts.
+
+Locking is what makes the tally meaningful: the tokens cannot be transferred, sold back to the
+curve, or used in another concurrent vote while they are held here.
+
+## Retracting and reclaiming
+
+There are two ways to get your tokens back, and they differ in when they work and what they do
+to the tally.
+
+| | `revoke_vote()` | `withdraw()` |
+| --- | --- | --- |
+| When | While the vote is open | After the close height |
+| Effect on the tally | Removes your stake from the option you chose | None — the result is already final |
+| Use it to | Change your mind, or exit before close | Reclaim locked tokens from a finished vote |
+
+`has_withdrawn(voter)` returns `option(bool)` — `None` if that address never voted at all,
+`Some(false)` if they voted and have not withdrawn, `Some(true)` if they have.
+
+If you voted and never withdraw, your tokens stay locked in the vote contract indefinitely.
+Nothing expires them back to you.
+
+## `current_vote_state` versus `final_vote_state`
+
+| | `current_vote_state()` | `final_vote_state()` |
+| --- | --- | --- |
+| Return type | `vote_state` | `option(vote_state)` |
+| Before close height | The running tally, changing with every vote and revoke | `None` |
+| After close height | Still readable | `Some(tally)` — the frozen result |
+
+The `option` wrapper is the mechanism, not a detail. `DAO.apply_vote_subject` switches on
+`final_vote_state()` and aborts with `VOTE_NOT_YET_FINAL` when it gets `None`, which is
+exactly what stops a proposal being executed mid-vote on a favourable intermediate tally.
+
+For a progress bar, read `current_vote_state()`. For anything that decides an outcome, read
+`final_vote_state()` and handle the `None` case.
+
+```javascript
+const current = await vote.current_vote_state().then((r) => r.decodedResult);
+const inFavour = current.get(true) ?? 0n;
+const against  = current.get(false) ?? 0n;
+```
+
+The map is keyed by the boolean option, and an option nobody has voted for is simply absent —
+hence the `?? 0n`.
+
+## Passing conditions
+
+Per the whitepaper, a vote must clear both:
+
+- at least **10%** of the total token stake participating, and
+- at least **55%** of the participating stake in favour.
+
+Those thresholds are evaluated in the contract, and the DAO reads the result through
+`final_vote_state()`. The exact comparison was not read from source — see Open questions.
+
+## Open questions
+
+- **Where the 10% and 55% thresholds are enforced.** They are stated in the whitepaper and the
+  `option` return of `final_vote_state()` implies the check lives in `DAOVote.aes`, but the
+  comparison itself was not read line by line. Confirm against
+  [`DAOVote.aes`](https://github.com/superhero-com/bcl-contracts) before building anything
+  that predicts whether a vote will pass.
+- **What total supply the 10% quorum is measured against.** Circulating supply changes with
+  every buy and sell while a vote is open; whether the contract snapshots supply at creation
+  or reads it at close was not verified.
+- **Whether `revoke_vote` can be followed by a second `vote`.** The ACI allows both calls; the
+  contract's handling of a re-vote after revocation was not read.
+
+## Read more
+
+- [DAO](/contracts/dao) — the contract that deploys these and executes the result
+- [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance calls voting depends on
+- [Voting](/dao/voting) — the same flow from the app
+- [Quorum and thresholds](/dao/quorum-and-thresholds) — what it takes for a proposal to pass
+- [Calling Contracts](/contracts/calling-contracts) — SDK setup and revert handling

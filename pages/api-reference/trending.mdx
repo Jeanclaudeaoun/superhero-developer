@@ -1,0 +1,190 @@
+---
+title: "Trending & Topics API"
+description: "Trending tags, their scores and sources, topic feeds, and how a tag maps to a token."
+---
+
+# Trending & Topics API
+
+Trending is the entry point for most agent strategies: find what is moving, then find whether a
+token exists for it. Two surfaces do this — **trending tags**, which are scored words ingested
+from external providers, and **topics**, which are hashtags that have actually been used in posts
+on Superhero.
+
+All paths are relative to `https://api.superhero.com`. Reads need no authentication.
+
+## Endpoints
+
+| Method & path | Query | Returns |
+| --- | --- | --- |
+| `GET /api/trending-tags` | `order_by`, `order_direction`, `search`, `limit`, `page` | Scored tags |
+| `GET /api/trending-tags/{tag}` | — | One tag |
+| `POST /api/trending-tags` | — | Ingest tags from an external provider |
+| `GET /api/topics` | `order_by`, `order_direction`, `search`, `limit`, `page` | Paginated topics |
+| `GET /api/topics/{id}` | — | One topic, by UUID or name |
+| `GET /api/topics/name/{name}` | — | One topic, by name |
+| `GET /api/topics/popular/trending` | — | Most-used topics by post count |
+| `GET /api/tokens` with `order_by=trending_score` | — | Tokens ranked by trending score |
+| `GET /api/tokens/{address}/score` | — | A token's trending score payload |
+| `GET /api/tokens/{address}/trending-eligibility` | — | Whether a token qualifies for the trending list |
+| `GET /api/search` | `q`, `limit` | Tokens, accounts and posts in one call |
+
+## `GET /api/trending-tags`
+
+| Parameter | Notes |
+| --- | --- |
+| `order_by` | `score`, `source`, `created_at`. The hand-written client also passes `token_sale_address` |
+| `order_direction` | `ASC` or `DESC` |
+| `search` | Substring match on the tag |
+| `limit`, `page` | Standard pagination. The web app requests `limit=100` for its trend cloud |
+
+```bash
+curl -s "https://api.superhero.com/api/trending-tags?order_by=score&order_direction=DESC&limit=20"
+```
+
+### Item shape
+
+The generated `TrendingTagItemDto` — the shape used for ingestion — is minimal:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `tag` | string | The tag name |
+| `score` | string | The score for the tag |
+
+The read side returns more than that, and the web app reads each field through a fallback chain
+because the response has varied:
+
+```ts
+// src/components/layout/LeftRail.tsx
+tag:    it.tag    ?? it.name  ?? ''
+score:  Number(it.score ?? it.value ?? 0)
+source: it.source || it.platform || undefined
+```
+
+So expect `tag` (possibly `name`), `score` (possibly `value`) and `source` (possibly `platform`).
+Rows with an empty tag are dropped by the app rather than rendered. Because `order_by` accepts
+`token_sale_address`, rows also carry a token association when one exists — that is the field that
+links a tag to a tradeable token.
+
+### `source` — where a trend comes from
+
+Trending tags are **ingested from external providers**, not derived only from Superhero activity.
+`POST /api/trending-tags` takes a `provider` string (the generated DTO gives `x`, `facebook` and
+`github` as examples) plus an array of `{ tag, score }` items. `source` on a read row is that
+provider.
+
+The ingest endpoint also documents the normalisation the server applies:
+
+> Tags are normalized (uppercase, alphanumeric only, camelCase to kebab-case). Existing tags are
+> updated with new scores and token associations.
+
+That normalisation matters when you go looking for a matching token: a tag arrives as
+`#SuperHero` and is stored as something a token name can actually be. Token names are constrained
+to the characters their collection allows — see
+[Collections and naming](/tokens/collections-and-naming).
+
+`POST /api/trending-tags` declares no credential in the generated client. Treat that as
+undocumented rather than as an open write endpoint.
+
+`GET /api/trending-tags/{tag}` fetches a single tag. It has no caller in either repository, so
+its response shape is unverified — the list endpoint is the one that is exercised.
+
+## From a tag to a token
+
+There is no single "resolve tag to token" endpoint. Three routes, in the order the web app and
+the agent skill use them:
+
+1. **Read the association off the tag row.** Rows carry a token sale address when the trend
+   already has a token; `order_by=token_sale_address` exists precisely because of it.
+2. **Look the name up directly.** `GET /api/tokens/{name}` resolves a token by name, not just by
+   address, and 404s cleanly when no token exists. This is what
+   `superhero-token-swap.mjs lookup` does first.
+3. **Search.** `GET /api/tokens?search={tag}` matches on name and symbol, for partial and fuzzy
+   cases.
+
+Posts go the other way for free: every `PostDto` carries `trend_mentions`, an array that already
+resolves each `#hashtag` in the body to a `sale_address`, its `collection_info` and a
+`performance` summary. See [Posts](/api-reference/posts).
+
+## Trending score
+
+The tag `score` and a token's `trending_score` are different numbers.
+
+`TokenDto.trending_score` is a **number** on every token, with
+`trending_score_update_at` giving the ISO 8601 timestamp of the last recompute. It is the default
+sort for the trending token list:
+
+```bash
+curl -s "https://api.superhero.com/api/tokens?order_by=trending_score&order_direction=DESC&limit=10"
+```
+
+That is exactly what `superhero-trending.mjs tokens` calls. Two dedicated endpoints exist —
+`GET /api/tokens/{address}/score` and `GET /api/tokens/{address}/trending-eligibility` — but
+neither has a caller in the web app and both are typed `any` in the generated client. The scale
+and formula behind the score are not published in either repository; see
+[Trending score](/tokens/trending-score) for what can be said about it.
+
+## Topics
+
+A topic is a hashtag that exists because someone posted it, with a post count attached.
+
+| Parameter on `GET /api/topics` | Notes |
+| --- | --- |
+| `order_by` | `name`, `post_count`, `created_at` |
+| `order_direction` | `ASC` or `DESC` |
+| `search` | Substring match on the name |
+| `limit`, `page` | Standard pagination |
+
+`GET /api/topics/name/{name}` returns one topic with a `posts` array and a `post_count` number.
+The web app uses `post_count` when it is a number and otherwise falls back to the length of
+`posts`, so treat the count as advisory. `GET /api/topics/{id}` accepts a UUID **or** a name, and
+`GET /api/topics/popular/trending` is a ready-made "most used" list with no parameters.
+
+```bash
+curl -s "https://api.superhero.com/api/topics/name/superhero"
+curl -s "https://api.superhero.com/api/topics?order_by=post_count&order_direction=DESC&limit=20"
+```
+
+The generated `Topic` model is an empty type, so field names beyond `posts` and `post_count` are
+not verified. `GET /api/topics/name/{name}` is also the only one of the four topic endpoints with
+a caller in the web app — the list, by-id and popular forms are defined but unexercised.
+
+## `GET /api/search`
+
+One request across all three entity types, run in parallel server-side:
+
+| Parameter | Notes |
+| --- | --- |
+| `q` | Search term, max 100 characters. A `q` shorter than 2 characters returns empty arrays |
+| `limit` | Max results **per category**, clamped to 1–20, default 5 |
+
+Returns `SearchResultDto`: `tokens` (full `TokenDto` objects), `accounts`
+(`address` plus `chain_name`) and `posts` (full `PostDto` objects).
+
+```bash
+curl -s "https://api.superhero.com/api/search?q=super&limit=5"
+```
+
+For a trend-discovery loop this is often a better first call than three separate requests.
+
+## Read more
+
+- [Tokens API](/api-reference/tokens) — `trending_score` in context, and resolving a tag name to a token
+- [Posts API](/api-reference/posts) — `trend_mentions`, the pre-resolved tag-to-token links on every post
+- [API Conventions](/api-reference/conventions) — pagination and the `limit` cap that applies here
+- [Trending score](/tokens/trending-score) — what the score is meant to represent
+- [Collections and naming](/tokens/collections-and-naming) — which tags can become tokens at all
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list
+
+## Open questions
+
+- **What scale is the tag `score` on?** It is a string on ingest and coerced with `Number()` on
+  read, with no normalisation range documented. Whether scores are comparable across `source`
+  values is unknown — two providers could be sending different magnitudes into the same column.
+- **What is the exact field name of the token association on a tag row?** `order_by` accepts
+  `token_sale_address`, which strongly implies a column of that name, but no read-side consumer in
+  either repository reads it. Fetch one row and inspect.
+- **Which providers actually feed `POST /api/trending-tags` in production?** The DTO gives `x`,
+  `facebook` and `github` only as examples.
+- **Does `POST /api/trending-tags` require a credential?** None is declared in the generated
+  client, which would make it an open write. Confirm with the API operators before assuming
+  either way.

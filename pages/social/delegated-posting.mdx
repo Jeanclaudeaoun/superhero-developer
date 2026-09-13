@@ -1,0 +1,168 @@
+---
+title: "Delegated & Gasless Posting"
+description: "Let a relayer pay the gas while you keep authorship."
+---
+
+# Delegated & Gasless Posting
+
+`post_without_tip_sig` lets any account submit a post on behalf of an author. The submitter
+pays the gas; the on-chain record still attributes the post to the signer. This is the
+mechanism behind gasless onboarding — a user signs a message in a wallet that holds no AE, and
+a relayer turns it into a transaction. This page documents the signature scheme precisely
+enough to implement either side of it, and is honest about what the scheme does not protect
+against.
+
+## The entrypoint
+
+```text
+post_without_tip_sig(
+  title  : string,
+  media  : list(string),
+  author : address,
+  sig    : signature
+) => int
+```
+
+Stateful, non-payable, returns the new `tip_id`, and emits the same
+`PostWithoutTipReceived(author, title)` event as a direct post. From the outside the two paths
+are indistinguishable: nothing in the stored `tip_meta` records that a relayer was involved.
+
+## The signature scheme
+
+The contract reconstructs the digest itself and checks it against `sig` and `author`:
+
+```text
+1. message  = concat(title, media)          // title and media as one string
+2. inner    = Blake2b(message)              // 32 bytes
+3. payload  = header || inner               // 28-byte header + 32-byte digest = 60 bytes
+4. digest   = Blake2b(payload)              // 32 bytes
+5. ok       = Crypto.verify_sig(digest, author, sig)
+```
+
+The header in step 3 is the æternity signed-message framing: the string
+`aeternity Signed Message:` followed by a newline, with a length byte before it and a length
+byte before the body. The prefix string is 26 bytes, so 1 + 26 + 1 = 28 bytes of header, and
+28 + 32 = 60 bytes hashed a second time. That framing is what stops a signature captured here
+from being replayed as a raw transaction signature on another protocol.
+
+`Crypto.verify_sig(msg, pubkey, sig)` is the Sophia standard-library Ed25519 check. Compiler
+version 8 and later accept a message of any length; earlier versions require exactly 32 bytes,
+which is why the scheme hashes down to a digest first.
+
+## Building the author side
+
+Illustrative — the exact concatenation in step 1 is the one part of the scheme the available
+sources do not pin down (see Open questions). Verify against the contract source before you
+ship.
+
+```js
+// Illustrative. Assumes title and media are concatenated with no separator.
+import blake2b from 'blakejs';
+
+const MESSAGE_PREFIX = 'aeternity Signed Message:\n';
+
+function personalMessageToBinary(bodyBytes) {
+  const prefix = new TextEncoder().encode(MESSAGE_PREFIX);
+  const out = new Uint8Array(1 + prefix.length + 1 + bodyBytes.length);
+  out[0] = prefix.length;                    // 26
+  out.set(prefix, 1);
+  out[1 + prefix.length] = bodyBytes.length; // 32
+  out.set(bodyBytes, 2 + prefix.length);
+  return out;                                // 60 bytes for a 32-byte body
+}
+
+export function postDigest(title, media) {
+  const message = title + media.join('');
+  const inner = blake2b.blake2b(new TextEncoder().encode(message), undefined, 32);
+  const payload = personalMessageToBinary(inner);
+  return blake2b.blake2b(payload, undefined, 32);
+}
+```
+
+Sign `postDigest(title, media)` with the author's Ed25519 key and hand the relayer the tuple
+`(title, media, author, signature)`.
+
+If you are signing from a connected wallet rather than a raw key, note that the wallet's
+`signMessage` applies the prefix framing itself over the message you give it. Passing the
+32-byte inner Blake2b digest as that message reproduces steps 2 to 4 exactly; passing the raw
+text does not, because the wallet would frame the text rather than its digest.
+
+## Building the relayer side
+
+A minimal relayer is a queue in front of one funded account:
+
+1. **Accept** a `(title, media, author, signature)` tuple over your own transport.
+2. **Verify before you spend.** Recompute the digest and check the signature against `author`
+   locally. A contract call that fails verification still costs you gas.
+3. **Rate-limit per author address.** The scheme has no nonce and the contract keeps no
+   per-author counter, so nothing on-chain stops the same author flooding you.
+4. **Deduplicate.** Keep a hash of every tuple you have already submitted. Identical tuples
+   produce different `tip_id`s and therefore duplicate posts — see below.
+5. **Submit** `post_without_tip_sig(title, media, author, sig)` from your funded account.
+6. **Return** the transaction hash and the returned `tip_id`, suffixed with `_v3` if you want
+   it to match what the Superhero API serves.
+
+The whitepaper's architecture section lists a "Backend Relayer" in the off-chain layer,
+described as accepting signed messages from users and submitting transactions on their behalf.
+No publicly callable endpoint for it appears in the REST inventory — see Open questions.
+
+## Replay, and what prevents it
+
+Nothing in the documented scheme prevents replay. Be explicit about this if you build on it:
+
+- **The signature has no nonce.** The digest covers only the title and the media list. Two
+  submissions of the same tuple both verify.
+- **The signature has no expiry.** A signature captured today is still valid next year.
+- **The signature does not name a relayer.** Anyone who sees the tuple can submit it.
+- **The contract does not deduplicate.** Each submission takes the next `tip_id` and appends a
+  new entry to the map, so a replay is a duplicate post, not a rejected one.
+
+The consequences are bounded — a replay can only republish content the author already
+authorised, under the author's own name, and it costs the replayer gas — but it is a real
+footgun. The X attestation flow in `ProfileRegistry.aes` solves the same problem properly by
+putting a nonce in the message and recording consumed nonces on-chain; delegated posting does
+not do this.
+
+Practical mitigations, in order of preference:
+
+| Mitigation | Where it lives | Effect |
+| --- | --- | --- |
+| Include a nonce or timestamp in the post text or a media entry | Author | Makes each tuple unique, so a replay is detectable and the content self-dates |
+| Keep a submitted-tuple set | Relayer | Stops your own relayer duplicating |
+| Treat delegated posts as one-shot credentials | Author | Do not hand the tuple to more than one relayer |
+
+None of these are enforced by the contract. Anyone can still submit a leaked tuple.
+
+## When to use it
+
+Use `post_without_tip_sig` when the author genuinely cannot pay — new-user onboarding before
+the wallet is funded, or a custodial surface that holds no user key but can forward a
+signature. For everything else prefer `post_without_tip`: it is simpler, it has no replay
+surface, and the gas is negligible (the agent skill quotes roughly 0.00001 AE per post).
+
+## Open questions
+
+- **How exactly are title and media concatenated?** The whitepaper says "the post title and
+  media are concatenated into a single string" without specifying a separator, an ordering
+  guarantee, or an encoding. The reference sketch above assumes plain concatenation with no
+  separator. Settle it from the `Tipping.aes` source before implementing a relayer — an
+  off-by-one separator makes every signature fail verification.
+- **Is there a public relayer endpoint?** The whitepaper names a backend relayer in the
+  off-chain architecture, but no endpoint for it appears in the app's REST inventory and the
+  web client always calls `post_without_tip` directly from the user's wallet. Whether the
+  relayer exists in production, and whether it is open to third parties, is unconfirmed.
+- **Does the deployed contract add any replay protection the whitepaper omits?** The vendored
+  ACI shows no nonce argument and no per-author state, but absence from an ACI is not proof of
+  absence in the implementation.
+
+## Read more
+
+- [Posting](/social/posting) — the direct path, the data model, and the shared conventions.
+- [The Tipping contract](/contracts/tipping) — the contract reference for both entrypoints.
+- [Verifying Your X Account](/identity/x-verification) — the same signed-message construction,
+  used with a nonce and on-chain replay protection.
+- [Contract security](/contracts/security) — the protocol's wider security model.
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) —
+  the reference for `Crypto.verify_sig` and its per-compiler message-length rules.
+- [aepp-sdk-js issue 1116](https://github.com/aeternity/aepp-sdk-js/issues/1116) — how the SDK
+  frames and hashes personal messages.

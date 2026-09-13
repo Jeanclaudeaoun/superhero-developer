@@ -1,0 +1,170 @@
+---
+title: "The Governance Registry"
+description: "The contract that indexes every poll and every delegation."
+---
+
+# The Governance Registry
+
+The `Registry` is the single entry point to æternity governance. It does two jobs: it keeps
+the index of every poll ever registered, and it holds the global delegation map. It does
+**not** hold votes — those live on each individual `Poll` contract — and it does not compute
+results, which happens off-chain in the governance backend.
+
+One registry per network, deployed once, with no admin entrypoint and no upgrade path.
+
+## Addresses
+
+| Network | Registry address |
+| --- | --- |
+| Mainnet | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` |
+| Testnet | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` |
+
+These are the values the Superhero app ships as `GOVERNANCE_CONTRACT_ADDRESS`. The agent
+skill's CLI defaults to the same mainnet address and accepts an override through the
+`AE_GOVERNANCE_REGISTRY` environment variable, which is how you point it at testnet.
+
+## State
+
+```text
+Registry.state = { polls          : map(int, Registry.poll_data)
+                 , seq_id         : int
+                 , delegations    : map(address, address)
+                 , created_height : int }
+
+Registry.poll_data = { poll         : Poll
+                     , is_listed    : bool
+                     , title        : string
+                     , close_height : option(int) }
+```
+
+Two design points follow from this shape.
+
+**`poll_data` duplicates the title and close height.** They also live on the poll contract.
+Caching them in the registry means a client can render a full poll list from one contract call
+instead of one call per poll — which is exactly what the app and the CLI do.
+
+**`delegations` is a plain address-to-address map.** That is the structural reason an account
+can have at most one outgoing delegation and any number of incoming ones. See
+[Delegation](/governance/delegation).
+
+`seq_id` is the counter behind poll ids: `add_poll` assigns the next one, so ids are dense,
+sequential and permanent. `created_height` records when the registry itself was deployed.
+
+## Entrypoints
+
+| Entrypoint | Signature | Purpose |
+| --- | --- | --- |
+| `init` | `()` | No parameters. The registry is deployed empty. |
+| `add_poll` | `(poll: Poll, is_listed: bool) : int` | Register a deployed poll; returns its id. Stateful. |
+| `polls` | `() : map(int, poll_data)` | Every poll, listed and unlisted |
+| `poll` | `(poll_id: int) : poll_data` | One poll's summary |
+| `delegate` | `(delegatee: address)` | Set or replace your delegation. Stateful. |
+| `revoke_delegation` | `()` | Remove your delegation. Stateful. |
+| `delegations` | `() : map(address, address)` | The complete delegation map |
+| `delegatee` | `(account: address) : option(address)` | Who that account delegates to |
+| `delegators` | `(account: address) : map(address, address)` | Direct delegators to that account |
+| `created_height` | `() : int` | Deployment height |
+| `version` | `() : int` | Contract version |
+
+There is no way to remove a poll, change its `is_listed` flag, or edit its cached title. There
+is no owner, no admin and no pause. `add_poll` is open to any caller — anyone can register any
+deployed `Poll` contract, including one they did not deploy.
+
+`polls()` returns everything, unlisted included, because `is_listed` is a display hint rather
+than an access control. Clients filter it; the contract does not. See
+[Polls](/governance/polls).
+
+## Events
+
+| Event | Fields |
+| --- | --- |
+| `AddPoll` | the poll contract, its id |
+| `Delegation` | delegator, delegatee |
+| `RevokeDelegation` | delegator |
+
+These three are the registry's whole public activity stream, and they are what the indexers
+consume. `AddPoll` lets a backend discover new polls without re-reading `polls()`; the
+delegation events let it maintain the delegation graph incrementally rather than re-reading the
+full map on every change.
+
+Note what is **not** here: votes. `Vote` and `RevokeVote` are emitted by each `Poll` contract,
+not by the registry, so an indexer has to subscribe per poll — which is why the governance
+backend discovers polls through `AddPoll` first and then follows them individually. See
+[Contract events](/contracts/events).
+
+## Calling it
+
+From the agent skill's CLI, which initialises the registry for you:
+
+```bash
+node scripts/superhero-governance.mjs list           # Registry.polls(), listed only
+node scripts/superhero-governance.mjs list 50 --all  # include unlisted
+node scripts/superhero-governance.mjs info-by-id 42  # Registry.poll(42), then the poll itself
+node scripts/superhero-governance.mjs delegatee      # Registry.delegatee(you)
+node scripts/superhero-governance.mjs delegators     # Registry.delegators(you)
+```
+
+To point any of them at testnet, override both the node and the registry:
+
+```bash
+export AE_NODE_URL=https://testnet.aeternity.io
+export AE_GOVERNANCE_REGISTRY=ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf
+```
+
+From your own client, initialise a contract instance against the registry ACI and the address
+for your network. The ACI ships in both repositories — as `RegistryWithEventsACI.json` in the
+agent skill's `contracts/` directory, and as `GovernanceRegistryACI.json` in the web app. The
+"with events" name refers to the event variant being declared in the ACI, which is what lets a
+client decode `AddPoll`, `Delegation` and `RevokeDelegation` without a separate schema.
+
+## The governance API
+
+The registry gives you structure; the backend gives you weighted results. Both are needed for
+a complete picture.
+
+| Network | Governance API base URL |
+| --- | --- |
+| Mainnet | `https://governance-server-mainnet.prd.service.aepps.com/` |
+| Testnet | `https://governance-server-testnet.prd.service.aepps.com/` |
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET version` | Backend version |
+| `GET pollOrdering?closed=true,false` | Poll ordering with per-poll totals, vote counts and a score |
+| `GET pollOverview/:pollAddress` | Full poll state, per-account stakes at height, per-option stakes |
+| `GET votesState/:address` | The same overview shape; the source of the official result |
+| `GET delegatedPower/:address?poll=:pollAddress` | Delegated power and delegation tree, optionally scoped to one poll |
+| `GET accountPollVoterAuthor/:address` | Polls an account voted in, authored, or was represented in by its delegatee |
+| `POST contractEvent` | Nudge the backend to re-index, with a topic and an optional poll address |
+
+The Superhero app combines the two sources for its poll list: it reads titles from
+`Registry.polls()` and ordering, stake totals and vote counts from `pollOrdering`, then merges
+them by poll id.
+
+The agent skill's CLI uses a slightly different mainnet host,
+`https://governance-server-mainnet.prd.aepps.com`, overridable with
+`AE_GOVERNANCE_BACKEND_URL`. Both spellings appear in the repositories; if one does not answer,
+try the other.
+
+Superhero's own backend additionally indexes governance transactions at
+`/api/governance/votes` and `/api/governance/delegations` — useful for history rather than for
+live results. See [Polls](/governance/polls).
+
+## Open questions
+
+- The `version()` value each deployed registry reports is not recorded in either repository, so
+  we cannot state which contract version the mainnet and testnet addresses are running. Call
+  `version()` against each to find out.
+- The Superhero app's testnet configuration points at `https://testnet.aeternity.io` while its
+  mainnet configuration uses a third-party node host. Whether the mainnet registry is reachable
+  through the public `https://mainnet.aeternity.io` node — which is what the agent skill's CLI
+  defaults to — is not something we verified against a live chain.
+
+## Read more
+
+- [Polls](/governance/polls) — what `poll_data` summarises, and how the backend turns votes into results.
+- [Delegation](/governance/delegation) — the delegation entrypoints in context, with the transitivity rules.
+- [Creating a Poll](/governance/create-a-poll) — `add_poll` as the second half of poll creation.
+- [Registry and Poll contract reference](/contracts/governance-contracts) — the full signature tables.
+- [Contract addresses](/contracts/addresses) — every deployed address across both networks in one place.
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference contracts, aepp and backend.

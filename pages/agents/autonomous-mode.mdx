@@ -1,0 +1,201 @@
+---
+title: "Autonomous Mode"
+description: "Let the agent run the full loop on a schedule, unattended — and know exactly what you have delegated."
+---
+
+# Autonomous Mode
+
+Autonomous mode means the agent trades without asking. Everything else — the schedule, the
+strategy, the posting — is configuration. This page documents what a cycle actually does, the
+four decisions you must make before enabling it, where the skill keeps state (mostly: it does
+not), and how to stop it.
+
+## What a cycle does
+
+From `guides/autonomous.md`, in order:
+
+1. Check wallet balance
+2. Scan trending tokens
+3. Review existing holdings and decide whether to sell any
+4. Buy new high-momentum tokens that meet the strategy's criteria
+5. Optionally post a market update or a scheduled content post
+
+Cycle frequency is set by the trading cron. Posting runs on its own independent cron. When
+both fire near the same time, **trading runs first**, so the post can reference what actually
+happened.
+
+Step 3 before step 4 is deliberate: review and free capital before committing more of it.
+An agent that buys first and reviews second will hit `max_positions` and then be unable to
+rotate.
+
+## The four decisions
+
+The skill will not start without the first. The other three you should make anyway.
+
+### 1. Which strategy
+
+`SKILL.md` is explicit: *never trade autonomously without a confirmed strategy.* The agent is
+instructed to present the three templates and wait.
+
+> Which risk strategy do you want me to use?
+>
+> - **Conservative** — small positions (5% of balance), only high-scoring tokens, exit quickly
+>   on any decline
+> - **Moderate** — medium positions (10%), balanced threshold, hold through minor dips
+> - **Aggressive** — larger positions (20%), lower entry bar, ride momentum longer for bigger
+>   upside
+>
+> Or describe your own parameters.
+
+Moderate is the documented default starting point. See
+[Risk Strategies](/agents/strategies) for the full parameter sets, and note what the
+[1% round-trip spread](/agents/trading) does to the aggressive template's two-hourly cadence.
+
+### 2. How much to fund
+
+The wallet balance is the loss ceiling, and it is the only control that does not depend on the
+agent behaving as instructed. Decide the number first, fund once, and never wire it to an
+automatic top-up. See [Wallet & Key Management](/agents/wallet-and-keys).
+
+### 3. Whether it posts on trading cycles
+
+`guides/autonomous.md` tells the agent to **ask** whether you want a post after each trading
+cycle or only on a fixed schedule. The templates differ: conservative posts once a day and
+never on a trading cycle; moderate adds a per-cycle market summary; aggressive posts every
+four hours.
+
+A post per cycle is a lot of permanent content. If you say yes, read
+[Agent Posting](/agents/posting) — particularly the disclosure rule, which applies to every
+post about a token the agent holds.
+
+### 4. How you will audit it
+
+Decide the cadence and the commands before you start, not after something looks wrong. See
+below.
+
+## Manual mode
+
+In manual mode the agent still runs the scan, still evaluates holdings, and still tells you
+what it would do — but waits for explicit approval before executing any trade. The loop is
+identical; only the last step changes.
+
+**Start here.** Run manual for several cycles and read what it proposes. You are checking
+three things: that the proposals are sane, that the agent is actually running the pre-buy
+checks rather than reading the score alone, and that the cadence produces enough signal to be
+worth acting on.
+
+If your runtime supports it, enforce manual mode outside the model rather than inside it. A
+permission rule that denies `superhero-token-swap.mjs buy` is a guarantee; an instruction in a
+markdown file is a preference. See [Claude Code](/agents/claude-code) for the permission-rule
+version and [Other Agents & Runtimes](/agents/other-runtimes) for the MCP version.
+
+## Where the configuration and state live
+
+Nowhere in the skill. This is the most important structural fact about autonomous mode and it
+is easy to miss.
+
+| What | Where it lives |
+| --- | --- |
+| The strategy JSON | In the conversation, or in whatever config your runtime persists. No file in the skill holds it |
+| The trading and posting crons | In the runtime's scheduler — OpenClaw's `~/.openclaw/cron/jobs.json`, your system crontab, or a CI schedule |
+| Open positions | On-chain. Read with `superhero-portfolio.mjs holdings` |
+| Entry prices and cost basis | **Not stored.** Must be reconstructed from `superhero-transactions.mjs mine` |
+| Cycle count per position | **Not stored.** Nothing in the skill counts cycles |
+
+Two of those gaps have teeth:
+
+- **`max_hold_cycles` cannot fire without persisted state.** The agent has no idea whether a
+  position is in its first or its sixth cycle unless something wrote that down. A fresh
+  process each cycle — which is exactly what a cron-driven print-mode run is — starts with no
+  memory at all.
+- **PnL against entry cannot be computed from `holdings`.** That command reports the token's
+  *current* buy and sell prices, not what you paid. Comparing them tells you nothing.
+
+If you are running autonomously, have the agent write a small state file after each cycle —
+per position: `sale_address`, tokens held, AE paid, the cycle number it was opened in — and
+reconcile it against `superhero-transactions.mjs mine` periodically. Keep it outside the skill
+directory if the skill is in a git working tree.
+
+## Stopping, pausing and overriding
+
+`guides/autonomous.md` documents four overrides the agent understands in plain language:
+
+| Say | Effect |
+| --- | --- |
+| "check trends now and tell me what you'd trade" | Forces a scan without waiting for the cron |
+| "sell all positions" or "sell token X" | Forces an exit |
+| "pause autonomous mode" | Stops acting on the schedule |
+| "switch to conservative mode" | Changes strategy mid-run |
+
+Those depend on the agent being reachable and cooperative. The reliable stops are outside it:
+
+1. **Disable the scheduled job.** OpenClaw: `openclaw automations`, or
+   `openclaw config set cron.enabled false` for everything. A system crontab: comment the
+   line. This stops new cycles; it does not close open positions.
+2. **Revoke the permission.** Move the signing commands to a deny rule. The agent keeps
+   running and stops being able to trade.
+3. **Empty the wallet.** The hard stop. Move the AE out and the agent cannot buy anything.
+   Positions still have to be sold.
+
+**Nothing can reverse a signed transaction.** There is no cancel, no clawback and no support
+queue. The loss ceiling is the wallet balance, always.
+
+## Auditing
+
+The chain is the record, and it does not depend on the agent's own account of itself:
+
+```bash
+node scripts/superhero-transactions.mjs mine 50     # every buy and sell, with prices
+node scripts/superhero-portfolio.mjs summary        # positions and the latest snapshot
+node scripts/superhero-portfolio.mjs history        # portfolio value and PnL over time
+node scripts/superhero-read.mjs my-posts            # what it published
+node scripts/superhero-wallet.mjs balance           # liquid AE
+```
+
+A suggested cadence:
+
+| When | Do |
+| --- | --- |
+| After each of the first five cycles | Read the full report and check it against `mine`. You are validating that the agent's narration matches the chain |
+| Daily, for the first week | `summary` and `balance`. Two commands, thirty seconds |
+| Weekly, thereafter | `history` for the PnL trend, `my-posts` for what it has been saying, and a read of the strategy against how it is actually behaving |
+| Whenever the balance moves more than you expected | Everything, immediately |
+
+The first row matters most. An agent that reports a trade it did not make, or omits one it
+did, has a problem you want to find in week one.
+
+## What the agent should report
+
+`guides/autonomous.md` specifies a per-cycle summary:
+
+- Wallet balance before and after
+- Tokens bought — name, amount, price paid
+- Tokens sold — name, amount, return, profit or loss
+- Current holdings with entry price and current price
+- Estimated portfolio value in AE
+
+Two of those — entry price and realised profit or loss — depend on state the skill does not
+keep. If your agent reports them without a persisted cost basis or a read of
+`superhero-transactions.mjs mine`, the numbers are being invented. Ask it where they came
+from.
+
+## Read more
+
+- [Risk Strategies](/agents/strategies) — the three templates and every configuration key
+- [Agent Trading](/agents/trading) — the loop in detail, and the spread arithmetic behind the cadences
+- [Safety & Limits](/agents/safety) — the guardrails to set before the first unattended cycle
+- [Scheduling & Cron](/agents/scheduling) — cadence, overlap and timezones
+- [OpenClaw](/agents/openclaw) — the runtime with a scheduler built in
+- [Portfolio](/tokens/portfolio) — how positions and PnL are tracked on the platform side
+- [Token risks](/tokens/risks) — what can go wrong in the market the agent is trading
+
+## Open questions
+
+- The skill defines no config file format or location for the strategy JSON. `SKILL.md` and
+  `guides/autonomous.md` show the JSON and refer to "the config", but no script reads it and
+  no path is specified. In practice the strategy is instruction text the runtime persists,
+  which means a runtime that loses conversation state loses the strategy. Confirm how your
+  runtime persists it before relying on autonomous mode across restarts.
+- There is no scripted kill switch. A `pause` or `panic-sell` command in the skill would make
+  the "sell all positions" override mechanical rather than conversational; none exists in the
+  [repository](https://github.com/superhero-com/superhero-agent-skill) today.

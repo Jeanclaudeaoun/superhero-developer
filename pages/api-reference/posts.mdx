@@ -1,0 +1,233 @@
+---
+title: "Posts API"
+description: "Read the feed, individual posts, comment threads, tips and the combined home feed."
+---
+
+# Posts API
+
+Superhero posts live on chain; this API is the indexed, queryable copy of them. Use it to read a
+feed, load a thread, search post content, or find everything one account has written — without
+scanning the chain yourself.
+
+All paths are relative to `https://api.superhero.com`. Reads need no authentication. **Posting is
+not a REST operation** — a post is a contract call, so writing goes through the chain, not
+through this API. See [Posting](/social/posting).
+
+## Endpoints
+
+| Method & path | Query | Returns |
+| --- | --- | --- |
+| `GET /api/posts` | `order_by`, `order_direction`, `search`, `account_address`, `topics`, `limit`, `page` | Paginated `PostDto` |
+| `GET /api/posts/popular` | `page`, `limit`, eight ranking weights, `debug` | Paginated `PostDto`, ranked |
+| `GET /api/posts/{id}` | — | One `PostDto` |
+| `GET /api/posts/{id}/comments` | `order_direction`, `limit`, `page` | Paginated comment thread |
+| `GET /api/feed` | `sort`, `cursor`, `limit` | Cursor-paginated mixed activity feed |
+| `GET /api/topics` | `order_by`, `order_direction`, `search`, `limit`, `page` | Paginated topics |
+| `GET /api/topics/name/{name}` | — | One topic with its posts |
+| `GET /api/topics/popular/trending` | — | Most-used topics by post count |
+| `GET /api/tips/posts/{postId}/summary` | — | Total tipped on a post |
+| `GET /api/tips` | `order_by`, `order_direction`, `sender`, `receiver`, `type`, `post_id`, `limit`, `page` | Paginated tips |
+| `GET /api/tips/accounts/{address}/summary` | — | Tips sent and received by an account |
+| `GET /api/posts/analytics` | `start_date`, `end_date` | Posting volume series |
+| `GET /api/posts/analytics/top-posters` | `start_date`, `end_date`, `limit` | Leaderboard of authors |
+| `GET /api/posts/analytics/top-topics` | `start_date`, `end_date`, `limit` | Leaderboard of topics |
+
+## `PostDto`
+
+Transcribed from `src/api/generated/models/PostDto.ts`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | Unique post identifier |
+| `tx_hash` | string | `th_...` of the transaction that created the post |
+| `tx_args` | array of objects | Raw contract-call arguments as JSON |
+| `sender_address` | string | Author `ak_...` |
+| `sender` | `PostSenderDto` | Inlined author profile — `address`, `public_name`, `bio`, `avatarurl` |
+| `contract_address` | string | `ct_...` of the posting contract |
+| `type` | string | Post or transaction type |
+| `content` | string | The post body |
+| `trend_mentions` | array of `PostTrendMentionDto` | Hashtags in `content` resolved to tokens |
+| `media` | array of strings | Media URLs attached to the post |
+| `total_comments` | number | Comment count |
+| `created_at` | string | ISO 8601 |
+
+`PostTrendMentionDto` turns a `#HASHTAG` in the body into something you can render as a live
+price chip:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | The trend name, without the `#` |
+| `sale_address` | string or null | Token sale address, when a token exists for that name |
+| `collection_info` | `CollectionInfoDto` or null | Collection metadata for that token |
+| `performance` | `TrendPerformanceSummaryDto` or null | `past_24h`, `past_7d`, `past_30d`, `all_time` price movement |
+
+Netlify's SEO edge function also reads `updated_at` and `slug` off the single-post response.
+Neither is on the generated `PostDto`, so treat both as present-but-untyped.
+
+## `GET /api/posts`
+
+| Parameter | Notes |
+| --- | --- |
+| `order_by` | `total_comments` or `created_at` |
+| `order_direction` | `ASC` or `DESC` |
+| `search` | Filters by content or topic |
+| `account_address` | Only posts by this `ak_...` |
+| `topics` | Comma-separated topic names, partial matching |
+| `limit`, `page` | Standard pagination, `limit` capped at 100 |
+
+```bash
+# Newest 20 posts mentioning a topic
+curl -s "https://api.superhero.com/api/posts?topics=superhero&order_by=created_at&order_direction=DESC&limit=20"
+```
+
+## `GET /api/posts/popular`
+
+The main feed. Ranking is **all-time with a temporary freshness boost for new posts** — the
+`window` parameter still exists but is explicitly deprecated in the generated client: *"Popular
+ranking is now all-time; this value is accepted for backwards compatibility and ignored."* Do not
+build against it.
+
+What you can tune are eight per-request weights. Each takes `low`, `med` (the default) or `high`,
+and shifts how much one signal contributes to the score:
+
+| Parameter | Signal |
+| --- | --- |
+| `comments` | Comment count |
+| `tipsAmountAE` | Total AE tipped |
+| `tipsCount` | Number of tips |
+| `uniqueTippers` | Distinct tipping accounts |
+| `trendingBoost` | Whether the post mentions a trending topic |
+| `contentQuality` | Server-side content quality signal |
+| `reads` | Read count |
+| `interactionsPerHour` | Engagement velocity from comments, tips and unique tippers per hour |
+
+Defaults are `page=1` and `limit=50`. Passing `debug=1` returns the ranking breakdown alongside
+the items.
+
+```bash
+# A feed that leans on tips rather than comments
+curl -s "https://api.superhero.com/api/posts/popular?limit=20&tipsAmountAE=high&comments=low"
+```
+
+Note the casing: the query key is `tipsAmountAE`, capital AE, while the rest are lowerCamelCase.
+
+## `GET /api/posts/{id}`
+
+One post. The server-side SEO renderer resolves a slug to an id by searching first, then fetching
+by id:
+
+```bash
+# Resolve a slug, then load the post
+ID=$(curl -s "https://api.superhero.com/api/posts?search=my-post-slug&limit=1&page=1" \
+  | grep -o '"id":"[^"]*"' | head -n1 | cut -d'"' -f4)
+curl -s "https://api.superhero.com/api/posts/$ID"
+```
+
+Whether `{id}` itself accepts a slug directly is not settled by either repository — see
+[Open questions](#open-questions).
+
+## `GET /api/posts/{id}/comments`
+
+Paginated thread under a post. Takes `order_direction` (`ASC` or `DESC`), `limit` and `page` —
+note that unlike `/api/posts` there is no `order_by`; comments are ordered by time.
+
+Comments are themselves posts in this model, so items follow the same `PostDto` shape.
+
+## `GET /api/feed`
+
+The combined home feed, and the only cursor-paginated endpoint in the API.
+
+| Parameter | Notes |
+| --- | --- |
+| `sort` | `latest` or `hot` |
+| `cursor` | Opaque cursor from the previous response's `next_cursor` |
+| `limit` | Page size |
+
+`sort=latest` is a keyset-paginated union of **posts, token creations and trades**. `sort=hot`
+returns posts only, ranked by the same algorithm as `/api/posts/popular` — trades and token
+creations are never ranked under Hot.
+
+Response shape:
+
+```json
+{
+  "items": [
+    { "type": "post", "created_at": "2026-09-13T09:14:02.000Z", "data": {} }
+  ],
+  "next_cursor": "..."
+}
+```
+
+Each item is a discriminated union: read `type` to know what `data` contains.
+
+No component in the web app calls `/api/feed` today — it renders its feed from `/api/posts` and
+`/api/posts/popular` instead. The endpoint is fully specified in the generated client, but its
+item payloads are unexercised by any code in these repositories.
+
+## Topics
+
+A topic is a hashtag with a post count. `GET /api/topics/name/{name}` returns the topic with its
+`posts` array and `post_count`; the web app uses `post_count` to render "N posts" on a token's
+topic feed and falls back to counting the array when the field is absent.
+
+`GET /api/topics` takes `order_by` of `name`, `post_count` or `created_at`, plus
+`order_direction`, `search`, `limit` and `page`. `GET /api/topics/{id}` accepts either a UUID or
+a name.
+
+```bash
+curl -s "https://api.superhero.com/api/topics/popular/trending"
+```
+
+Topics are the social side of the same names that become tokens. See
+[Trending & Topics](/api-reference/trending) for how a tag maps to a token.
+
+## Tips
+
+`GET /api/tips/posts/{postId}/summary` is the one tip endpoint the web app actually calls. It
+returns `totalTips`, a **string that the app treats as a number** — parse it rather than
+comparing it.
+
+```bash
+curl -s "https://api.superhero.com/api/tips/posts/123/summary"
+```
+
+`GET /api/tips` lists individual tips, ordered by `amount`, `type` or `created_at`, with filters
+for `sender`, `receiver`, `type` and `post_id`. The web app uses it to show who tipped a post,
+combining `post_id` and `receiver` into one indexed query rather than paging the receiver's whole
+transaction history:
+
+```bash
+curl -s "https://api.superhero.com/api/tips?post_id=123&receiver=ak_YOUR_ADDRESS&order_by=created_at&order_direction=DESC&limit=100"
+```
+
+Fields read from each item:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `tx_hash` | string | `th_...` of the tipping transaction |
+| `sender_address` | string | The tipper. Falls back to `sender.address` |
+| `amount` | string | Tip size **in AE** — rendered without any 1e18 division |
+| `created_at` | string | ISO 8601 |
+
+`GET /api/tips/accounts/{address}/summary` returns totals sent and received for one account. It
+has no caller in the web app, so its field names are untested.
+
+## Read more
+
+- [API Conventions](/api-reference/conventions) — the pagination envelope, and the four endpoints that break it
+- [Trending & Topics](/api-reference/trending) — the tag surface these posts reference
+- [Profile API](/api-reference/profile) — resolving `sender_address` to a display name
+- [Posting](/social/posting) — how a post gets on chain in the first place
+- [The feed](/social/feed) — what the ranking is trying to achieve
+- [superhero.com](https://superhero.com) — the live feed this endpoint backs
+
+## Open questions
+
+- **Does `GET /api/posts/{id}` accept a slug as well as an id?** The Netlify SEO function resolves
+  a slug by searching and then fetching by id, which suggests it does not — but the endpoint is
+  documented only as "Post ID". Try `GET /api/posts/{slug}` against a known slug to settle it.
+- **What is the `type` enum on `PostDto`?** Typed as a bare `string` in the generated client. The
+  `/api/feed` union uses at least `post`, plus token-creation and trade variants whose exact
+  discriminator strings are not in either repository.
+- **What are the response shapes of `/api/posts/analytics*` and the two unused tip endpoints?**
+  All are typed `any` in the generated client and none has a caller in the web app.

@@ -1,0 +1,80 @@
+---
+title: "Governance & Voting"
+description: "æternity-wide stake-weighted polls, delegation, and the /voting section of Superhero."
+---
+
+# Governance & Voting
+
+This section documents æternity's protocol-level governance: stake-weighted polls run through
+a `Registry` contract, with each poll deployed as its own `Poll` contract, weighted by AE
+balance and delegation. Superhero surfaces the whole system at
+[superhero.com/voting](https://superhero.com/voting).
+
+## This is not the same thing as a community DAO
+
+Two different systems, two different contract sets, two different sources of voting power.
+People confuse them constantly, so be sure which one you are in.
+
+| | æternity governance poll | Community DAO |
+| --- | --- | --- |
+| Contracts | `Registry.aes`, `Poll.aes` | `DAO.aes`, `DAOVote.aes` |
+| Scope | The æternity ecosystem as a whole | One community token's treasury |
+| Voting power | AE balance at the poll's close height, plus delegated AE | That community's AEX-9 token balance |
+| Tokens locked while voting | **No** | **Yes** — an AEX-9 allowance locks your stake |
+| Delegation | Yes, global and transitive | No |
+| Ballot | Any list of at least two options | Binary: in favour or against |
+| Outcome | Signalling. Nothing executes automatically. | Executes an on-chain action via `apply_vote_subject` |
+| Cost to open | Two transactions, roughly 0.02 AE | 555 AE, non-refundable |
+| Duration | Whatever close height the author sets, or never | Fixed at two weeks |
+| Where in the app | `/voting` | `/trends/daos` |
+
+The most consequential differences: **a governance poll does not lock your tokens and does not
+execute anything.** It records what stake-weighted opinion was at a block height. Acting on
+that result is a social and off-chain process. A community DAO vote is the opposite — it locks
+your stake and, if it passes, moves real money on-chain.
+
+If you are looking for community treasuries and payout proposals, go to
+[Community DAOs](/dao) instead.
+
+## How a poll works, in short
+
+1. Somebody deploys a `Poll` contract with a title, a description, a reference link and a list
+   of options, then registers it in the `Registry` — two transactions.
+2. Any account votes by calling `vote(option)` on the poll contract. One vote per address; you
+   can change it or revoke it at any time before the poll closes.
+3. Accounts that have not voted have their AE counted for whoever they delegated to.
+4. At the poll's close height, balances and delegations **at that height** decide the weight of
+   each option.
+5. The governance backend computes and publishes the stake-weighted result.
+
+**The official result is `stake_weighted_results`.** Raw vote counts are address counts and
+are not the outcome — see [Polls](/governance/polls).
+
+## In this section
+
+- [Polls](/governance/polls) — the data model, how stake weighting works, and which result figure is authoritative.
+- [Creating a Poll](/governance/create-a-poll) — the two-transaction creation flow, from the UI and from the CLI, with every field limit.
+- [Voting on Polls](/governance/voting) — casting and revoking a vote, and why you read the poll first.
+- [Delegation](/governance/delegation) — delegating your AE weight, revoking it, and how chains of delegation resolve.
+- [The Governance Registry](/governance/registry) — the contract that indexes every poll and every delegation, with deployed addresses.
+
+## The Voting page
+
+Superhero's `/voting` route is one page with four tabs, driven by the URL:
+
+| Tab | Route | What it does |
+| --- | --- | --- |
+| Polls | `/voting` | Browse and search polls, filtered by open, closed or all |
+| Vote | `/voting/p/:pollAddress` | One poll: its options, live results, and your vote |
+| My Account | `/voting/account` | Your balance, your delegation, and who delegates to you |
+| Create Poll | `/voting/create` | The poll creation form |
+
+## Read more
+
+- [Community DAOs](/dao) — the other system: per-community treasury governance.
+- [Polls](/governance/polls) — start here for how a poll is actually counted.
+- [The Governance Registry](/governance/registry) — contract addresses and the governance API.
+- [Governance with an agent](/agents/governance) — driving all of this from the CLI or an AI agent.
+- [superhero.com/voting](https://superhero.com/voting) — the live governance interface.
+- [æternity governance](https://docs.aeternity.com/aeternity-core-concepts/aeternity-governance) — the protocol's own description of delegated coin-weighted governance.
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference governance aepp, its contracts and its backend.

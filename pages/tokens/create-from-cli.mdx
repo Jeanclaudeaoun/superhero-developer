@@ -1,0 +1,250 @@
+---
+title: "Create a Token from the Command Line"
+description: "Launch a community token from a terminal or an AI agent, with every flag, buffer and error path documented."
+---
+
+# Create a Token from the Command Line
+
+`scripts/superhero-token-create.mjs` in the [agent skill](https://github.com/superhero-com/superhero-agent-skill)
+wraps `CommunityFactory.create_community` in three subcommands: `check`, `create` and `info`. It
+signs with a key from your environment, resolves the collection for you, and prints one line of JSON
+on success. This page documents what it does at each step, what every failure looks like, and how to
+do the same thing against the SDK directly if you would rather not depend on the script.
+
+## Setup
+
+```bash
+export AE_PRIVATE_KEY=<your_secret_key>
+cd /path/to/superhero-agent-skill
+```
+
+Both the working directory and the environment variable matter. The script reads its ACI files from
+`./contracts/` relative to the current directory, so it must be run from the skill's root. It signs
+with an in-memory account built from `AE_PRIVATE_KEY` and talks to `https://mainnet.aeternity.io`.
+There is no testnet switch: the node URL and the factory address are constants in the file.
+
+## Pre-flight
+
+1. Confirm you have AE for gas — the guide budgets about 0.001 AE for creation, plus whatever you intend to pre-buy:
+
+   ```bash
+   node scripts/superhero-wallet.mjs balance
+   ```
+
+2. Pick a name: uppercase `A–Z`, digits `0–9` and dash, at most 20 characters for the English collection.
+3. Check availability, and abort if `exists` comes back `true`:
+
+   ```bash
+   node scripts/superhero-token-create.mjs check "MYTOKEN"
+   ```
+
+   ```json
+   {
+     "collection": "WORDS-ak_...",
+     "name": "MYTOKEN",
+     "exists": false,
+     "allowed_name_length": "20",
+     "allowed_chars": "A-Z, 0-9, - (dash)"
+   }
+   ```
+
+   `collection` and `allowed_name_length` come from the live factory schema; `allowed_chars` is a
+   hardcoded string in the script describing the English collection, so do not rely on it if you are
+   working in another collection. `exists` is a real on-chain `has_community` call.
+
+## Create
+
+```bash
+node scripts/superhero-token-create.mjs create "MYTOKEN" 0.1
+```
+
+| Parameter | Meaning |
+| --- | --- |
+| Name | Uppercase, digits, dash. Max 20 characters. Unique within its collection |
+| `buy_ae` | AE to spend on an initial buy at creation. Optional, default `0` |
+
+On success, one JSON object on stdout:
+
+```json
+{
+  "success": true,
+  "token_name": "MYTOKEN",
+  "collection": "WORDS-ak_...",
+  "sale_address": "ct_...",
+  "dao_address": "ct_...",
+  "community_management_address": "ct_...",
+  "initial_buy_ae": 0.1,
+  "estimated_tokens": "131748.00",
+  "tx_hash": "th_..."
+}
+```
+
+Progress messages go to stderr, so `2>/dev/null` gives you parseable JSON and nothing else.
+
+### What the script does, step by step
+
+1. **Load the signing account** from `AE_PRIVATE_KEY` and connect to mainnet.
+2. **Initialise the factory** at the hardcoded mainnet address `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` using `contracts/CommunityFactory.aci.json`.
+3. **Check the balance** — only when `buy_ae` is greater than zero. It requires `balance >= buy_ae + 0.01`, where the extra 0.01 AE is the gas headroom. With `buy_ae` of 0 this check is skipped entirely, so a zero-buy creation from an empty wallet gets all the way to signing before it fails.
+4. **Resolve the collection.** It fetches `https://api.superhero.com/api/factory` and takes `Object.values(schema.collections)[0].id` — literally the first collection in the schema, which is the English `WORDS-ak_...` one. There is no flag to choose a different collection; to create in another one you need the raw SDK path below.
+5. **Check the name** with `factory.has_community(collectionId, tokenName)` and abort if it is taken.
+6. **Size the initial buy**, if there is one:
+   - Estimate a token count off-chain by bisecting the curve integral against your AE figure (`calculateTokensFromAE`, up to 1,000 iterations, search bounds 0 to 10^12 tokens, always from supply zero). The stopping tolerance is an **absolute** 0.001 AE, so for a small buy it is a meaningful fraction of the target: a 0.1 AE initial buy is only sized to within about 1%.
+   - Read `supported_decimals()` off the bonding curve and scale the count into token decimal units.
+   - Ask the chain for the real price: `bonding_curve.calculate_buy_price(0, count)`.
+   - Multiply that by **1.05** and round up. This is the AE actually attached to the transaction.
+7. **Call `create_community`** with the collection id, the name, the scaled initial buy count, `is_private: false`, an empty `meta_info` map, and the buffered amount as `amount`.
+8. **Print** the returned `(DAO, TokenSale, CommunityManagement)` tuple with the transaction hash.
+
+### The 5% buffer
+
+The amount attached to the transaction is not the price — it is the price plus five percent:
+
+```text
+attached = ceil( calculate_buy_price(0, count) × 1.05 )
+```
+
+Two things eat into that headroom. First, `calculate_buy_price` returns the **bare curve integral**;
+the sale contract also charges a 0.5% affiliation fee, so roughly a tenth of the buffer is spent
+before drift is even considered. Second, and less obviously, the price is quoted at supply zero but
+your token is created at supply zero by definition — nobody can front-run a token that does not
+exist yet — so genuine curve drift between quote and execution is zero for a creation. The buffer is
+therefore generous in practice; it exists because the same pattern is reused for ordinary buys, where
+drift is real.
+
+It also means the AE you send is about 4.5% more than the tokens are worth. What happens to the
+remainder is not determinable from the contract interface — see Open questions.
+
+## Inspect afterwards
+
+```bash
+node scripts/superhero-token-create.mjs info ct_<sale_address>
+node scripts/superhero-trending.mjs token-info ct_<sale_address>
+```
+
+Both hit `GET /api/tokens/{address}` and print the full token record. `info` prints it verbatim;
+`token-info` is the same call from the trending script.
+
+## Timing
+
+Creation takes **2–5 minutes** to mine. The agent skill's own instruction is to run the command in a
+background terminal and wait up to **10 minutes** before treating it as failed. Do not resubmit in
+the meantime: a second transaction with the same name will simply fail on-chain once the first one
+lands, and you will have paid gas twice.
+
+## Every error path
+
+| Output | Exit | Cause |
+| --- | --- | --- |
+| `AE_PRIVATE_KEY environment variable is not set...` | 1 | No signing key in the environment. Affects `create`, `check` and `info` alike, because the account is loaded before the subcommand switch |
+| `Usage: node scripts/superhero-token-create.mjs create <name> [buy_ae]` | 1 | `create` called with no name |
+| `{"error":"Insufficient balance","balance_ae":"…","required_ae":"…"}` | 1 | `buy_ae` greater than zero and wallet balance below `buy_ae + 0.01` |
+| `ERROR: Could not get collection from Superhero factory API` | 1 | `GET /api/factory` returned no usable `collections` object. Usually the API being down |
+| `{"error":"Token already exists","collection":"…","name":"…"}` | 1 | `has_community` returned true |
+| `Usage: node scripts/superhero-token-create.mjs check <name>` | 1 | `check` called with no name |
+| `Usage: node scripts/superhero-token-create.mjs info <sale_address>` | 1 | `info` called with no address |
+| `API error: 404` | 1 | `info` called with an address the token API does not know |
+| `ERROR: <message>` | 1 | Anything thrown that is not handled above: node unreachable, gas too low, a contract revert such as `NAME_ALREADY_REGISTERED`, an invalid private key |
+| *(no output at all)* | 0 | An unrecognised subcommand. The switch has no default branch, so `create-token` or a typo prints nothing and exits successfully. Check your spelling before you conclude nothing happened |
+
+A revert surfaces as the last row: the SDK throws, `main().catch` prints `ERROR:` and the
+contract's own reason string. The two worth recognising are `NAME_ALREADY_REGISTERED` (someone
+claimed the name between your check and your transaction) and any message mentioning the allowed
+character set or name length (your name does not fit the collection you were routed to).
+
+## Without the skill scripts
+
+The script is convenience, not necessity. This is the same deployment against
+`@aeternity/aepp-sdk` directly. You need `CommunityFactory.aci.json` and `BondingCurve.aci.json`,
+both of which are in the skill's `contracts/` directory.
+
+```js
+import { AeSdk, Node, MemoryAccount, Contract } from '@aeternity/aepp-sdk';
+import BigNumber from 'bignumber.js';
+import fs from 'fs';
+
+const NODE_URL = 'https://mainnet.aeternity.io';
+const FACTORY = 'ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN';
+
+const aeSdk = new AeSdk({
+  nodes: [{ name: 'mainnet', instance: new Node(NODE_URL) }],
+  accounts: [new MemoryAccount(process.env.AE_PRIVATE_KEY)],
+});
+
+const factory = await Contract.initialize({
+  address: FACTORY,
+  aci: JSON.parse(fs.readFileSync('./CommunityFactory.aci.json', 'utf8')),
+  onAccount: aeSdk,
+  onNode: aeSdk.api,
+});
+
+// 1. Pick a collection. Read the schema from the API, or call the factory:
+//    allowed_name_length(name) and allowed_name_chars(name) describe each one.
+const schema = await fetch('https://api.superhero.com/api/factory').then((r) => r.json());
+const collectionId = Object.values(schema.collections)[0].id;   // e.g. "WORDS-ak_..."
+
+const name = 'MYTOKEN';
+
+// 2. Refuse to burn gas on a name that is already taken.
+if ((await factory.has_community(collectionId, name)).decodedResult) {
+  throw new Error(`${name} already exists in ${collectionId}`);
+}
+
+// 3. Decide how many tokens to pre-buy, and ask the curve what they cost.
+const curveAddress = (await factory.bonding_curve()).decodedResult;
+const curve = await Contract.initialize({
+  address: curveAddress,
+  aci: JSON.parse(fs.readFileSync('./BondingCurve.aci.json', 'utf8')),
+  onAccount: aeSdk,
+  onNode: aeSdk.api,
+});
+
+const decimals = Number((await curve.supported_decimals()).decodedResult);
+const initialBuyCount = new BigNumber(437014)                 // whole tokens
+  .multipliedBy(new BigNumber(10).pow(decimals))
+  .toFixed(0);
+
+const price = (await curve.calculate_buy_price(0n, BigInt(initialBuyCount))).decodedResult;
+const amount = new BigNumber(price.toString())
+  .multipliedBy(1.05)                                          // fee + drift headroom
+  .toFixed(0, BigNumber.ROUND_CEIL);
+
+// 4. Deploy. meta_info is a Sophia map(string, string); an empty Map is valid.
+const result = await factory.create_community(
+  collectionId,
+  name,
+  BigInt(initialBuyCount),
+  false,                                                       // is_private
+  new Map(),                                                   // meta_info
+  { amount },
+);
+
+const [dao, tokenSale, communityManagement] = result.decodedResult;
+console.log({ dao, tokenSale, communityManagement, txHash: result.hash });
+```
+
+Pass `initialBuyCount` as `0n` and `amount` as `'0'` to create with no pre-buy. To create in a
+non-English collection, substitute its id at step 1 — this is the path the CLI script does not offer.
+
+## Factory address
+
+Mainnet community factory: `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`
+
+Prefer resolving it from `GET /api/factory` in anything long-lived: the factory is a one-time static
+deployment, but a redeployment would leave a hardcoded address pointing at an abandoned registry.
+
+## Read more
+
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — the same deployment through the web form, with live price estimates
+- [Curve Parameters & Units](/tokens/curve-parameters) — why `initialBuyCount` is scaled by 10^18 and what `supported_decimals()` is for
+- [Collections & Naming Rules](/tokens/collections-and-naming) — how to pick a collection deliberately instead of taking the first one
+- [Buying & Selling](/tokens/buying-and-selling) — the trading script, which follows the same conventions
+- [Agent CLI reference](/agents/cli-reference) — every script in the skill, not just this one
+- [superhero-agent-skill on GitHub](https://github.com/superhero-com/superhero-agent-skill) — the source for the script documented here
+- [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/) — `Contract.initialize`, ACIs and call options such as `amount`
+- [Create a token on superhero.com](https://superhero.com/trends/create) — the hosted equivalent, if you would rather not hold a raw key
+
+## Open questions
+
+- **Is unspent attached AE refunded?** The script attaches 5% more AE than the quoted price, and the sale contract's `buy` is payable, but nothing in the ACI says whether the surplus is returned to the caller or kept by the contract. Comparing an account balance before and after a creation with a known `buy_ae`, or decoding the `Buy(int, int, int)` event from the sale contract, would settle it.
+- The `check` subcommand reports `allowed_chars` as the fixed string `"A-Z, 0-9, - (dash)"` regardless of the collection it just looked up. The real rules are in the schema's `allowed_name_chars`; the script does not decode them.

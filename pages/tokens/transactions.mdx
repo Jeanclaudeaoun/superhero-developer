@@ -1,0 +1,182 @@
+---
+title: "Transaction History"
+description: "Query trades — yours, a token's, an account's, or the whole market — and verify any of them on-chain."
+---
+
+# Transaction History
+
+Every buy and sell against a bonding curve is an on-chain contract call, indexed by Superhero and
+served through one endpoint with two filters. That makes trade history useful for three different
+jobs: checking your own fills, researching a token before you buy it, and watching a specific account.
+This page covers the CLI, the API and how to verify anything you find against the chain itself.
+
+## From the command line
+
+```bash
+node scripts/superhero-transactions.mjs mine [limit] [page]
+node scripts/superhero-transactions.mjs token ct_<sale_address> [limit] [page]
+node scripts/superhero-transactions.mjs account ak_<address> [limit] [page]
+node scripts/superhero-transactions.mjs all [limit] [page]
+node scripts/superhero-transactions.mjs activity ct_<sale_address> ak_<address> [limit]
+```
+
+| Command | Filter applied | Use it for |
+| --- | --- | --- |
+| `mine` | your account | Confirming your own entry price and fills |
+| `token` | one sale address | Pre-trade research: is the flow organic? |
+| `account` | one account | Following a known trader or whale |
+| `all` | none | Market pulse — what is being traded right now |
+| `activity` | token **and** account | Checking whether a specific whale is accumulating a specific token |
+
+Default `limit` is 20 and default `page` is 1 everywhere. `mine` needs `AE_PRIVATE_KEY` set, because
+it derives your address from the key; the other four take an address as an argument and need no key
+at all.
+
+## The API
+
+All five commands are the same endpoint with different query parameters:
+
+```text
+GET /api/transactions
+  ?token_address=ct_...      sale address of the token
+  &account_address=ak_...    the trader
+  &includes=token            embed the full token record in each row
+  &limit=20
+  &page=1
+```
+
+Both filters are optional and combine. Omitting both gives you the market-wide feed. The response is
+paginated with `items` and `meta`.
+
+A single transaction can be fetched by hash:
+
+```text
+GET /api/transactions/by-hash?tx_hash=th_...
+```
+
+## Fields
+
+The generated `TransactionDto` — the shape the app's typed client expects — is:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Indexer row id |
+| `account` | The trader's address |
+| `tx_hash` | On-chain transaction hash, verifiable in an explorer |
+| `tx_type` | `buy` or `sell` |
+| `spent_amount` | AE spent or received |
+| `spent_amount_data` | The same figure converted into each supported currency |
+| `volume` | Trade volume |
+| `price` | Buy price at the time of the trade |
+| `price_data` | Converted |
+| `sell_price` | Sell price at the time of the trade |
+| `sell_price_data` | Converted |
+| `created_at` | Timestamp |
+
+The `*_data` objects are `PriceDto` records with `ae`, `usd`, `eur`, `aud`, `brl`, `cad`, `chf`,
+`gbp` and `xau` keys, so you can read a trade in any of them without doing your own conversion.
+
+The agent skill's script reads a slightly different set of names when it formats a row —
+`address`, `amount.ae`, `unit_price.ae`, `buy_price.ae`, `sell_price.ae`, `sale_address`,
+`token.name`, `token.symbol` and `block_height`:
+
+```js
+function formatTx(tx) {
+  return {
+    type: tx.tx_type,
+    hash: tx.tx_hash,
+    account: tx.address,
+    token_name: tx.token?.name,
+    token_symbol: tx.token?.symbol,
+    sale_address: tx.sale_address || tx.token?.sale_address,
+    amount_ae: tx.amount?.ae,
+    unit_price_ae: tx.unit_price?.ae,
+    buy_price_ae: tx.buy_price?.ae,
+    sell_price_ae: tx.sell_price?.ae,
+    timestamp: tx.created_at,
+    block_height: tx.block_height,
+  };
+}
+```
+
+The two do not line up field for field: `account` versus `address`, `spent_amount` versus
+`amount.ae`. The script reads every field with optional chaining, so a name that is absent comes back
+as `undefined` rather than throwing — which means a missing column in the output is a naming mismatch,
+not an empty trade. **Inspect one raw response before you build on either list**, and treat the wire
+format as authoritative over both.
+
+The agent skill's own reference table uses a third set of names again (`type`, `ae_amount`,
+`amount`); those are the guide's labels for the concepts rather than literal response keys.
+
+## Pre-trade research
+
+The pattern the agent guides recommend, and the reasoning behind it:
+
+```bash
+node scripts/superhero-transactions.mjs token ct_<sale_address> 30
+```
+
+> Many small buyers suggests organic momentum. One large buyer suggests a pump with higher exit risk.
+
+On a bonding curve this distinction is sharper than it would be on an order book. A single large buy
+does not merely print a high last trade — it *permanently* moves the price for everyone, because the
+supply genuinely increased. The elevated price will sit there until someone sells, whether or not
+anyone else ever wanted the token at that level. So a chart that has gapped up on one transaction is
+telling you about one person's position, not about demand.
+
+Three things to count in the output:
+
+1. **Distinct accounts.** Thirty trades from four addresses is four opinions, not thirty.
+2. **Buy-to-sell ratio.** A wall of buys with no sells can mean conviction, or it can mean nobody has been able to exit yet.
+3. **Clustering in time.** Trades evenly spread over days look different from trades in one minute, and the second pattern often has one account behind it.
+
+Cross-check whatever you conclude against the holders tab — see
+[Reading a Token Page](/tokens/token-page).
+
+## Verifying a transaction on-chain
+
+Every row carries a `tx_hash`. Superhero's indexer is convenient but it is not the chain; to verify a
+trade independently, open the hash in [aeScan](https://aescan.io), the explorer the app itself links
+to. What to check:
+
+- The **contract called** is the sale address you expected.
+- The **caller** is the account the indexer attributed it to.
+- The **amount** attached matches the AE you think moved.
+- The **events** — `Buy` or `Sell` on the sale contract, `Mint` or `Burn` on the token contract — carry the executed figures, which is what you want if a quote and a fill disagreed.
+
+The same applies to a contract address: paste a `sale_address` into the explorer and you can read the
+deployed code and call its read-only entrypoints directly.
+
+## Diagnosing a failed trade
+
+The backend exposes `GET /api/debug/failed-transactions`, which the web app never calls — it is a
+diagnostic endpoint with no UI behind it. Its response shape is not documented, so treat anything you
+get from it as informational.
+
+More reliable first steps when a trade did not go through:
+
+| Symptom | Likely cause |
+| --- | --- |
+| Sell reverted, tokens still held | `minimal_return_required` not met, or no allowance granted to the sale contract |
+| Buy reverted | Attached AE below the price after the curve moved; your slippage tolerance was too tight |
+| Nothing in your transaction list, nothing on-chain | The transaction was never signed or never broadcast — check the wallet |
+| On-chain but not in the list | Indexer lag. Verify on aeScan and wait |
+
+See [Buying & Selling](/tokens/buying-and-selling) for the allowance and slippage mechanics behind
+the first two rows.
+
+## Read more
+
+- [Reading a Token Page](/tokens/token-page) — the holders and chart panels to weigh this data against
+- [Buying & Selling](/tokens/buying-and-selling) — what each of these transactions actually did on-chain
+- [Portfolio & PnL](/tokens/portfolio) — your positions, which these fills add up to
+- [The Trending Score](/tokens/trending-score) — the momentum signal that trade flow either confirms or contradicts
+- [Transactions API](/api-reference/transactions) — the endpoint reference
+- [aeScan](https://aescan.io) — the æternity explorer for verifying any hash or address on this page
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the Transactions tab on any token page shows the same feed
+
+## Open questions
+
+- **The live response shape of `GET /api/transactions` is not pinned down here.** The generated `TransactionDto` and the agent skill's `formatTx` read different field names for the same concepts, and the app's own endpoint inventory records only "items + meta as used by consumers". One live request would resolve it; it was not reachable from the authoring environment.
+- `GET /api/debug/failed-transactions` takes no documented parameters and has no callers in the app. What it returns, how far back it goes, and whether it is scoped to an account are all unknown.
+- Whether `volume` on a transaction row is a token count or an AE figure is not stated, and the field name is ambiguous on a market where both are natural readings.

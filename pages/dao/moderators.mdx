@@ -1,0 +1,190 @@
+---
+title: "Moderators & Write Thresholds"
+description: "How a community controls who can post in it."
+---
+
+# Moderators & Write Thresholds
+
+A community's governance layer and its moderation layer are the same thing. Moderators are
+appointed and removed by DAO vote; the token balance you need to post is changed by DAO vote.
+Both live in one contract, `CommunityManagement.aes`, deployed alongside the DAO when the
+community is created. This page documents what that contract holds, who can change what, and
+where each change comes from.
+
+## The contract
+
+```text
+CommunityManagement.state =
+  { owner                   : address
+  , minimum_token_threshold : int
+  , is_private              : bool
+  , moderator_accounts      : Set.set(address)
+  , muted_user_ids          : Set.set(string)
+  , meta_info               : map(string, string) }
+```
+
+It is deployed by `CommunityFactory.create_community`, which sets an initial moderator and an
+initial threshold in the same transaction that creates the token, the sale and the DAO.
+
+Reach it from the DAO with `get_community_management()`, which returns
+`option(CommunityManagement)`.
+
+## Who can change what
+
+This is the part worth getting right, because the two authorities are different.
+
+| Change | Entrypoint | Authorised by |
+| --- | --- | --- |
+| Appoint a moderator | `add_moderator(moderator)` | DAO vote — `AddModerator` |
+| Remove a moderator | `delete_moderator(moderator)` | DAO vote — `DeleteModerator` |
+| Change the write threshold | `change_minimum_token_threshold(n)` | DAO vote — `ChangeMinimumTokenThreshold` |
+| Replace the metadata map | `change_meta_info(meta_info)` | DAO vote — `ChangeMetaInfo` |
+| Mute a user | `mute_user_id(user_id)` | A moderator |
+| Unmute a user | `unmute_user_id(user_id)` | A moderator |
+| Transfer ownership | `set_owner(owner)` | The owner |
+
+Moderators mute and unmute. Everything structural — who the moderators are, what the
+threshold is, what the community says about itself — is a token-holder decision that goes
+through a proposal and a two-week vote. A moderator cannot appoint another moderator, cannot
+change the threshold, and cannot remove themselves from the set. That separation is the point:
+day-to-day moderation is fast and delegated, the moderator roster is slow and collective.
+
+The `owner` of `CommunityManagement` is the DAO, which is how a passed vote reaches these
+entrypoints at all.
+
+## The minimum token threshold
+
+`minimum_token_threshold` is the amount of the community's own token an account needs to write
+in the community. The whitepaper scopes it to users with verified accounts.
+
+It carries a second job: it is also the bar for **opening a DAO proposal**. A holder at or
+above the threshold can call `DAO.add_vote`. So raising the threshold makes a community both
+harder to post in and harder to propose in, and lowering it does the reverse. Communities
+routinely overlook the second effect when they vote on the first.
+
+Read it directly:
+
+```text
+CommunityManagement.minimum_token_threshold() : int
+```
+
+The value is in the token's smallest unit. Divide by `10^decimals` — read `decimals` from the
+token's `meta_info()` — before comparing it to a balance shown in a wallet.
+
+### Choosing one
+
+There is no protocol guidance and no default that fits every community, but the mechanics
+constrain the choice:
+
+- **The token price is not fixed.** The threshold is a token count, and the bonding curve
+  price rises with supply. A threshold set when the token was cheap becomes expensive later
+  without anyone voting to change it.
+- **It gates proposals as well as posts.** Set it high enough to keep out drive-by spam, low
+  enough that more than a handful of accounts can still open a vote — otherwise the community
+  cannot govern itself.
+- **Changing it is slow and costs 555 AE.** Treat it as a decision you revisit a few times a
+  year, not a dial you tune.
+
+## Moderator powers
+
+A moderator's on-chain authority is exactly two entrypoints:
+
+```text
+stateful entrypoint mute_user_id(user_id: string) : unit
+stateful entrypoint unmute_user_id(user_id: string) : unit
+```
+
+Note the type: `muted_user_ids` is a `Set.set(string)`, not a set of addresses. The mute list
+keys on a **user id string**, not an `ak_` account, so it is not limited to what an æternity
+address can express. Read the set with `muted_user_ids()` and the roster with
+`moderator_accounts()`.
+
+There is no post deletion, no edit, no ban, no timed mute and no appeal mechanism in the
+contract. That is a deliberate consequence of the architecture: posts are immutable on-chain
+records, so moderation is a filter applied by clients reading the chain, not a deletion from
+it. A muted user's existing posts remain on-chain and remain verifiable; what changes is
+whether conforming clients render them. See [Moderation](/social/moderation).
+
+Muting is not governance. A moderator does not need a vote to mute, and a mute is not
+reversible by vote — only another moderator action, or removing the moderator and having the
+next one unmute, changes it.
+
+## The `is_private` flag
+
+`is_private` is set once, at community creation, as the third argument to
+`CommunityManagement.init`:
+
+```text
+init(initial_moderator : address,
+     minimum_token_threshold : int,
+     is_private : bool,
+     meta_info : CommunityManagement.meta_info)
+```
+
+It is exposed on the factory too, so whoever creates the community chooses it:
+
+```text
+CommunityFactory.create_community(collection_name, name, initial_buy_count,
+                                  is_private, meta_info)
+```
+
+What we can state with confidence: it is fixed at creation. `CommunityManagement` has no
+`set_is_private` entrypoint, it is not in the vote-subject set, and `change_meta_info` only
+replaces the metadata map. **A community cannot become private, or stop being private, after
+it is created** — not by moderator action and not by DAO vote. The only way to change it is a
+new community.
+
+What the flag actually causes is enforced by clients rather than by this contract; see the
+open question below.
+
+## The metadata map
+
+```text
+CommunityManagement.meta_info = map(string, string)
+```
+
+A free-form string map holding the community's descriptive metadata. It is replaced wholesale
+by `change_meta_info`, which is reached through a `ChangeMetaInfo` vote — so a proposal that
+means to change one key must carry every other key unchanged, or they are dropped. There is no
+per-key update entrypoint.
+
+## Events
+
+`CommunityManagement` emits an event for every state change, which is what makes the
+moderation history auditable without replaying contract state:
+
+| Event | Fields |
+| --- | --- |
+| `ChangeMinimumTokenThreshold` | the new threshold |
+| `AddModerator` | the appointed address |
+| `DeleteModerator` | the removed address |
+| `MuteUserId` | the muted user id string |
+| `UnmuteUserId` | the unmuted user id string |
+| `SetOwner` | the new owner address |
+| `ChangedMetaInfo` | no fields |
+
+Every mute in a community's history is a permanent public record, including ones that were
+later undone. See [Contract events](/contracts/events).
+
+## Open questions
+
+- What `is_private` changes in practice — whether it hides the community from listings,
+  restricts reading, or only restricts writing — is not determined by the
+  `CommunityManagement` ACI, which merely stores the flag. Settle it from the client code
+  that reads it, or from the `CommunityFactory.aes` source.
+- The initial `minimum_token_threshold` that the factory passes when creating a community is
+  not a `create_community` parameter, so the factory supplies it. Its default value is not
+  visible in the ACI and would have to come from the `CommunityFactory.aes` source, or by
+  reading `minimum_token_threshold()` on a freshly created community.
+- Whether the threshold is enforced on-chain when posting, or only applied by clients and the
+  indexer, is not visible here. `CommunityManagement` stores the number; nothing in its ACI
+  gates a write against it.
+
+## Read more
+
+- [Proposals and Vote Subjects](/dao/proposals) — the four subjects that reach this contract, with their parameter shapes.
+- [How DAOs Work](/dao/overview) — how a moderator appointment travels from proposal to execution.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds) — the vote a moderator change has to clear.
+- [Moderation](/social/moderation) — how muting is applied to the social feed.
+- [Community Management contract reference](/contracts/community-management) — the full entrypoint table.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the "Community Management" section is the canonical description of moderator powers.

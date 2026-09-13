@@ -1,0 +1,194 @@
+---
+title: "Notifications"
+description: "In-app and push notifications, and what triggers them."
+---
+
+# Notifications
+
+Superhero has two independent notification systems. The **bell** is a server-side feed —
+someone replied, someone sent you AE, a room let you in — delivered over REST plus a socket and
+optionally as an OS notification. The **transaction banner** is a purely local progress
+indicator for whatever you are signing right now. They share no code and no delivery path. This
+page covers both, the types the bell carries, and where a click lands.
+
+## The bell
+
+### One signature, one session
+
+The whole feature is gated on a single æternity message signature. The client asks for a
+challenge, signs it, and exchanges it for a bearer token that is then reused for REST calls,
+the socket handshake and the push subscription. It never re-signs per request.
+
+```text
+Superhero Notifications
+Open notification feed session for <your ak_ address>
+nonce: <nonce>
+```
+
+| Call | Purpose |
+| --- | --- |
+| `POST /api/notifications/{address}/feed/challenge` | Returns a `nonce` |
+| `POST /api/notifications/{address}/feed/session` | Send `nonce` and `signature`, receive `token` and `expiresAt` |
+| `GET /api/notifications/{address}/feed?limit=50` | The feed page — `items` and `nextCursor` |
+| `GET /api/notifications/{address}/feed/unread-count` | The badge value |
+| `POST /api/notifications/{address}/feed/read` | Mark specific `ids` read, or all when omitted; returns the new unread total |
+
+The token is cached with its expiry, and concurrent callers collapse onto one bootstrap so the
+user sees at most one wallet prompt.
+
+### REST is the source of truth
+
+The socket connects to the API origin's `/notifications` namespace and emits two events:
+`notification` with a new feed item, and `unread-count` with a new badge value. Live events are
+treated as optimistic and deduplicated by id.
+
+On **every** socket connect and reconnect the client re-fetches both the first feed page and
+the unread count, and publishes the server's values over whatever the live layer accumulated.
+If the socket never recovers, the REST layer still works — the bell degrades to refresh-driven
+rather than stopping.
+
+The in-memory list is capped at 200 items.
+
+### Feed item shape
+
+| Field | Type |
+| --- | --- |
+| `id` | Number |
+| `type` | The notification type — see below |
+| `title` | Display title |
+| `body` | Display body |
+| `data` | An untyped bag of routing hints, or null |
+| `read_at` | Timestamp or null |
+| `created_at` | Timestamp |
+
+Everything in `data` is read defensively. A missing field makes a row non-navigable rather than
+throwing.
+
+### Types and where a click lands
+
+| Type | Destination | Actor field |
+| --- | --- | --- |
+| `post-comment` | `/post/` plus `data.commentId`, falling back to `data.parentPostId` | `data.commenter` |
+| `incoming-transfer` | `/wallet` | `data.sender` |
+| `invitation-claimed` | `/wallet` | `data.claimer` |
+| `room-membership` | `/trends/tokens/` plus `data.saleAddress` | — |
+| `room-messages` | `/trends/tokens/` plus `data.saleAddress` | — |
+| `announcement` | None — the row renders as non-navigable | — |
+
+Two deliberate choices are worth calling out:
+
+- **A reply opens the comment, not the parent.** A comment is itself a post, so
+  `/post/<commentId>` renders the comment with its ancestor chain above it and scrolls it into
+  view. Linking to the parent would land the recipient on the post they already know about.
+- **The `_v3` suffix is stripped.** Post ids are stored as `<id>_v3` and every in-app post link
+  drops the suffix, with the resolver re-adding it. The bell, the service worker and the legacy
+  comment redirect all share one helper so the rule cannot drift between them.
+
+The backend deliberately ships routing *hints* — a type plus ids — rather than a URL, because
+the same payload also feeds the mobile app, which has different routes. Each client owns its
+own mapping.
+
+## Browser push
+
+Push is the same feed delivered by the OS when no tab is open. It uses VAPID and the same
+bearer session.
+
+| Call | Purpose |
+| --- | --- |
+| `GET /api/notifications/web-push/vapid-public-key` | The server's public key |
+| `POST /api/notifications/{address}/web-push/subscription` | Register `endpoint`, `keys` and the user agent |
+| `DELETE /api/notifications/{address}/web-push/subscription` | Deregister by `endpoint` |
+
+The client reports one of five states:
+
+| State | Meaning |
+| --- | --- |
+| `unsupported` | The browser has no service worker, push manager or notification API |
+| `unconfigured` | The backend has no VAPID key |
+| `denied` | The user refused the OS permission |
+| `default` | Not asked yet, or not subscribed |
+| `subscribed` | Registered |
+
+One push endpoint belongs to one address. If a second account in the same browser enables push,
+the server's upsert re-points the endpoint at it — so the client records who owns the endpoint
+locally and re-registers on start when it should. This matters on a shared device: the previous
+account's UI can otherwise keep saying "subscribed" while the OS notifications go elsewhere.
+
+### The service worker
+
+Push is handled by a dedicated worker at `/notifications-sw.js`, registered on demand with an
+origin-wide scope so it can receive pushes for the whole site.
+
+It handles exactly three events — `push`, `notificationclick` and `pushsubscriptionchange` —
+and registers **no** `fetch` handler. That is a security property, not an omission: the worker
+shares an origin with the inline wallet, and an origin-wide scope is only acceptable because
+the worker cannot intercept requests. A test fails if a `fetch` listener is ever added.
+
+On `push` it reads a JSON payload of `title`, `body` and `data`, accepting the type from either
+the top level or inside `data`, and shows a notification with the 192px PNG app icon as both
+icon and badge — several platforms, Android Chrome in particular, silently drop SVG
+notification icons. A `tag` in the payload coalesces repeats of the same logical notification.
+
+On `notificationclick` it resolves the same routes as the in-app bell, from its own copy of the
+mapping, cross-checked against the app's by a test. A `data.url` in the payload wins over the
+mapping, but only after an origin check — without it a misconfigured payload would turn a
+notification click into an open redirect, since opening a window from a worker is not
+origin-scoped.
+
+## Preferences and devices
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/notifications/preferences/challenge` | Challenge for a preference write |
+| `GET /api/notifications/{address}/preferences` | Read the account's preferences |
+| `POST /api/notifications/{address}/preferences` | Write them |
+| `POST /api/notifications/devices/challenge` | Challenge for a device registration |
+| `POST /api/notifications/devices` | Register a device |
+| `DELETE /api/notifications/devices` | Deregister it |
+
+The per-room mute control is separate and lives with chat: it writes `muted` and a tri-state
+account-wide `mute_all` through `POST /api/rooms/{saleAddress}/mute` behind its own signed
+challenge. The account-wide half of that switch is what turns `room-messages` notifications off
+everywhere. See [Chat](/social/chat).
+
+## The transaction banner
+
+Distinct system, entirely local, no server involved. It narrates whatever you are currently
+signing and confirming — "Publishing post", "Publishing reply", "Confirm in your wallet",
+"Confirming on blockchain" — and runs multi-step flows with explicit step counts. The sponsored
+`.chain` claim is the longest of them:
+
+```text
+Step 1 of 4 — reserving the name on-chain
+Step 2 of 4 — submitting the sponsored claim
+Step 3 of 4 — updating the name pointers
+Step 4 of 4 — transferring the name to your wallet
+```
+
+Others cover token creation, swaps, wrapping and unwrapping AE, liquidity changes, and signing
+a profile update. None of these are recorded in the notification feed; they exist only for the
+duration of the operation.
+
+## Open questions
+
+- **What triggers each feed type server-side?** The types and their payload fields are visible
+  from the client, but the conditions the backend uses — how soon after a comment, whether
+  self-actions are suppressed, how `announcement` rows are authored — are not documented in the
+  app repository.
+- **What preference keys exist?** The preferences endpoints are generated from the API schema
+  with untyped bodies, so the set of togglable categories is unknown from the client side.
+- **What does a device registration do that a web-push subscription does not?** The devices
+  endpoints exist alongside the web-push ones with no callers visible in the web client; they
+  are presumably for the mobile app.
+- **Is there a notification for tips?** No `tip` type appears in the client's mapping or its
+  tests, even though tipping is a first-class action.
+
+## Read more
+
+- [Comments](/social/comments) — the `post-comment` type is the most common notification, and
+  the `_v3` suffix rule explains its deep link.
+- [Chat](/social/chat) — `room-membership` and `room-messages`, and the per-room mute control.
+- [Tipping](/social/tipping) — an incoming tip arrives as a plain transfer.
+- [Invite links](/rewards/invite-links) — what produces an `invitation-claimed` notification.
+- [WebSocket API](/api-reference/websocket) — the app's other socket, for token activity.
+- [Superhero](https://superhero.com/) — the bell sits in the app header.

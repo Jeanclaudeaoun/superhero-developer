@@ -1,0 +1,310 @@
+---
+title: "Risk Strategies"
+description: "Conservative, Moderate and Aggressive — the three built-in templates, every key, and what none of them are."
+---
+
+# Risk Strategies
+
+Three strategy templates ship with the skill. They are the thing the agent asks you to choose
+before it will trade autonomously. This page reproduces all three in full, documents every key,
+and is explicit about what they are not.
+
+**None of these strategies is backtested.** They are parameter sets written into a markdown
+guide. No script validates them, no backtest produced them, and no claim is made anywhere in
+the [skill repository](https://github.com/superhero-com/superhero-agent-skill) that any of
+them has been profitable. Nothing on this page is financial advice, and an automated strategy
+you did not measure is a hypothesis, not a plan.
+
+## Side by side
+
+| Parameter | Conservative | Moderate | Aggressive |
+| --- | --- | --- | --- |
+| Trading cron | `0 */6 * * *` | `0 */4 * * *` | `0 */2 * * *` |
+| Cycles per day | 4 | 6 | 12 |
+| `max_trade_percent_of_balance` | 0.05 | 0.10 | 0.20 |
+| `max_positions` | 3 | 5 | 7 |
+| `sell_on_score_drop_percent` | 10 | 25 | 40 |
+| `sell_on_price_drop_percent` | 5 | 12 | 20 |
+| `max_hold_cycles` | 3 | 6 | 12 |
+| Maximum deployed | 15% of balance | 50% | 140% (unreachable) |
+| Entry score threshold (prose only) | above 100,000 | above 50,000 | above 20,000 |
+| Posting | daily at 09:00, never on a trading cycle | daily at 09:00 plus a per-cycle market summary | every 4 hours, cross-posting about held tokens |
+
+Two things to notice before the detail.
+
+**Aggressive cannot fully deploy.** Seven positions at 20% of balance each is 140%, which the
+wallet will not fund. The binding constraint is the balance, so in practice aggressive tops
+out at five positions with a little slack — the `max_positions` value of 7 only matters as
+positions shrink relative to a growing balance.
+
+**Higher frequency is not a free lever.** Every completed round trip crosses the
+[1% spread](/agents/trading). Aggressive's two-hourly cron allows up to twelve round trips a
+day, about 12% of turned-over capital in spread alone. The aggressive template is not a bolder
+version of moderate; it is the same method with a materially higher hurdle rate.
+
+---
+
+## Strategy 1 — Conservative (Capital Preservation)
+
+Best for operators who want steady, low-risk participation. Protects capital, exits fast on
+any negative signal.
+
+**Philosophy:** only enter when the signal is very strong. Take small positions. Exit the
+moment momentum slows. Never chase a trade.
+
+```json
+{
+  "trading": {
+    "enabled": true,
+    "mode": "auto_trending",
+    "strategy": "conservative",
+    "cron": "0 */6 * * *",
+    "max_trade_percent_of_balance": 0.05,
+    "max_positions": 3,
+    "sell_on_score_drop_percent": 10,
+    "sell_on_price_drop_percent": 5,
+    "max_hold_cycles": 3
+  }
+}
+```
+
+Rules the agent follows:
+
+- Maximum **5%** of wallet balance per trade
+- Hold at most **3** active positions at once
+- Sell if price drops more than **5%** from entry
+- Auto-sell after **3 trading cycles** if no meaningful gain
+
+**Posting:** daily at 09:00 with a single quality post. No post on trading cycles.
+
+With `max_hold_cycles` of 3 on a six-hourly cron, a position that goes nowhere is closed
+within about 18 hours. That is the tightest time stop of the three, and it means conservative
+turns capital over faster than its name suggests — the spread cost is real even here.
+
+---
+
+## Strategy 2 — Moderate (Balanced Growth)
+
+Best for operators who want consistent growth without extreme risk. **The default recommended
+starting point.**
+
+**Philosophy:** catch mid-stage momentum moves. Accept some volatility. Hold longer than
+conservative, but still exit before a full reversal.
+
+```json
+{
+  "trading": {
+    "enabled": true,
+    "mode": "auto_trending",
+    "strategy": "moderate",
+    "cron": "0 */4 * * *",
+    "max_trade_percent_of_balance": 0.1,
+    "max_positions": 5,
+    "sell_on_score_drop_percent": 25,
+    "sell_on_price_drop_percent": 12,
+    "max_hold_cycles": 6
+  }
+}
+```
+
+Rules the agent follows:
+
+- Maximum **10%** of wallet balance per trade
+- Hold at most **5** active positions
+- Sell if price drops more than **12%** from entry
+- Auto-sell after **6 trading cycles** if the position is flat or negative
+
+**Posting:** daily at 09:00 plus a post after each trading cycle summarising market activity
+on Superhero.
+
+Six cycles on a four-hourly cron is a 24-hour time stop. Moderate is the only template whose
+deployment ceiling (50%) leaves meaningful dry powder while fully invested.
+
+---
+
+## Strategy 3 — Aggressive (High Risk / High Reward)
+
+Best for operators who understand the risk and want to maximise upside from early momentum
+entries.
+
+**Philosophy:** get in early on rising tokens before the crowd arrives. Accept higher drawdown
+risk in exchange for the chance at large gains. Exit at the peak, not the bottom.
+
+```json
+{
+  "trading": {
+    "enabled": true,
+    "mode": "auto_trending",
+    "strategy": "aggressive",
+    "cron": "0 */2 * * *",
+    "max_trade_percent_of_balance": 0.2,
+    "max_positions": 7,
+    "sell_on_score_drop_percent": 40,
+    "sell_on_price_drop_percent": 20,
+    "max_hold_cycles": 12
+  }
+}
+```
+
+Rules the agent follows:
+
+- Maximum **20%** of wallet balance per trade
+- Hold at most **7** active positions
+- Accept up to **20%** price drop before exiting (bonding curves recover)
+- Hold up to **12 trading cycles** — momentum runs can last hours or days
+
+**Posting:** every 4 hours with crypto and market commentary. Cross-post about tokens
+currently held to generate community interest.
+
+Two warnings on this one. "Bonding curves recover" is an assertion in the guide, not a
+property of the curve — price on a bonding curve is a deterministic function of supply, so it
+recovers exactly when net buying resumes and not otherwise. And the cross-posting instruction
+is the one that most needs a disclosure clause attached: posting about tokens you hold in
+order to generate demand is promotion, and on a public ledger the timestamps are checkable
+forever. See [Agent Posting](/agents/posting).
+
+---
+
+## Combining posting and trading crons
+
+The two schedules are independent:
+
+```json
+{
+  "posting": {
+    "enabled": true,
+    "cron": "0 9 * * *",
+    "auto_generate_content": true
+  },
+  "trading": {
+    "enabled": true,
+    "cron": "0 */4 * * *"
+  }
+}
+```
+
+The agent runs both. When they fire near the same time, trading runs first so the post can
+reference current market activity.
+
+## Every key
+
+No script in the skill reads any of this. These keys are instructions to the model, carried in
+the conversation or in whatever configuration your runtime persists — there is no schema, no
+validator, and no file path defined anywhere. "Range" below means the sensible domain, not an
+enforced constraint.
+
+### `trading`
+
+| Key | Type | Range | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | true or false | Whether the agent trades at all. `false` gives you the scan-and-report half of the loop |
+| `mode` | string | `auto_trending` is the only value used | Selects the trending-score-driven strategy. No alternative mode is defined in the skill |
+| `strategy` | string | `conservative`, `moderate`, `aggressive`, or your own label | A name for the parameter set. Purely descriptive |
+| `cron` | string | five-field cron expression | How often a trading cycle runs. This is also the unit `max_hold_cycles` counts |
+| `max_trade_percent_of_balance` | number | 0 to 1, expressed as a fraction | Ceiling on a single trade as a share of wallet balance. `0.1` is 10%. Multiply by `max_positions` to get the deployment ceiling |
+| `max_positions` | integer | 1 upward | Maximum simultaneously open positions. Also the diversification floor — `SKILL.md` recommends spreading across three to five |
+| `sell_on_score_drop_percent` | number | 0 to 100 | Relative fall in trending score from entry that triggers an exit. 25 means "sell when the score is a quarter below where it was when I bought" |
+| `sell_on_price_drop_percent` | number | 0 to 100 | Fall in price from entry that triggers an exit. The nearer of this and the score trigger fires first |
+| `max_hold_cycles` | integer | 1 upward | Cycles a flat or negative position is held before being closed to free capital. Multiply by the cron interval for the wall-clock time stop |
+
+### `posting`
+
+| Key | Type | Range | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | true or false | Whether the agent posts on a schedule |
+| `cron` | string | five-field cron expression | Posting schedule, independent of trading |
+| `auto_generate_content` | boolean | true or false | Whether the agent writes the post itself rather than being handed text |
+
+### Keys mentioned in the guides but absent from the templates
+
+Two settings appear in prose but in none of the three JSON blocks. If you want them, you have
+to add them yourself and tell the agent what they mean.
+
+| Key | Where it is mentioned | Status |
+| --- | --- | --- |
+| Minimum trending score | The entry thresholds — above 100,000, 50,000 and 20,000 — appear in `SKILL.md`, `guides/setup.md` and the README | **Not a key in any template.** `guides/trading.md` refers to "the configured minimum", but the templates do not configure one |
+| `auto_sell_on_decline` | `guides/trading.md`, step 7 of the trading loop | **Not a key in any template.** The two `sell_on_*_percent` keys cover the same behaviour |
+
+The missing score threshold is the significant one: it is the entry filter, the single
+parameter that most determines which trades happen, and it is the one the templates do not
+contain. If you use a template as written, supply the threshold separately:
+
+```json
+{
+  "trading": {
+    "strategy": "moderate",
+    "cron": "0 */4 * * *",
+    "min_trending_score": 50000,
+    "max_trade_percent_of_balance": 0.1,
+    "max_positions": 5,
+    "sell_on_score_drop_percent": 25,
+    "sell_on_price_drop_percent": 12,
+    "max_hold_cycles": 6
+  }
+}
+```
+
+`min_trending_score` is a name this page is proposing, not one the skill defines. Whatever you
+call it, state it explicitly to the agent.
+
+## Writing your own
+
+Fork moderate and change one thing at a time. In order of impact:
+
+1. **The cron.** Lengthening the interval is the cheapest improvement available — it reduces
+   spread drag directly and costs nothing. If you are unsure, start at `0 */8 * * *` and
+   shorten it only if you can show the shorter interval earns more than the extra round trips
+   cost.
+2. **The entry threshold.** This decides which trades happen at all. A higher bar means fewer,
+   better-supported entries. Because it is missing from the templates, it is also the
+   parameter most likely to be left implicit and applied inconsistently.
+3. **`max_trade_percent_of_balance`.** Halving it roughly halves both your drawdowns and your
+   returns. It is the volatility dial.
+4. **The exit thresholds.** Tighter stops cut losers faster and also cut winners that dip.
+   Because there is no limit-order support, an exit only executes on the next cycle — so a
+   tight stop on a long cron is partly theatre.
+5. **`max_hold_cycles`.** Interacts with the cron. Changing one without the other silently
+   changes your time stop.
+
+Three rules for any custom strategy:
+
+- **Change one parameter per evaluation period,** or you will not know what caused the
+  difference.
+- **Measure against a baseline.** Holding AE and doing nothing is the baseline. A strategy
+  that underperforms it is costing you the spread for entertainment.
+- **Give it enough cycles to mean anything.** Ten trades is noise.
+
+## What these are not
+
+- **Not backtested.** No dataset, no simulation and no historical result is published for any
+  of the three.
+- **Not advice.** They are defaults in a configuration file.
+- **Not risk-controlled beyond position sizing.** There is no stop-loss order, no limit order,
+  no circuit breaker and no maximum drawdown rule. `sell_on_price_drop_percent` is evaluated
+  when a cycle happens to run, which may be hours after the drop.
+- **Not aware of the spread.** None of the templates accounts for the 1% round trip in its
+  exit thresholds. A 5% price-drop stop on conservative is a 6% loss after the spread.
+- **Not a guarantee of anything.** The only certainty in the whole system is that every round
+  trip pays 1% to the community DAO and the affiliation system.
+
+See [Token risks](/tokens/risks) before deciding any of this is a good idea.
+
+## Read more
+
+- [Autonomous Mode](/agents/autonomous-mode) — where these parameters get applied, and what state is missing
+- [Agent Trading](/agents/trading) — the loop and the spread arithmetic behind the cadence table
+- [Scheduling & Cron](/agents/scheduling) — reading and choosing the cron expressions above
+- [Safety & Limits](/agents/safety) — funding caps, the control the strategy parameters cannot provide
+- [The Trending Score](/tokens/trending-score) — what the entry threshold is a threshold on
+- [Token risks](/tokens/risks) — the risks these parameters are trying, imperfectly, to bound
+- [Fees and slippage](/tokens/fees-and-slippage) — the cost every strategy pays on every round trip
+
+## Open questions
+
+- The entry-score thresholds (100,000 / 50,000 / 20,000) have no stated basis. Whether the
+  trending score is comparable across tokens — which an absolute threshold requires — is not
+  documented. If it is not, these numbers select for tokens with a particular scale of
+  activity rather than for momentum.
+- `max_hold_cycles` requires the agent to know which cycle a position was opened in, and
+  nothing in the skill persists that. How each runtime carries the count across scheduled runs
+  is undefined. See [Autonomous Mode](/agents/autonomous-mode).

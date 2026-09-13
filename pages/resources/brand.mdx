@@ -1,0 +1,135 @@
+---
+title: "Brand & Media"
+description: "Logos, colours, typography and the usage rules that actually apply."
+---
+
+# Brand & Media
+
+The canonical brand kit is the in-app branding page at
+[superhero.com/branding](https://superhero.com/branding), which serves every asset as a direct
+download. This page mirrors the palette, typography and asset inventory so you can reference them
+without opening the app, and states the licence position plainly — because it is more restrictive
+than a download button implies.
+
+## Colour palette
+
+| Name | Hex | RGB | Used for |
+| --- | --- | --- | --- |
+| Primary Neon Teal | `#00ff9d` | `0, 255, 157` | Core interactions, success states, primary actions |
+| Neon Pink / Crimson | `#ff6b6b` | `255, 107, 107` | Error states, destructive actions, active gradients |
+| Neon Blue | `#0f61fe` | `15, 97, 254` | Sub-headings, secondary buttons, informative components |
+| Background | `#0a0a0f` | `10, 10, 15` | The deep dark-mode backdrop the neon hues sit on |
+
+The background colour is also the PWA's `theme_color` and `background_color` in
+`manifest.webmanifest`, so it is what a mobile browser paints around the installed app. Superhero's
+own description of the system: "Our deep dark-mode backdrop, optimized for high contrast with
+radiant cyberpunk neon hues." There is no light theme.
+
+## Typography
+
+The primary typeface is **Inter**, described in the brand kit as "an open-source, modern type family
+carefully crafted for high readability on screens."
+
+```css
+font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+```
+
+Three weights carry the system: Regular for body, Semibold for emphasis, Black for headings. The
+brand kit's own specimens are "Attention Markets" as a heading and "Follow Trends on-chain on a
+decentralized network." as body text.
+
+## Assets
+
+Every asset below is downloadable from [superhero.com/branding](https://superhero.com/branding).
+The paths are the app's own asset paths, so they also resolve directly under `superhero.com`.
+
+| Asset | Format | Path | Description |
+| --- | --- | --- | --- |
+| Full logo | SVG | `/full-logo.svg` | The main combination logo: the Superhero brand name alongside the blue power shield icon |
+| Favicon / small logo | SVG | Inline in the app, downloadable from the branding page | The minimalistic geometric shield, legible at browser-tab and avatar sizes |
+| Square brand logo | PNG | `/logo.png` | The square emblem, for social profile images, directories and app stores |
+| OG social banner | PNG, 1200 × 630 | `/og-default.png` | The default sharing card for X, Telegram, Discord or Facebook |
+| App showcase screenshot | PNG | `/screen-1.png` | Interface layout with trending topics, feeds and market components |
+| PWA icons | PNG, 192 and 512 | `/icons/icon-192.png`, `/icons/icon-512.png` | Standard install icons |
+| PWA maskable icon | PNG, 512 | `/icons/icon-maskable-512.png` | Maskable variant for adaptive launcher shapes |
+
+The branding page also offers four custom UI icons as individual SVG downloads — **diamond**,
+**wallet**, **hashtag** and **feed**. They are part of the product's icon set rather than the logo
+family, and are exported from the running page rather than served as static files.
+
+## Usage rules
+
+Read this before you ship anything with the marks on it. The rules come from section V of the
+[terms of use](https://superhero.com/terms), which is the operative document — the branding page's
+download buttons do not grant a licence.
+
+**What the terms say.** Logos, trademarks, domain names and code appearing on or accessible through
+`https://superhero.com/` are protected intellectual property and belong "strictly and solely to
+Superhero.com". Use of any of them is "subject to prior authorisation". None may be reproduced,
+copied, edited, transmitted, downloaded or distributed — in whole or in part, on any medium —
+without prior written consent.
+
+**The two carve-outs.**
+
+1. **Press.** Use "for press requirements is allowed solely in compliance with the intellectual
+   property rights that are mentioned."
+2. **Personal.** Copying is "authorised only for private, non-commercial, personal use on the
+   personal technical devices of the user."
+
+**In every permitted case**, the assets "must not be denatured, modified, altered or changed in any
+way whatsoever." That rules out recolouring the logo, stretching it, adding your own wordmark to it,
+or building a derivative mark from the shield.
+
+**Practical guidance.** Editorial and press use of the unmodified logo is covered. Anything that
+could read as endorsement — a product name, an app icon, a landing page, a token or a community that
+presents itself as official — is not, and needs written permission first. Ask at
+`superherowallet@protonmail.com`, the address the terms give for exactly this kind of question.
+
+Three cases deserve a specific warning:
+
+- **Do not use the marks on a site that collects keys or funds.** Superhero branding on a
+  wallet-connect flow is the single most effective phishing pattern against this product. See
+  [Official Links](/resources/links).
+- **Community-run deployments are not official.** The terms note that because the interface is open
+  source, "deployments may be operated independently by community members" and Superhero "is not
+  responsible for the operation, modification, or compliance of third-party or community-run
+  instances." If you run one, do not present it as Superhero.
+- **Community tokens are not brand licences.** Creating a token named after Superhero, or using the
+  logo as a token image, does not make it official and does not grant any trademark right.
+
+## Writing about Superhero
+
+A few conventions the product uses consistently, worth matching:
+
+| Convention | Correct | Avoid |
+| --- | --- | --- |
+| Product name | Superhero | SuperHero, Super Hero |
+| Domain | superhero.com | superhero.io, superhero.app |
+| Chain | æternity, with the ligature | aeternity (acceptable in plain-ASCII contexts such as the FAQ copy) |
+| Coin | AE | ÆTH, AET |
+| Identity | Superhero Onchain ID, SuperheroID | Superhero ID (spaced) |
+| Analytics surface | Trendminer | Trend Miner, TrendMiner |
+| Wallet | Superhero Wallet — a separate product from the Superhero app | Treating `wallet.superhero.com` and `superhero.com` as the same thing |
+
+Superhero's own one-line description, used in `manifest.webmanifest` and `llms.txt`: "Superhero is
+an on-chain attention market built on the æternity blockchain where users can discover, trade, and
+govern social trends."
+
+## Read more
+
+- [superhero.com/branding](https://superhero.com/branding) — the live brand kit, with working downloads.
+- [Terms & Privacy](/resources/legal) — the intellectual-property section quoted above, in context.
+- [Official Links](/resources/links) — the domains and repositories that are genuinely Superhero.
+- [What is Superhero?](/concepts/what-is-superhero) — the positioning language to stay consistent with.
+- [How to Contribute](/contributing/how-to-contribute) — if you want to change something on this site instead.
+
+## Open questions
+
+- **Is there a written brand licence separate from the terms of use?** The branding page presents
+  assets as a "resource hub … to help you create materials", while section V of the terms requires
+  prior written consent for any reproduction. No document reconciling the two appears in these
+  repositories, so the conservative reading above is the one to follow.
+- **Are there approved logo clear-space, minimum-size or misuse rules?** The brand kit publishes
+  colours, type and files but no layout specification.
+- **Is a light-background logo variant available?** Every asset in the kit is presented on the
+  `#0a0a0f` background and no inverse lockup is offered.

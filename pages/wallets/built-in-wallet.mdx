@@ -1,0 +1,312 @@
+---
+title: "The Built-In Wallet"
+description: "How Superhero's in-app vault stores your seed, which factors unlock it, and what clearing site data destroys."
+---
+
+# The Built-In Wallet
+
+Superhero can create and hold an æternity account inside the app itself, with no extension and
+no second app. The seed lives encrypted in your browser's own storage on that device, and every
+signature re-verifies you before the seed is decrypted. This page explains the vault format, the
+unlock factors, how keys are derived, and — the part most people need and rarely read — exactly
+where the key material lives and what destroys it.
+
+Everything here is the web app's own implementation, in `src/features/wallet/`. It is a different
+thing from [Superhero Wallet](/wallets/superhero-wallet-extension), the standalone extension and
+mobile app, even though both end up holding the same kind of `ak_...` account.
+
+## Where the built-in wallet is offered
+
+| Surface | Create a wallet | Import an existing seed | In-page signing |
+| --- | --- | --- | --- |
+| Installed PWA (Add to Home Screen) | Yes | Yes | Yes |
+| Plain browser tab | Yes | No — use Connect instead | Not installed as the signer |
+
+Creating a wallet (passkey or a fresh recovery phrase) is offered on every surface. Pasting a seed
+phrase or private key is offered **only in the installed app**: in a browser tab the answer to "I
+already have a wallet" is Connect, which hands signing to the extension or the wallet app and
+never asks for your secret.
+
+The in-page signer is installed by the SDK provider's signer factory only when two things hold at
+once: the app is running standalone (installed), and the active address is listed in this device's
+cleartext manifest. Any other address keeps its existing signing path — an externally connected
+wallet is never intercepted.
+
+## The vault model
+
+Three layers, each in its own module.
+
+```text
+mnemonic (BIP39, 12 or 24 words)
+   │  AES-256-GCM, AAD "superhero-vault-v1", fresh 96-bit IV
+   ▼
+SealedBox            ──────────────┐
+                                   │  sealed under a random 256-bit DEK
+DEK (data-encryption key)          │
+   │  wrapKey/unwrapKey, AES-256-GCM, AAD "wrap:<factor-id>:<type>"
+   ▼
+one wrapped copy per enrolled factor  ── passphrase · recovery code · passkey
+```
+
+### `VaultRecord` — the thing at rest
+
+One record per device. Plain JSON; every secret inside it is base64 ciphertext.
+
+| Field | What it holds |
+| --- | --- |
+| `v` | Format version. Currently `1`. |
+| `createdAt` | Creation timestamp. |
+| `seal` | The mnemonic, AES-256-GCM-sealed under the DEK. |
+| `mnemonicWordCount` | Metadata, not secret. |
+| `factors` | The OR-set of wrapped factors. Always at least one. |
+| `mnemonicBackedUpAt` | When you completed a **verified** written backup, or `null`. |
+
+Sealed boxes are self-describing — each records the algorithm and the AAD it was sealed under, and
+opening reads those back from the box rather than from current code constants, so an algorithm
+change is forward-compatible instead of a format migration. Opening also asserts the expected AAD,
+so a box lifted from a different context fails before decryption rather than decrypting happily.
+
+### The OR-set, and what it costs you
+
+Factors form an **OR-set**: any single enrolled factor unwraps the same DEK and therefore opens the
+whole vault. That is what makes "passkey or passphrase" work, and it is also the security ceiling —
+**the vault is only as strong as its weakest enrolled factor.** A weak passphrase is not made safe
+by also having a passkey.
+
+The code enforces the other side of that trade: `removeFactor` refuses to remove the last factor,
+because a vault with no factors is permanently unopenable.
+
+## The unlock factors
+
+| Factor | KDF | Input entropy | Where the secret lives |
+| --- | --- | --- | --- |
+| Passphrase | Argon2id, 64 MiB memory, 3 iterations, 1 lane, 16-byte salt | Whatever you choose — gated, see below | Your head |
+| Recovery code | HKDF-SHA256, 32-byte salt, info `recovery-code` | 128 bits, generated | Wherever you wrote it |
+| Passkey | HKDF-SHA256, 32-byte salt, info `webauthn-prf` | 32-byte WebAuthn PRF output | Your platform authenticator |
+
+Argon2id is used for the passphrase because it is the only factor that may take a human-chosen
+secret, and memory-hardness is what makes an offline attack on an exfiltrated vault expensive. The
+other two feed HKDF, which is valid **only** because their inputs are already high-entropy. KDF
+parameters are stored per factor, so raising them later never strands an existing vault.
+
+### Passphrase strength gate
+
+The passphrase is scored locally with zxcvbn (dictionaries, breach lists, keyboard and repeat
+patterns, leetspeak un-munging) — no network call. The rules:
+
+- Minimum zxcvbn score **3** of 4 ("safely unguessable").
+- A numeric-only string is rejected outright as a PIN, with no estimator needed.
+- The generator offers **five words from the BIP39 English list**, about 55 bits.
+- If the estimator fails to load, the gate **fails closed** — Create stays disabled and you are
+  offered a retry. It never falls back to a length rule.
+
+### Recovery code
+
+A 128-bit code shown **once** at enrollment, rendered as eight dash-separated groups of four
+uppercase hex characters (32 hex digits total). Parsing tolerates case, spaces and dashes.
+
+Read this carefully, because the name invites the wrong assumption: the recovery code is
+**passkey-independent, not device-independent.** It derives a KEK and nothing else. Unwrapping the
+DEK still needs this device's `VaultRecord`. If that record is gone, the code opens nothing.
+
+### Passkey (WebAuthn PRF)
+
+The passkey factor uses the WebAuthn **PRF extension**, which yields a stable 32-byte secret for a
+given (credential, salt) pair. The ceremony requires `userVerification: "required"` and a resident
+(discoverable) credential, and offers ES256 and RS256.
+
+Proof that PRF actually works is strict: a non-empty `results.first` of at least 32 bytes. Some
+CTAP2.1 keys report `prf.enabled` but return no result — that is treated as **unsupported**, never
+as success. If evaluation at creation returns nothing while PRF is reported enabled, the app does a
+follow-up assertion to obtain it, which is why you may see two prompts.
+
+The **RP ID** is the custody boundary. It is pinned at build time from `VITE_WEBAUTHN_RP_ID`,
+defaults to `superhero.com`, and is **never** derived from `window.location` — so a bundle served
+from an unexpected host cannot mint host-scoped credentials. The failure mode when that value is
+wrong is genuinely confusing and is documented in [Troubleshooting](/wallets/troubleshooting).
+
+## Two ways a wallet is created
+
+### From a recovery phrase
+
+A 12-word BIP39 phrase is generated, shown, and **verified by re-entry** before any vault exists.
+Only then does a passphrase factor create the vault. The recovery code is enrolled next and is
+mandatory. A device passkey is offered after that and is optional.
+
+Import follows the same path minus the show/verify screens; the phrase is normalized (trimmed,
+whitespace collapsed, lowercased) and checked against the BIP39 wordlist **and checksum** before a
+vault is created, so a typo cannot seal a wrong seed.
+
+### From a passkey
+
+One ceremony does everything. The passkey is enrolled, and the BIP39 mnemonic is **derived from its
+own PRF output** — so there is no phrase screen, because there is nothing that needs writing down
+to be recoverable:
+
+```text
+PRF(credential, "superhero.com/wallet/seed/v1")   ← fixed, public salt
+   ├─ HKDF-SHA256, info "superhero-wallet-seed-v1"  → 16 bytes entropy → 12-word BIP39 phrase
+   └─ HKDF-SHA256, info "webauthn-prf"              → the KEK that wraps the DEK
+```
+
+Two properties carry this design:
+
+1. **The seed PRF salt is fixed and public.** A random per-enrollment salt would have to be stored
+   next to the vault, and the vault is evictable — losing it would lose the ability to re-derive the
+   seed even though the passkey still exists. A PRF salt is a domain separator, not a secret.
+2. **The two derivations use different HKDF `info` strings**, so neither can be computed from the
+   other. The seed material never doubles as the wrapping key.
+
+The honest caveat, which the onboarding copy also states: this makes the passkey a real backup
+**only if the passkey syncs** — iCloud Keychain, Google Password Manager. A device-bound platform
+credential such as Windows Hello dies with its device, and **there is no phrase reveal or export
+screen anywhere in the app today**, so for those users the passkey is the only copy. A passkey
+wallet still leaves `mnemonicBackedUpAt` at `null`, because no verified written backup happened.
+
+Restoring on a new device runs a *discoverable* assertion (no credential id to start from — that is
+what is being rebuilt), derives the wallet it implies, and shows you the derived address **before
+persisting anything**. The confirm screen also checks whether that address has on-chain activity: a
+pristine account is a warning that you picked the wrong passkey, because evaluating a seed-phrase
+wallet's device passkey at the seed salt derives a valid but empty different wallet.
+
+## Key derivation
+
+| Purpose | Path | Curve | Factory |
+| --- | --- | --- | --- |
+| æternity spending key | `m/44'/457'/<index>'/0'/0'` | ed25519, SLIP-0010 | The SDK's `AccountMnemonicFactory` |
+| Nostr chat identity | `m/44'/1237'/0'/0/<index>` | secp256k1 | Separate path, chat module |
+
+The æternity path uses the SDK's own factory and is never reimplemented by hand, so an account
+created here is **byte-identical** to importing the same phrase into the Superhero Wallet extension
+or the native app at the same index. There is nothing proprietary to be stranded in. A golden-vector
+test guards that path against drift.
+
+The chat key is the one deliberate exception to "nothing derived is cached". It is produced by a
+single-purpose, nostr-only unlock primitive that runs the same user-verification path, unseals the
+mnemonic transiently, derives the secp256k1 key, and returns **nostr keys only** — never the
+mnemonic, the seed, the DEK, or the æternity spending key. The chat session caches that nostr key in
+memory for a rolling idle window, and the unlock prompt says so, because the usual "authorise one
+signature" wording would be untrue for it.
+
+## Signing: verification every time
+
+The rule the signer enforces, with no fast path around it:
+
+1. Run the unlock provider — a WebAuthn ceremony or the passphrase prompt. **Every signature.**
+2. Unwrap the DEK, unseal the mnemonic, derive the account key. All transient.
+3. Check that the derived key actually produces the advertised address. If it does not, **refuse to
+   sign** — this catches a vault swapped underneath a live session, and a mismatched address/index
+   pair, either of which would otherwise produce a valid signature attributed to the wrong account.
+4. Sign, then drop every reference.
+
+There is no cached unlock and no session-cached seed. The SDK-facing adapter even reloads the vault
+record from storage on every signature, so adding or removing a factor takes effect immediately.
+
+The bridge between the React-free signer and the prompt UI is a small broker with two properties
+worth knowing as a user: if no prompt is mounted it **rejects immediately** rather than hanging — a
+signature is never produced without someone seeing it — and it renders **one prompt at a time**, so
+two concurrent requests cannot overlap ceremonies or let you approve request B while reading
+request A.
+
+### What the confirmation shows
+
+The prompt does not show you opaque base64. The transaction is decoded with the SDK's own unpacker
+and FATE calldata decoder into named rows, with two deliberate behaviours:
+
+- **Decode, never re-encode.** The bytes signed are always the original string. A decoding bug can
+  mislead; it cannot alter what gets signed.
+- **Fail closed.** If the envelope, a contract call's arguments, or a wrapped inner transaction
+  cannot be decoded, the summary is `null` and the prompt **refuses to offer approval at all**.
+  There is no "show raw bytes and approve anyway".
+
+Recognised calls are named in plain language — publish a post, buy tokens, sell tokens, create a
+community, transfer, the four AEX-9 allowance operations, add and remove liquidity, wrap and unwrap
+AE, add a poll, cast or revoke a vote, delegate and revoke delegation, and the invitation-code
+operations. A call whose decoded argument shape does not exactly match the expected one is
+downgraded to an unrecognised-contract caution with every argument rendered raw, rather than being
+labelled with semantics the calldata does not support.
+
+Two rows are there because their absence was actively misleading:
+
+- **"Gas, at most"** — gas is charged on top of `fee`, so a prompt showing only the network fee
+  understates what a contract call can cost.
+- **"Name price"** — on a name claim this is the largest amount by far, next to a network fee of
+  cents.
+
+Token amounts are shown in **raw base units, not scaled by decimals**: decimals are a per-token
+on-chain fact this pure decoder cannot know, and inventing a scale would misstate what you are
+approving.
+
+## Where the key material lives
+
+| Thing | Where | Encrypted? |
+| --- | --- | --- |
+| `VaultRecord` (sealed mnemonic, wrapped DEKs) | IndexedDB, database `superhero-wallet`, store `vault`, key `vault` | Yes |
+| Wallet manifest (addresses, derivation indexes, labels, active address) | `localStorage`, key `wallet.inlineManifest` | **No — cleartext by design** |
+| Mnemonic, DEK, KEK, derived keys | Memory, inside one unlock-to-sign scope | n/a |
+| Anything at all | A Superhero server | Nothing is sent |
+
+The manifest is cleartext on purpose: the SDK installs an account synchronously and reads its
+address immediately, so the address-to-index lookup has to be available without an `await` and
+without an unlock. It must never grow a field that could hold secret material — public addresses,
+integer indexes and user labels only.
+
+One caveat inherited from the platform: a JavaScript string cannot be truly zeroed, so the mnemonic
+"drop" is a dropped reference, not a wiped buffer. The guarantee is that nothing survives the
+signing scope, not that memory is scrubbed. Seed *bytes* do get a best-effort `fill(0)`.
+
+## What clearing site data destroys
+
+Plainly, because this is the question that costs people money.
+
+**Clearing site data (or "Cookies and site data") for superhero.com deletes the IndexedDB vault.**
+When the `VaultRecord` is gone:
+
+- Your **passphrase** opens nothing — it only derives a KEK, and there is no wrapped DEK left to
+  unwrap.
+- Your **recovery code** opens nothing, for exactly the same reason.
+- Your **passkey** still exists in your authenticator, but for a *seed-phrase* wallet its stored
+  wrap salt went with the record, so it opens nothing either.
+
+The same loss happens without you touching anything: IndexedDB is evictable, and Safari's
+Intelligent Tracking Prevention can evict it after roughly seven days without interaction. A
+successful save is **never** a durable backup.
+
+What actually survives a wiped vault:
+
+| You have | Survives? | Why |
+| --- | --- | --- |
+| The written 12/24-word phrase | **Yes** | Standard BIP39 on the standard path — re-import anywhere. |
+| A **syncing** passkey on a passkey-created wallet | **Yes** | The seed re-derives from the PRF output at the fixed public salt. |
+| A device-bound passkey (e.g. Windows Hello) on a passkey-created wallet | Only on that device | It cannot leave the device, and there is no export screen. |
+| A passkey on a **seed-phrase** wallet | No | It wraps a DEK; it does not derive the seed. |
+| The recovery code alone | No | It derives a KEK, not the seed. |
+| The passphrase alone | No | Same. |
+
+Losing only `localStorage` is survivable: the manifest is rebuildable by unlocking once and
+re-deriving addresses from index 0 upward, and the app has a repair path for exactly that case. In
+practice clearing site data usually takes both stores at once.
+
+Erasing the wallet deliberately is available from onboarding's "this device already has a wallet"
+screen, and takes two taps because for a passkey wallet it is unrecoverable.
+
+## Read more
+
+- [Backup & Recovery](/wallets/backup-and-recovery) — the procedures that follow from everything above, including what to write down and how to verify it.
+- [Troubleshooting](/wallets/troubleshooting) — the passkey RP-ID failure that shows no OS prompt at all, plus storage and signing faults.
+- [Connecting a Wallet](/wallets/connecting) — how an external wallet is discovered instead, and why the in-page signer never intercepts one.
+- [Security Best Practices](/wallets/security) — how the OR-set property changes what a strong passphrase is worth.
+- [Accounts and Keys](/aeternity/accounts-and-keys) — what an `ak_...` address is at the protocol level.
+- [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet this seed can also be imported into.
+
+## Open questions
+
+- Is there a plan for a user-verification-gated **phrase reveal** for passkey-created wallets? Today
+  a device-bound passkey is the only copy of that seed and the app offers no export. The comments in
+  `wallet-lifecycle.ts` name this as the intended fix but not a shipped one.
+- Does the passkey unlock provider yet bind the WebAuthn PRF challenge to a hash of the payload and
+  network id? `inline-signer.ts` records this as a requirement on the provider ("so a KEK obtained
+  for payload A cannot sign payload B") rather than as implemented behaviour.
+- What is the exact rolling idle window for the cached chat identity? The prompt is passed an
+  `idleMinutes` value by the caller; the concrete number lives in the chat session module, which was
+  not read for this page.
