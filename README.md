@@ -15,9 +15,26 @@ pnpm build    # production build
 
 > **Note on dependencies:** the Nextra versions are pinned to the `2.x` line, which is the
 > line that supports this repository's `pages/` + `_meta.json` layout. `nextra@latest` now
-> resolves to the 4.x line, which requires the App Router and a different meta format. The
-> previous `pnpm-lock.yaml` was resolved against `"latest"` and no longer matches these
-> specifiers, so it was removed — the first `pnpm install` regenerates it.
+> resolves to the 4.x line, which requires the App Router and a different meta format, so
+> do not "upgrade" these specifiers without migrating the whole site first.
+>
+> `pnpm-lock.yaml` is committed and resolved against those pinned versions, so
+> `pnpm install --frozen-lockfile` (the default on Vercel and most CI) works as-is.
+
+### Two constraints worth knowing before you edit
+
+1. **Never create `pages/api/`.** Next.js reserves it for API routes in the pages router,
+   so MDX placed there builds as a serverless stub and returns HTTP 500 instead of
+   rendering. The REST documentation lives at `pages/api-reference/` for this reason.
+2. **Run the linter before you commit.** MDX failures are compile-time, not render-time,
+   so a bad page breaks the whole build:
+
+   ```bash
+   python3 scripts/lint-mdx.py
+   ```
+
+   It checks frontmatter quoting, bare braces and JSX hazards, pipes inside table cells,
+   broken internal links, and `_meta.json` drift. It exits non-zero on any finding.
 
 ## How this site is organised
 
