@@ -192,7 +192,7 @@ curl -s "https://api.superhero.com/api/tokens?order_by=trending_score&order_dire
 ```
 
 Response is the standard `items` + `meta` envelope described in
-[Conventions](/api/conventions#pagination).
+[Conventions](/api-reference/conventions#pagination).
 
 ## `GET /api/tokens/{address}/holders`
 
@@ -301,10 +301,10 @@ instead.
 
 ## Read more
 
-- [API Conventions](/api/conventions) — pagination, the `limit` cap and the full unit table
-- [Transactions API](/api/transactions) — the trade records behind `tx_count` and the price series
-- [Accounts API](/api/accounts) — the same tokens from the holder's side, with portfolio value and PnL
-- [WebSocket API](/api/websocket) — push updates for `TokenDto` instead of polling this endpoint
+- [API Conventions](/api-reference/conventions) — pagination, the `limit` cap and the full unit table
+- [Transactions API](/api-reference/transactions) — the trade records behind `tx_count` and the price series
+- [Accounts API](/api-reference/accounts) — the same tokens from the holder's side, with portfolio value and PnL
+- [WebSocket API](/api-reference/websocket) — push updates for `TokenDto` instead of polling this endpoint
 - [Bonding curve](/tokens/bonding-curve) — why buy price and sell price differ
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the same list this endpoint backs
 

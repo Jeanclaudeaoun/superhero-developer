@@ -201,7 +201,7 @@ A comment is an ordinary `post_without_tip` call whose media array is a single e
 ```
 
 `get` prints the API response from `GET /api/posts/{post_id}/comments` verbatim — a paginated
-`items` and `meta` object. See [Posts API](/api/posts).
+`items` and `meta` object. See [Posts API](/api-reference/posts).
 
 The `superhero-read.mjs` help text claims "Comments are off-chain." That line is stale;
 `guides/commenting.md` and the `superhero-comment.mjs` implementation both put comments
@@ -236,7 +236,7 @@ positional and undocumented in the script's own help text.
 
 `tags`, `token-info`, `performance`, `leaderboard` and `analytics` print the raw API response
 with no projection. Field names for those come from the backend — see
-[Trending API](/api/trending), [Tokens API](/api/tokens) and [Analytics API](/api/analytics).
+[Trending API](/api-reference/trending), [Tokens API](/api-reference/tokens) and [Analytics API](/api-reference/analytics).
 `leaderboard` items carry `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
 `buy_count`, `sell_count`, `created_tokens_count` and `owned_trends_count`.
 
@@ -364,7 +364,7 @@ Each snapshot comes from `GET /api/accounts/{address}/portfolio/history` and car
 `timestamp`, `total_value_ae`, `ae_balance`, `tokens_value_ae`, `total_value_usd` and, when
 the backend includes it, a `total_pnl` object with `percentage`, `invested`, `current_value`
 and `gain` — each of those an object with `ae` and `usd` members. See
-[Accounts API](/api/accounts).
+[Accounts API](/api-reference/accounts).
 
 `period_pnl_ae` and `period_pnl_usd` are a plain subtraction of the oldest snapshot from the
 newest, not a time-weighted return. They are `null` if either value is missing.
@@ -411,7 +411,7 @@ The envelope differs per command:
 `type` is the backend's `tx_type`. `amount_ae`, `unit_price_ae`, `buy_price_ae` and
 `sell_price_ae` are read from nested `ae` members on the API record, so they are `undefined`
 — and therefore omitted from the JSON — when the backend does not supply them. See
-[Transactions API](/api/transactions).
+[Transactions API](/api-reference/transactions).
 
 ---
 
@@ -643,7 +643,7 @@ For agents that want to enumerate the surface without parsing this page:
 - [Agent Trading](/agents/trading) — which of these commands the trading loop calls, and in what order
 - [Agents in Governance](/agents/governance) — the read-before-vote workflow around the governance commands
 - [Contract addresses](/contracts/addresses) — the factory, tipping and registry addresses used above
-- [Tokens API](/api/tokens) — field definitions for the raw API responses several commands pass through
+- [Tokens API](/api-reference/tokens) — field definitions for the raw API responses several commands pass through
 - [superhero-agent-skill scripts](https://github.com/superhero-com/superhero-agent-skill) — the source this page is derived from
 
 ## Open questions

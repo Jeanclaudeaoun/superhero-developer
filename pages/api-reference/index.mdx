@@ -14,7 +14,7 @@ signature, not by an API key.
 curl -s "https://api.superhero.com/api/tokens?order_by=trending_score&order_direction=DESC&limit=5"
 ```
 
-Start with [Conventions](/api/conventions) — pagination, units, errors and the write flow are
+Start with [Conventions](/api-reference/conventions) — pagination, units, errors and the write flow are
 shared by everything below and are not repeated per endpoint.
 
 ## Base URLs
@@ -30,7 +30,7 @@ Both hosts serve identical paths. Every path in this reference begins with `/api
 
 1. **`limit` is capped at 100** on list endpoints. Page rather than asking for more.
 2. **Units are mixed within the same object.** `price` is in AE; `market_cap`, `dao_balance` and
-   `total_supply` are in base units and need dividing by 1e18. [Conventions](/api/conventions)
+   `total_supply` are in base units and need dividing by 1e18. [Conventions](/api-reference/conventions)
    has the full table and the evidence.
 3. **Date parameters are spelled three different ways** depending on the endpoint —
    `start_date`, `startDate` and `from_date`. Getting it wrong returns unfiltered data rather
@@ -40,19 +40,19 @@ Both hosts serve identical paths. Every path in this reference begins with `/api
 
 | Page | What it covers |
 | --- | --- |
-| [Conventions](/api/conventions) | Pagination, shared query parameters, units, errors, status codes, authentication |
-| [Posts](/api/posts) | The feed, single posts, comments, topics, tips and the combined activity feed |
-| [Tokens](/api/tokens) | The full `TokenDto`, holders, history, performance and rankings |
-| [Accounts](/api/accounts) | Account records, holdings, portfolio value, PnL and the leaderboard |
-| [Transactions](/api/transactions) | Buys and sells, by token, by account or by hash |
-| [Trending & Topics](/api/trending) | Scored tags, topics, trending score and unified search |
-| [Analytics](/api/analytics) | Platform aggregates and AE fiat rates |
-| [Profile](/api/profile) | Profile reads and every write endpoint in the API |
-| [Factory & Contracts](/api/factory-and-contracts) | Discovering the live factory, its collections and their naming rules |
-| [Invitations & Affiliations](/api/invitations-and-affiliations) | Invite claim status and referral analytics |
-| [DEX](/api/dex) | AMM tokens, pairs, routes and swap transactions |
-| [WebSocket](/api/websocket) | The four Socket.IO channels that push live token data |
-| [Node & Middleware](/api/node-and-middleware) | Direct chain access when the REST API is not enough |
+| [Conventions](/api-reference/conventions) | Pagination, shared query parameters, units, errors, status codes, authentication |
+| [Posts](/api-reference/posts) | The feed, single posts, comments, topics, tips and the combined activity feed |
+| [Tokens](/api-reference/tokens) | The full `TokenDto`, holders, history, performance and rankings |
+| [Accounts](/api-reference/accounts) | Account records, holdings, portfolio value, PnL and the leaderboard |
+| [Transactions](/api-reference/transactions) | Buys and sells, by token, by account or by hash |
+| [Trending & Topics](/api-reference/trending) | Scored tags, topics, trending score and unified search |
+| [Analytics](/api-reference/analytics) | Platform aggregates and AE fiat rates |
+| [Profile](/api-reference/profile) | Profile reads and every write endpoint in the API |
+| [Factory & Contracts](/api-reference/factory-and-contracts) | Discovering the live factory, its collections and their naming rules |
+| [Invitations & Affiliations](/api-reference/invitations-and-affiliations) | Invite claim status and referral analytics |
+| [DEX](/api-reference/dex) | AMM tokens, pairs, routes and swap transactions |
+| [WebSocket](/api-reference/websocket) | The four Socket.IO channels that push live token data |
+| [Node & Middleware](/api-reference/node-and-middleware) | Direct chain access when the REST API is not enough |
 
 ## Full endpoint index
 
@@ -321,9 +321,9 @@ OpenAPI document or Swagger UI for `api.superhero.com` that either repository po
 
 ## Read more
 
-- [Conventions](/api/conventions) — read this before any endpoint page
-- [Tokens](/api/tokens) — the most-used part of the API
-- [Node & Middleware](/api/node-and-middleware) — what to do when this API does not have the data
+- [Conventions](/api-reference/conventions) — read this before any endpoint page
+- [Tokens](/api-reference/tokens) — the most-used part of the API
+- [Node & Middleware](/api-reference/node-and-middleware) — what to do when this API does not have the data
 - [Agent quickstart](/agents/quickstart) — the fastest path from these endpoints to a working agent
 - [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
 - [superhero-agent-skill on GitHub](https://github.com/superhero-com/superhero-agent-skill) — scripts that call these endpoints for real

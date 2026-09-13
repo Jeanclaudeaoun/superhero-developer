@@ -205,7 +205,7 @@ contracts are **not** in config — they are deployed per community, so you look
 `https://api.superhero.com` on mainnet, `https://testnet.api.dev.tokensale.org` on testnet. The node
 and middleware are separate: `https://mdw.wordcraft.fun` and `https://mdw.wordcraft.fun/mdw` on
 mainnet, `https://testnet.aeternity.io` and `https://testnet.aeternity.io/mdw` on testnet. See
-[Conventions](/api/conventions).
+[Conventions](/api-reference/conventions).
 
 ### Is the API authenticated? Are there rate limits?
 
@@ -249,13 +249,13 @@ are sending AE, not tokens. See [Where the Money Goes](/concepts/value-flow).
 The contract returns an integer `tip_id`. The clients and the API use that integer with a `_v3`
 suffix, so a post published as `tip_id` 12352 is addressed as `12352_v3` and shown at a slug URL
 like `https://superhero.com/post/ever-notice-crypto-communities-12352`. A comment is an ordinary
-post whose first media entry is `comment:PARENT_ID`. See [Posts](/api/posts).
+post whose first media entry is `comment:PARENT_ID`. See [Posts](/api-reference/posts).
 
 ### How do I get live updates instead of polling?
 
 Open a socket.io connection to the API origin and subscribe to `token-created`, `token-updated`,
 `token-transaction` or `token-history`. Two of them fan out per `sale_address`. See
-[WebSocket](/api/websocket).
+[WebSocket](/api-reference/websocket).
 
 ### Which SDK should I use?
 

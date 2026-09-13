@@ -157,7 +157,7 @@ Note the mix of `/v2/` and `/v3/` paths in the web app. Both work against the sa
 
 For chain names specifically, prefer the Superhero API's own batch helper —
 `GET /api/accounts/chain-names?addresses=ak_a,ak_b` resolves up to 25 at a time in one request —
-and fall back to the middleware only for names it does not know. See [Accounts](/api/accounts).
+and fall back to the middleware only for names it does not know. See [Accounts](/api-reference/accounts).
 
 ## The middleware mirror on api.superhero.com
 
@@ -192,9 +192,9 @@ No component in the web app calls any of them, so treat the shapes as unexercise
 
 | You need | Go to |
 | --- | --- |
-| Token prices, holders, trades, trending, portfolio value | Superhero API — [Tokens](/api/tokens), [Accounts](/api/accounts) |
-| Posts, comments, topics, tips | Superhero API — [Posts](/api/posts) |
-| Claim status of invites you issued | Superhero API — [Invitations](/api/invitations-and-affiliations) |
+| Token prices, holders, trades, trending, portfolio value | Superhero API — [Tokens](/api-reference/tokens), [Accounts](/api-reference/accounts) |
+| Posts, comments, topics, tips | Superhero API — [Posts](/api-reference/posts) |
+| Claim status of invites you issued | Superhero API — [Invitations](/api-reference/invitations-and-affiliations) |
 | A raw transaction by hash, or "is my transaction confirmed?" | Middleware `GET /v3/transactions/{hash}` |
 | Every call an account made to a specific contract | Middleware `GET /v3/transactions?contract=&caller_id=` |
 | AEX-9 balances for an arbitrary token | Middleware `GET /v3/accounts/{ak}/aex9/balances` |
@@ -210,10 +210,10 @@ the Superhero API indexes after that. For anything where staleness matters, read
 
 ## Read more
 
-- [API Conventions](/api/conventions) — how the Superhero API's conventions differ from the middleware's
-- [Transactions API](/api/transactions) — Superhero trade records, and how `tx_hash` links back to the chain
-- [Accounts API](/api/accounts) — the batch chain-name resolver to use before falling back here
-- [Invitations & Affiliations](/api/invitations-and-affiliations) — a worked example of combining both sources
+- [API Conventions](/api-reference/conventions) — how the Superhero API's conventions differ from the middleware's
+- [Transactions API](/api-reference/transactions) — Superhero trade records, and how `tx_hash` links back to the chain
+- [Accounts API](/api-reference/accounts) — the batch chain-name resolver to use before falling back here
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — a worked example of combining both sources
 - [Networks](/aeternity/networks) — mainnet and testnet, and what a network id means
 - [æternity node API documentation](https://api-docs.aeternity.io/) — the node's own reference
 - [ae_mdw on GitHub](https://github.com/aeternity/ae_mdw) — the middleware's endpoint list and source

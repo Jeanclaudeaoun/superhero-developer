@@ -31,7 +31,7 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 
 Note the casing split: the account-scoped portfolio endpoints and the leaderboard use
 **camelCase** `startDate` / `endDate`, unlike the snake_case `start_date` / `end_date` used
-everywhere under `/api/analytics`. See [Conventions](/api/conventions).
+everywhere under `/api/analytics`. See [Conventions](/api-reference/conventions).
 
 ## `GET /api/accounts/{address}`
 
@@ -44,7 +44,7 @@ Returns the account aggregate the web app types as `AccountAggregate`:
 | `chain_name` | string or null | Legacy `.chain` name field |
 | `chain_name_updated_at` | string or null | ISO 8601 |
 | `links` | object or null | Verified address links, see below |
-| `profile` | object or null | Profile payload, see [Profile](/api/profile) |
+| `profile` | object or null | Profile payload, see [Profile](/api-reference/profile) |
 | `public_name` | string or null | Resolved display name |
 | `x_username` | string or null | Legacy X handle field |
 
@@ -230,10 +230,10 @@ curl -s "https://api.superhero.com/api/accounts/leaderboard?window=30d&sortBy=ro
 
 ## Read more
 
-- [API Conventions](/api/conventions) — the camelCase/snake_case date-parameter split, and the leaderboard's non-standard `meta`
-- [Tokens API](/api/tokens) — the `TokenDto` nested inside each holding
-- [Transactions API](/api/transactions) — the individual trades these aggregates are built from
-- [Profile API](/api/profile) — writing to the `links` block documented above
+- [API Conventions](/api-reference/conventions) — the camelCase/snake_case date-parameter split, and the leaderboard's non-standard `meta`
+- [Tokens API](/api-reference/tokens) — the `TokenDto` nested inside each holding
+- [Transactions API](/api-reference/transactions) — the individual trades these aggregates are built from
+- [Profile API](/api-reference/profile) — writing to the `links` block documented above
 - [Portfolio](/tokens/portfolio) — what these numbers mean for a trader
 - [Leaderboard on superhero.com](https://superhero.com/trends/leaderboard) — the live view of this endpoint
 

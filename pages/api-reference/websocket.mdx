@@ -88,7 +88,7 @@ trades collapses into a single refetch.
 
 `data` carries the trade fields and `token` carries the token. The app spreads them into one
 object and runs its usual transaction normalisation — see the field-alias note on
-[Transactions](/api/transactions) — then prepends the row to its cached
+[Transactions](/api-reference/transactions) — then prepends the row to its cached
 `GET /api/transactions` page and bumps `meta.totalItems`.
 
 ### `token-history`
@@ -205,7 +205,7 @@ polling instead. `forceNew: true` is set alongside it, because transport and upg
 manager-level options that Socket.IO would otherwise ignore when reusing a manager for the origin.
 
 The token comes from the feed session flow described in
-[Conventions](/api/conventions#authentication): challenge, wallet signature, then a bearer token
+[Conventions](/api-reference/conventions#authentication): challenge, wallet signature, then a bearer token
 cached in `localStorage`. The REST side of the same subsystem:
 
 ```text
@@ -229,10 +229,10 @@ by default), not on this socket. Chain events are also absent; for those, watch 
 
 ## Read more
 
-- [Transactions API](/api/transactions) — the REST form of the `token-transaction` payload, and the field aliases to normalise
-- [Tokens API](/api/tokens) — the full `TokenDto` that `token-updated` sends partial updates for
-- [API Conventions](/api/conventions) — base URLs, the `PriceDto` currency keys and the units rule
-- [Node & Middleware](/api/node-and-middleware) — for chain-level events rather than Superhero events
+- [Transactions API](/api-reference/transactions) — the REST form of the `token-transaction` payload, and the field aliases to normalise
+- [Tokens API](/api-reference/tokens) — the full `TokenDto` that `token-updated` sends partial updates for
+- [API Conventions](/api-reference/conventions) — base URLs, the `PriceDto` currency keys and the units rule
+- [Node & Middleware](/api-reference/node-and-middleware) — for chain-level events rather than Superhero events
 - [Socket.IO client documentation](https://socket.io/) — the protocol this endpoint speaks
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live table these channels drive
 

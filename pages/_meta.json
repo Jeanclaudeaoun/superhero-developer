@@ -23,13 +23,13 @@
     "title": "Build"
   },
   "agents": "AI Agents",
-  "api": "API Reference",
+  "api-reference": "API Reference",
   "contracts": "Smart Contracts",
   "-- chain": {
     "type": "separator",
     "title": "Underlying Chain"
   },
-  "aeternity": "\u00e6ternity Blockchain",
+  "aeternity": "æternity Blockchain",
   "-- ref": {
     "type": "separator",
     "title": "Reference"
@@ -37,13 +37,13 @@
   "resources": "Resources",
   "contributing": "Contributing",
   "superhero": {
-    "title": "superhero.com \u2197",
+    "title": "superhero.com ↗",
     "type": "page",
     "href": "https://superhero.com",
     "newWindow": true
   },
   "agentskill": {
-    "title": "Agent Skill \u2197",
+    "title": "Agent Skill ↗",
     "type": "page",
     "href": "https://github.com/superhero-com/superhero-agent-skill",
     "newWindow": true

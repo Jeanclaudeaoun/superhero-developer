@@ -22,7 +22,7 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 
 These are **Superhero trade records**, not raw chain transactions. For arbitrary chain history —
 transfers, contract calls, name transactions — go to the middleware instead; see
-[Node & Middleware](/api/node-and-middleware).
+[Node & Middleware](/api-reference/node-and-middleware).
 
 ## `GET /api/transactions`
 
@@ -87,7 +87,7 @@ under either.
 
 ### Units
 
-Same split as everywhere else in the API — see [Conventions](/api/conventions):
+Same split as everywhere else in the API — see [Conventions](/api-reference/conventions):
 
 - `price`, `sell_price` and every `PriceDto` field are in **AE**, already whole units.
 - `volume` is in **token base units** — divide by 10 raised to the token's `decimals`.
@@ -122,13 +122,13 @@ curl -s "https://api.superhero.com/api/tokens/SUPERHERO/transactions?interval=36
 ```
 
 For OHLC candles specifically, `GET /api/tokens/{address}/history` is the better endpoint — see
-[Tokens](/api/tokens).
+[Tokens](/api-reference/tokens).
 
 ## Live trades
 
 Polling `/api/transactions` is not the only option. The API pushes every trade over Socket.IO on
 the `token-transaction` and `token-history` channels, and the web app seeds its list from this
-endpoint once and then updates from the socket. See [WebSocket](/api/websocket).
+endpoint once and then updates from the socket. See [WebSocket](/api-reference/websocket).
 
 ## Relating a record to the chain
 
@@ -145,11 +145,11 @@ The web app polls the middleware form of this while a trade is confirming, treat
 
 ## Read more
 
-- [API Conventions](/api/conventions) — the units table and the shared pagination envelope
-- [Tokens API](/api/tokens) — the `TokenDto` that `includes=token` inlines
-- [Accounts API](/api/accounts) — the aggregated PnL these individual trades roll up into
-- [WebSocket API](/api/websocket) — push instead of poll for the same records
-- [Node & Middleware](/api/node-and-middleware) — chain history beyond Superhero trades
+- [API Conventions](/api-reference/conventions) — the units table and the shared pagination envelope
+- [Tokens API](/api-reference/tokens) — the `TokenDto` that `includes=token` inlines
+- [Accounts API](/api-reference/accounts) — the aggregated PnL these individual trades roll up into
+- [WebSocket API](/api-reference/websocket) — push instead of poll for the same records
+- [Node & Middleware](/api-reference/node-and-middleware) — chain history beyond Superhero trades
 - [æScan](https://aescan.io/) — the block explorer for resolving a `tx_hash`
 
 ## Open questions

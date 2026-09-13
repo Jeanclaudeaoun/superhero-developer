@@ -33,7 +33,7 @@ Each `/api/bcl-affiliation/*` endpoint has a `/preview` sibling that takes no pa
 Account-level invite counters live on the accounts endpoint instead —
 `GET /api/accounts?order_by=total_invitation_count` also accepts
 `total_claimed_invitation_count` and `total_revoked_invitation_count`. See
-[Accounts](/api/accounts).
+[Accounts](/api-reference/accounts).
 
 ## `GET /api/invitations`
 
@@ -100,7 +100,7 @@ generated client — treat that as undocumented, not as an open write endpoint.
 
 The three-segment `POST` path takes an OAuth-style `provider` and `access_code` alongside the
 invite code, which reads as a social-provider reward path parallel to the X flows on
-[Profile](/api/profile). Nothing in either repository confirms that reading.
+[Profile](/api-reference/profile). Nothing in either repository confirms that reading.
 
 ## How this relates to the on-chain treasury
 
@@ -141,7 +141,7 @@ GET {middlewareUrl}/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNx
 
 It then filters to `tx.function === 'register_invitation_code'`, reads the invitee addresses from
 argument 0 and the per-invite amount from argument 2 (in **aettos** — divide by 1e18), and follows
-`response.next` to page. See [Node & Middleware](/api/node-and-middleware).
+`response.next` to page. See [Node & Middleware](/api-reference/node-and-middleware).
 
 So the complete picture of one inviter's invites needs both sources: the middleware for what was
 created and for how much, and `GET /api/invitations?inviter=...` for what has since been claimed.
@@ -162,10 +162,10 @@ with the rest of `/api/analytics`.
 
 ## Read more
 
-- [API Conventions](/api/conventions) — pagination and the write-endpoint authentication model
-- [Accounts API](/api/accounts) — the per-account invitation counters
-- [Factory & Contracts API](/api/factory-and-contracts) — discovering the factory the treasury hangs off
-- [Node & Middleware](/api/node-and-middleware) — the middleware query behind invite creation
+- [API Conventions](/api-reference/conventions) — pagination and the write-endpoint authentication model
+- [Accounts API](/api-reference/accounts) — the per-account invitation counters
+- [Factory & Contracts API](/api-reference/factory-and-contracts) — discovering the factory the treasury hangs off
+- [Node & Middleware](/api-reference/node-and-middleware) — the middleware query behind invite creation
 - [Affiliation treasury](/contracts/affiliation-treasury) — the contract itself
 - [Invite links](/rewards/invite-links) — the feature from a user's point of view
 - [Invite page on superhero.com](https://superhero.com/trends/invite) — where invites are generated

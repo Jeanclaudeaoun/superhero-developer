@@ -105,7 +105,7 @@ belongs to.
 You do not have to join against the factory schema to label a token — `TokenDto` carries
 `collection` (the id string) and `collection_info`, a resolved `CollectionInfoDto` with `id`,
 `name`, `description` and `allowed_name_length`. `collection_info` is `null` when the token has no
-collection or the collection is unknown to the factory. See [Tokens](/api/tokens).
+collection or the collection is unknown to the factory. See [Tokens](/api-reference/tokens).
 
 You can also filter the token list by collection directly:
 
@@ -155,13 +155,13 @@ are likewise configuration rather than discovery; see [Contract addresses](/cont
 Both exist in the generated client. `GET /api/contracts` is marked `@deprecated` there;
 `GET /api/stats` is not deprecated but has no caller anywhere in either repository, and both are
 typed `any`. Neither has a documented response shape. Use `/api/factory` for the factory and
-[Analytics](/api/analytics) for platform numbers.
+[Analytics](/api-reference/analytics) for platform numbers.
 
 ## Read more
 
-- [Tokens API](/api/tokens) — `collection`, `collection_info` and `factory_address` on every token
-- [API Conventions](/api/conventions) — base URLs, and why reads need no credential
-- [Invitations & Affiliations](/api/invitations-and-affiliations) — the affiliation treasury reached through the factory
+- [Tokens API](/api-reference/tokens) — `collection`, `collection_info` and `factory_address` on every token
+- [API Conventions](/api-reference/conventions) — base URLs, and why reads need no credential
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — the affiliation treasury reached through the factory
 - [Community factory](/contracts/community-factory) — what the contract itself does
 - [Collections and naming](/tokens/collections-and-naming) — the naming rules from a creator's point of view
 - [Contract addresses](/contracts/addresses) — the addresses this endpoint does not cover

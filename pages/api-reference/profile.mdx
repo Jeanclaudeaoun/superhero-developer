@@ -18,7 +18,7 @@ Two endpoints return overlapping data, and the web app uses both, in this order:
 
 1. **`GET /api/accounts/{address}`** — the primary read. Returns the account aggregate with the
    verified `links` block. This is the authoritative source for a linked X handle, bio, website
-   and preferred `.chain` name. Documented on [Accounts](/api/accounts).
+   and preferred `.chain` name. Documented on [Accounts](/api-reference/accounts).
 2. **`GET /api/profile/{address}`** — a secondary read used only to fill fields the account
    record did not supply.
 
@@ -242,9 +242,9 @@ address-link endpoints above.
 
 ## Read more
 
-- [API Conventions](/api/conventions) — the full list of challenge/submit pairs across the API
-- [Accounts API](/api/accounts) — `GET /api/accounts/{address}` and the `links` precedence rule
-- [Posts API](/api/posts) — `PostDto.sender`, the inlined profile on every post
+- [API Conventions](/api-reference/conventions) — the full list of challenge/submit pairs across the API
+- [Accounts API](/api-reference/accounts) — `GET /api/accounts/{address}` and the `links` precedence rule
+- [Posts API](/api-reference/posts) — `PostDto.sender`, the inlined profile on every post
 - [Profiles](/identity/profiles) — what a Superhero profile is, beyond its wire format
 - [Chain names](/identity/chain-names) — what a `.chain` name buys you
 - [X verification](/identity/x-verification) — the OAuth half of the X link flow

@@ -136,7 +136,7 @@ Subscriptions made before the socket connects are queued and replayed on `connec
 reconnects after 1000 ms. Notifications ride a separate socket.io namespace
 (`src/features/notifications/notification-feed-client.ts`). Chat is neither: it is a Nostr
 connection to `wss://relay.superhero.chat`, whose origin must also appear in the server's CSP
-`connect-src` allowlist or every socket dies at connect time. See [WebSocket](/api/websocket).
+`connect-src` allowlist or every socket dies at connect time. See [WebSocket](/api-reference/websocket).
 
 ## What is open source, and where
 
@@ -173,7 +173,7 @@ The full address list, including the DEX contracts, is in [Deployed Addresses](/
 
 - [Deployed Addresses](/contracts/addresses) — every contract address for both networks.
 - [Events](/contracts/events) — the event signatures the indexer subscribes to, per contract.
-- [WebSocket](/api/websocket) — the four channels above, with payload shapes.
+- [WebSocket](/api-reference/websocket) — the four channels above, with payload shapes.
 - [Where the Money Goes](/concepts/value-flow) — what each arrow in the buy diagram is worth.
 - [Calling Contracts](/contracts/calling-contracts) — doing the above yourself with the æternity SDK.
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the "System Architecture" section.

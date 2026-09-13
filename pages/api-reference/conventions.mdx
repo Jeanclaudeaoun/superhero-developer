@@ -31,7 +31,7 @@ OpenAPI.BASE = (CONFIG.SUPERHERO_API_URL || 'https://api.superhero.com').replace
 
 Every path in this reference is relative to that base and begins with `/api/`. The only versioned
 prefix in the whole surface is `/api/v2/mdw/*` (the indexed chain mirror — see
-[Node & Middleware](/api/node-and-middleware)).
+[Node & Middleware](/api-reference/node-and-middleware)).
 
 ## Authentication
 
@@ -68,7 +68,7 @@ The server verifies the signature against the address in the request, so possess
 | Notification preferences | `POST /api/notifications/preferences/challenge` | `POST /api/notifications/{address}/preferences` |
 
 Each `claim` flow has a matching `unclaim` and `unclaim/submit` pair that reverses it, signed the
-same way. See [Profile](/api/profile) for the exact bodies.
+same way. See [Profile](/api-reference/profile) for the exact bodies.
 
 **One subsystem does issue a bearer token.** The notification feed trades a single wallet
 signature for a session token, and then uses it as a normal `Authorization: Bearer` header:
@@ -135,7 +135,7 @@ Do not write a generic paginator that assumes `items` everywhere.
 | `GET /api/feed` | Keyset pagination: `items` plus `next_cursor`. Pass the cursor back as `cursor`; there is no page number. |
 
 The analytics series endpoints also return bare arrays, and the totals endpoints return a scalar
-or a small object — see [Analytics](/api/analytics).
+or a small object — see [Analytics](/api-reference/analytics).
 
 ## Shared query parameters
 
@@ -250,11 +250,11 @@ the API.
 
 ## Read more
 
-- [API Reference](/api) — the full endpoint index, grouped by resource
-- [Tokens API](/api/tokens) — the `TokenDto` these unit rules apply to, field by field
-- [Accounts API](/api/accounts) — the portfolio and leaderboard endpoints with the camelCase date parameters
-- [Profile API](/api/profile) — the challenge/signature write flow end to end
-- [Node & Middleware](/api/node-and-middleware) — what to do when the REST API does not have the data
+- [API Reference](/api-reference) — the full endpoint index, grouped by resource
+- [Tokens API](/api-reference/tokens) — the `TokenDto` these unit rules apply to, field by field
+- [Accounts API](/api-reference/accounts) — the portfolio and leaderboard endpoints with the camelCase date parameters
+- [Profile API](/api-reference/profile) — the challenge/signature write flow end to end
+- [Node & Middleware](/api-reference/node-and-middleware) — what to do when the REST API does not have the data
 - [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
 
 ## Open questions
