@@ -1,21 +1,200 @@
 ---
 title: "Swapping"
-description: "Trade any pair through the DEX router."
+description: "Trade any pair through the DEX router — routing, quoting, price impact, slippage and the entrypoints behind each swap."
 ---
 
 # Swapping
 
-> **Page brief** — Document the swap UI and the router call behind it, including routing and price impact.
->
-> `status: outline` · `depth: standard`
+`https://superhero.com/defi/swap` trades AEX-9 tokens against liquidity pools through the
+`AedexV2Router` contract. You pick two tokens, the app finds a route, quotes it against the
+router, and submits one of six swap entrypoints depending on whether native AE is on either
+side.
 
-## What this page still needs
+**This is not the bonding curve.** Buying a community token on its own page mints new supply
+against a fixed formula; swapping here moves tokens between pool reserves. The two prices for
+the same token are unrelated and nothing arbitrages them for you. See
+[the comparison table](/defi) before you assume a DEX quote reflects the curve price.
 
-- Document the swap form: token selection, route display, slippage tolerance, deadline.
-- Explain multi-hop routing and how the route is chosen.
-- Document the router contract interface and a raw swap example.
+## The form
 
-## Sources to mine
+| Field | Behaviour |
+| --- | --- |
+| From / To | Token pickers. Native `AE` is selectable and is handled specially. |
+| Amount | Type into either side. Typing into **From** quotes exact-in; typing into **To** quotes exact-out. |
+| Route | Shown once a path is found, including any intermediate hop. |
+| Price impact | Computed from pool reserves, when the indexer supplied them. |
+| Settings | Slippage tolerance and transaction deadline. |
 
-- `superhero/src/features/dex/views/DexSwap.tsx`
-- `superhero/src/config.ts` — `DEX_ROUTER`, `DEX_FACTORY`
+Quotes are debounced by 300 ms after you stop typing, and every quote carries a sequence
+number so a slow response from an earlier keystroke cannot overwrite a newer one.
+
+Below the form sit a candlestick chart for the selected pair and a Recent Activity list of
+your own swaps, wraps and unwraps.
+
+## Settings: slippage and deadline
+
+Open **Settings** on the swap card.
+
+| Setting | Default | Presets | Allowed range | Stored as |
+| --- | --- | --- | --- | --- |
+| Slippage tolerance | **5%** | 0.1, 0.5, 1.0 | 0 to 50 | `dex:slippage` in local storage |
+| Transaction deadline | **30 minutes** | 10, 20, 30 | 1 to 60 | `dex:deadline` in local storage |
+
+The 5% default is high compared with most AMM front-ends, and it applies to every swap until
+you change it. On a deep pool that is simply unnecessary slack; on a thin one it is the
+difference between a bad fill and a rejected transaction. Set it deliberately.
+
+What each one does at the contract boundary:
+
+- **Slippage** sets the protective bound, not the price. For an exact-in swap the app
+  computes `amountOutMin` by subtracting your tolerance from the quoted output. For exact-out
+  it queries `get_amounts_in`, adds the tolerance, and passes the result as `amountInMax`.
+  If the pool has moved past that bound by the time the transaction executes, the router
+  reverts and you keep your tokens.
+- **Deadline** becomes an absolute timestamp: the app sends `Date.now()` plus your minutes,
+  **in milliseconds since epoch**. Past it, the router refuses the swap. Note the unit — the
+  router here expects milliseconds, not seconds.
+
+## How a route is found
+
+1. **AE to WAE, or WAE to AE, short-circuits.** No route is computed; it becomes a wrap or
+   unwrap at 1:1 with zero price impact. See [Wrapped AE](/defi/wrapped-ae).
+2. **Ask the DEX indexer.** `GET /api/dex/swap-routes/<from_token>/<to_token>` returns
+   candidate routes, each a list of pairs with their reserves. Native AE is substituted with
+   the WAE address before the lookup, and the two addresses are sorted before being sent.
+3. **Prefer synchronized routes.** Routes where every pair reports `synchronized` are used if
+   any exist; otherwise all candidates are considered. A route whose derived path ends at the
+   requested output token wins.
+4. **Fall back to the chain.** If the indexer is unreachable or returns nothing, the app asks
+   the factory for a direct pair via `get_pair`. If there is none, and neither token is WAE,
+   it tries a two-hop path through WAE.
+5. **No path, no quote.** If all of that fails the quote errors with "No route found".
+
+## How the number you see is produced
+
+Two different calculations run, and they are used for different things.
+
+- **Reserve math** gives the spot ratio across the route and powers the price-impact and
+  liquidity checks. The ratio is the product of `reserveOut / reserveIn` across each hop,
+  shifted by the decimal difference between the two tokens.
+- **The router** gives the number actually displayed. `get_amounts_out(amountIn, path)` for
+  exact-in, `get_amounts_in(amountOut, path)` for exact-out. When the router answers, its
+  figure replaces the reserve-derived estimate.
+
+Price impact is computed from reserves alone, by simulating the trade hop by hop under the
+constant-product invariant:
+
+```text
+For each hop, with reserves (rIn, rOut) and input amount a:
+    k          = rIn × rOut
+    rIn'       = rIn + a
+    rOut'      = k / rIn'
+    received   = rOut − rOut'          (feeds the next hop as its input)
+
+marketPrice    = 1 / (product of rOut/rIn across the route)
+executionPrice = amountIn / receivedOut
+priceImpact    = (executionPrice − marketPrice) × −100 / executionPrice
+```
+
+Note that this simulation uses the raw constant product without the swap fee, so the figure
+is a pure depth measure, not a full cost estimate. And it is only available when the indexer
+supplied reserves — if the route came from the on-chain fallback, no price impact is shown.
+
+**Liquidity ceiling.** The app also checks your input against the first hop's input-side
+reserve. If you are trying to spend more than that reserve holds, it flags the swap as
+exceeding available liquidity and reports the maximum available instead of letting you submit
+a trade that will execute at a ruinous price.
+
+## Fees
+
+The swap fee is **0.3% of the trade**, and it goes to the pool's liquidity providers, not to
+Superhero. æternity's documentation states the exchange has no platform fee beyond the
+liquidity-provider reward, capped at 0.3%. That fee is charged inside the pair contract and
+is already reflected in the router's `get_amounts_out` answer — it is not a separate line
+item you pay.
+
+On top of it you pay the ordinary æternity transaction fee, plus a second transaction fee if
+an allowance approval is needed.
+
+## Approvals
+
+Native AE needs no allowance. Any AEX-9 input does.
+
+Before an exact-in swap with a token input, the app reads your current allowance for the
+router and, if it is short, raises it. The router's contract address is converted from its
+`ct_` form to the corresponding `ak_` form for the allowance record, because AEX-9 allowances
+are keyed by account address. Then:
+
+- No allowance record at all → `create_allowance(router, needed)`
+- A record that is too small → `change_allowance(router, needed − current)`
+
+That is a separate transaction you sign. The swap card shows a two-step indicator ("Approve
+token", then "Execute swap") when it happens. For an exact-out swap the approval is deferred
+until after `get_amounts_in` has run, so the allowance covers the slippage-padded maximum
+input rather than the nominal amount.
+
+## The six swap entrypoints
+
+Which router entrypoint is called depends only on whether native AE is the input, the output,
+or neither, and on whether you fixed the input or the output amount.
+
+| Input | Output | Exact | Entrypoint |
+| --- | --- | --- | --- |
+| Token | Token | in | `swap_exact_tokens_for_tokens(amountIn, amountOutMin, path, to, deadline, referrer)` |
+| Token | Token | out | `swap_tokens_for_exact_tokens(amountOut, amountInMax, path, to, deadline, referrer)` |
+| AE | Token | in | `swap_exact_ae_for_tokens(amountOutMin, path, to, deadline, referrer)` with the AE attached as call value |
+| AE | Token | out | `swap_ae_for_exact_tokens(amountOut, path, to, deadline, referrer)` with the padded maximum attached as call value |
+| Token | AE | in | `swap_exact_tokens_for_ae(amountIn, amountOutMin, path, to, deadline, referrer)` |
+| Token | AE | out | `swap_tokens_for_exact_ae(amountOut, amountInMax, path, to, deadline, referrer)` |
+
+`to` is your own address. `referrer` is passed as `null` by the Superhero front-end. An
+AE-to-AE route is rejected outright as invalid.
+
+Router and factory addresses for both networks are in the
+[deployment table](/defi). At startup the app asks the router for its own `factory()` and only
+falls back to the configured factory address if that call fails.
+
+## What can go wrong
+
+| Symptom | Cause |
+| --- | --- |
+| "No route found" | No pool connects the two tokens, directly or through WAE |
+| Quote shows but the swap reverts | The pool moved past your slippage bound, or the deadline passed |
+| A large price impact warning | The pool is thin relative to your trade size — split it or pick another route |
+| "Exceeds available liquidity" | Your input is larger than the first hop's input reserve |
+| Two wallet prompts for one swap | The first is the AEX-9 allowance approval |
+| Insufficient balance error | Checked client-side before submission, against the input token's balance |
+
+## Swapping from an agent or a script
+
+The agent skill's `scripts/superhero-token-swap.mjs` is a **bonding-curve** tool — its `buy`,
+`sell` and `price` commands call the token sale contract, not the router. There is no
+DEX-swap script in the skill. To swap on the AMM programmatically, initialise the router with
+the `AedexV2Router` ACI from `dex-contracts-v2` and call the entrypoints in the table above
+directly.
+
+## Open questions
+
+- **What makes a route "synchronized"?** The indexer marks pairs with this flag and the
+  client prefers routes where every pair carries it, but the meaning — presumably that the
+  indexer's cached reserves match the chain at the current height — is defined by the DEX
+  backend, not by the app.
+- **Does the router support routes longer than two hops?** The on-chain fallback only ever
+  builds a direct or a WAE-mediated path, but the indexer can return arbitrary-length routes
+  and the app will use whichever one ends at the right token. How long a path the backend
+  will actually produce is its own policy.
+- **Is the 0.3% fee configurable per pair?** The æternity documentation describes it as
+  capped at 0.3%; whether individual pairs can deploy with a lower fee is a question for the
+  pair contract, not the front-end.
+
+## Read more
+
+- [Liquidity Pools](/defi/pools) — the other side of every swap, and where the 0.3% goes.
+- [Wrapped AE](/defi/wrapped-ae) — the 1:1 shortcut the swap form takes for AE and WAE.
+- [Exploring the DEX](/defi/explore) — finding a pair and checking its depth before you trade.
+- [Bonding curve fees and slippage](/tokens/fees-and-slippage) — the equivalent mechanics on
+  the curve side, which work differently.
+- [DEX API](/api/dex) — the `/api/dex/*` endpoints, including swap routes.
+- [Swap on superhero.com](https://superhero.com/defi/swap) — the live form.
+- [dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) — the router, factory and
+  pair contracts, with their ACIs.

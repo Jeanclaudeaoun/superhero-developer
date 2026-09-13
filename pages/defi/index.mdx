@@ -5,19 +5,99 @@ description: "Swapping, liquidity pools, wrapped AE and bridging — the AMM sid
 
 # DeFi & DEX
 
-> **Page brief** — Document the DEX, and be explicit that it is a different market from the bonding curve. Readers mix them up.
->
-> `status: outline` · `depth: overview`
+Superhero embeds a full automated market maker at `/defi`. You can swap any pair that has a
+pool, provide liquidity and earn fees, wrap AE into its AEX-9 form, and browse every token,
+pool and transaction on the exchange.
 
-Superhero embeds a full AMM DEX at `/defi`. **This is separate from the bonding-curve token
-market.** Bonding-curve community tokens are minted and burned against a curve; DEX tokens
-trade against liquidity pools. Different contracts, different pricing, different risks.
+**This is a different market from the bonding curve.** Readers mix the two up constantly, so
+start with the distinction before anything else.
+
+## The DEX is not the bonding curve
+
+| | Bonding curve (community tokens) | DEX (AMM) |
+| --- | --- | --- |
+| Where | `/trends/tokens/...` | `/defi/swap` |
+| What sets the price | A fixed exponential formula on supply | The ratio of two pool reserves |
+| What happens when you buy | Tokens are **minted** against the curve | Tokens are **bought from a pool**, nothing is minted |
+| What happens when you sell | Tokens are **burned** back to the curve | Tokens go **into the pool** |
+| Counterparty | The curve contract's reserve | Other liquidity providers |
+| Contracts | `AffiliationBondingCurveTokenSale`, `BondingCurveExponential` | `AedexV2Router`, `AedexV2Factory`, `AedexV2Pair` |
+| Fee | 1% spread, split 0.5% DAO and 0.5% affiliation | 0.3% per swap, to liquidity providers |
+| Can it run out of liquidity | No — the reserve always covers the full supply | Yes — a thin pool gives terrible prices or no route at all |
+| Main risk | Price falls back down the curve | Price impact, no route, and impermanent loss if you provide liquidity |
+
+Two consequences worth internalising:
+
+- **A community token's curve price and any DEX price for the same token are independent.**
+  Nothing arbitrages them automatically.
+- **Bonding-curve solvency guarantees do not transfer.** The curve can always buy back its
+  entire supply; a liquidity pool offers no such promise. If the liquidity providers leave,
+  you cannot sell at any price.
+
+## Routes
+
+| Route | What it does |
+| --- | --- |
+| `/defi` | Redirects to `/defi/swap` |
+| `/defi/swap` | The swap form, a candlestick chart for the selected pair, and recent activity |
+| `/defi/pool` | Your liquidity positions, plus the add and remove forms |
+| `/defi/pool/add-tokens` | Add-liquidity flow for a pair you pick |
+| `/defi/wrap` | Wrap AE into WAE and unwrap it back |
+| `/defi/explore/tokens` | Every token the DEX indexes |
+| `/defi/explore/tokens/<address>` | One token's detail page |
+| `/defi/explore/pools` | Every pair |
+| `/defi/explore/pools/<address>` | One pool's detail page |
+| `/defi/explore/transactions` | Filterable feed of every DEX transaction |
+| `/defi/bridge` | **Disabled.** Redirects to `/defi/swap` — see [Bridging from Ethereum](/defi/bridge) |
+| `/defi/buy-ae-with-eth` | **Disabled.** Redirects to `/defi/swap` |
+
+`/swap`, `/pool`, `/explore` and `/pool/add-tokens` still resolve as legacy paths.
+
+## Deployment addresses
+
+Both networks, from the app's build-time configuration:
+
+| Contract | Mainnet | Testnet |
+| --- | --- | --- |
+| Router | `ct_azbNZ1XrPjXfqBqbAh1ffLNTQ1sbnuUDFvJrXjYz7JQA1saQ3` | `ct_MLXQEP12MBn99HL6WDaiTqDbG4bJQ3Q9Bzr57oLfvEkghvpFb` |
+| Factory | `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` | `ct_NhbxN8wg8NLkGuzwRNDQhMDKSKBwDAQgxQawK7tkigi2aC7i9` |
+| WAE | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` | `ct_JDp175ruWd7mQggeHewSLS1PFXt9AzThCDaFedxon8mF8xTRF` |
+| aeETH | `ct_ryTY1mxqjCjq1yBn9i6HDaCSdA6thXUFZTA84EMzbWd1SLKdh` | `ct_WVqAvLQpvZCgBg4faZLXA1YBj43Fxj91D33Z8K7pFsY8YCofv` |
+
+The app also queries a DEX indexer alongside the chain:
+
+| Network | DEX backend |
+| --- | --- |
+| Mainnet | `https://dex-backend-mainnet.prd.service.aepps.com` |
+| Testnet | `https://dex-backend-testnet.prd.service.aepps.com` |
+
+At runtime the router is asked for its own `factory()` address, and the configured factory
+above is only used as a fallback.
 
 ## In this section
 
-- [Swapping](/defi/swap) — Document the swap UI and the router call behind it, including routing and price impact.
-- [Liquidity Pools](/defi/pools) — Cover adding and removing liquidity, LP tokens, fee accrual, and the risks.
-- [Wrapped AE](/defi/wrapped-ae) — Short and mechanical. Explain the WAE contract and the wrap/unwrap flow.
-- [Bridging from Ethereum](/defi/bridge) — Document the ae-eth bridge, the aeETH token, and the risks of bridging.
-- [Exploring the DEX](/defi/explore) — Document the three explore views and the data behind them.
-- [Buying AE](/defi/buy-ae) — Document the in-app purchase flow, its providers, and the alternatives.
+- [Swapping](/defi/swap) — the swap form, how a route is chosen, the router entrypoints
+  behind each swap shape, and what slippage and deadline actually do.
+- [Liquidity Pools](/defi/pools) — adding and removing liquidity, LP tokens, and impermanent
+  loss with a worked example.
+- [Wrapped AE](/defi/wrapped-ae) — why native AE cannot be a pool reserve, and the wrap and
+  unwrap calls.
+- [Bridging from Ethereum](/defi/bridge) — the real, currently-disabled status of the in-app
+  bridge, and what the code would do if it were re-enabled.
+- [Exploring the DEX](/defi/explore) — the three explore views and the `/api/dex/*` endpoints
+  behind them.
+- [Buying AE](/defi/buy-ae) — how to actually get AE, which is entirely third-party.
+
+## Read more
+
+- [Bonding curves](/tokens/bonding-curve) — the other market, and the one most Superhero
+  tokens actually trade on.
+- [Buying and selling tokens](/tokens/buying-and-selling) — the curve-side trade flow, for
+  comparison with the swap form.
+- [AEX-9 tokens](/wallets/aex9-tokens) — the token standard every DEX asset conforms to.
+- [DEX API](/api/dex) — the REST surface for tokens, pairs and transactions.
+- [Superhero DEX on superhero.com](https://superhero.com/defi/swap) — the live exchange.
+- [Superhero DEX on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-dex)
+  — æternity's own description of the exchange and its 0.3% fee.
+- [dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) — the AMM contracts,
+  including the QuviQ audit.

@@ -1,26 +1,151 @@
 ---
 title: "Bridging from Ethereum"
-description: "Move value between Ethereum and æternity."
+description: "The in-app Ethereum bridge is disabled. What that means, what the code would do if re-enabled, and where aeETH still matters."
 ---
 
 # Bridging from Ethereum
 
-> **Page brief** — Document the ae-eth bridge, the aeETH token, and the risks of bridging.
->
-> `status: outline` · `depth: standard`
+**The in-app bridge is currently disabled.** Both `/defi/bridge` and `/defi/buy-ae-with-eth`
+resolve to redirects that send you to `/defi/swap`. You cannot bridge from inside Superhero
+in this build, and any guide that tells you to is out of date.
+
+The bridge *code* is still in the repository, complete with contract addresses, an asset list
+and a working UI component. It is simply not reachable. This page documents the real status
+first, then what that code says the bridge does, so you know what would come back if it were
+switched on.
+
+## The evidence
+
+Four independent switches are off, all in the shipped application:
+
+| Where | What is disabled |
+| --- | --- |
+| `src/routes.tsx` | The `Bridge` and `DexBridge` lazy imports are both commented out. |
+| `src/routes.tsx` | `/defi/bridge` and `/defi/buy-ae-with-eth` render `Navigate to="/defi/swap"`, with the real elements commented out beneath and a note saying how to re-enable them. |
+| `src/features/dex/layouts/DexLayout.tsx` | The DEX sidebar's `BRIDGE` and `BUY AE` navigation entries are commented out, along with their icons. |
+| `src/components/layout/RightRail.tsx` | The `BuyAeWidget` import, the rail card that embedded it, and the "Buy AE with ETH" quick action are all commented out. |
+
+A search across the whole `src/` tree for anything importing `features/ae-eth-bridge/` finds
+exactly two hits: the feature's own `README.md`, and the commented-out line in `routes.tsx`.
+Nothing else in the application references it. The same is true of the `ae-eth-buy` widget,
+whose only live consumer, `DexBridge`, is itself only referenced by a commented-out route.
+
+**Conclusion:** the ETH bridge feature is dead code in the shipped app. It is not hidden
+behind a feature flag, an environment variable or a permission — it is commented out at the
+route table, so no configuration change will surface it. Re-enabling it requires a code
+change and a rebuild.
+
+## What still works: aeETH on the DEX
+
+Disabling the bridge did not remove aeETH. The token address is still live configuration and
+is still a tradeable AEX-9 asset on the DEX:
 
 | Network | aeETH contract |
 | --- | --- |
 | Mainnet | `ct_ryTY1mxqjCjq1yBn9i6HDaCSdA6thXUFZTA84EMzbWd1SLKdh` |
 | Testnet | `ct_WVqAvLQpvZCgBg4faZLXA1YBj43Fxj91D33Z8K7pFsY8YCofv` |
 
-## What this page still needs
+If you already hold aeETH on æternity, you can still swap it at
+[`/defi/swap`](https://superhero.com/defi/swap) like any other token — the aeETH/WAE pair is
+what the disabled buy-with-ETH widget used to route through. What you cannot do from inside
+Superhero is create aeETH from ETH, or redeem it back to Ethereum.
 
-- Confirm the bridge's current availability — the route is commented out in `src/routes.tsx`.
-- Document supported assets, fees and settlement times in both directions.
-- State the trust model of the bridge plainly.
+## What the disabled code describes
 
-## Sources to mine
+Treat everything in this section as a description of code that does not run today. The
+addresses and parameters are what the feature was configured with when it was disabled, not
+verified live deployments.
 
-- `superhero/src/features/ae-eth-bridge/views/Bridge.tsx`
-- `superhero/src/routes.tsx` — the commented-out bridge route
+### Bridge contracts
+
+| | Mainnet | Testnet (Sepolia) |
+| --- | --- | --- |
+| Ethereum chain id | `0x1` | `0xaa36a7` |
+| æternity bridge contract | `ct_2Xdym95f2i998W9Zoh1NgAB7pVuQ34ztEsema7u4XwSoq5VKUJ` | `ct_2C5nHYyzUMiqU9HE32XNLN47pFEDL2bNpVTAsG5XmZNigvM4Fv` |
+| Ethereum bridge contract | `0xd099E3Ab65d6294d1d2D1Ad92897Cc29286F8cA5` | `0xa2E1f5E1f2721Ae935ac7b0799BC108963276dBA` |
+| Explorers | `etherscan.io` and `aescan.io` | `sepolia.etherscan.io` and `testnet.aescan.io` |
+
+### Operating parameters
+
+| Parameter | Value |
+| --- | --- |
+| Cooldown between bridge transactions from æternity | **12 hours** |
+| Ethereum-side funds threshold | 0.01 |
+| æternity-side funds threshold | 0.005 |
+
+The two thresholds are balance floors the UI checks on the bridge's own funding accounts
+before letting you proceed — the bridge holds liquidity on each side and refuses transfers it
+could not settle.
+
+### Supported assets
+
+The mainnet asset list pairs an Ethereum ERC-20 with an æternity AEX-9 for each of: ETH
+(as wrapped ETH), WAE, USDT, USDC, BNB, stETH, TRX, LINK and TONCOIN, among others. Decimals
+differ per asset — USDT and USDC at 6, TONCOIN at 9, the rest at 18.
+
+### What the feature claims to do
+
+From the feature's own README: bi-directional transfers, multiple token support, automatic
+allowance handling, transaction tracking through both explorers, a balance check against the
+bridge's funds, and the 12-hour rate limit on æternity-originated transfers. The same README
+carries an open TODO list, including replacing direct `window.ethereum` access with a proper
+wallet-connection library — which is a fair indication of how finished it was.
+
+## The trust model, stated plainly
+
+A bridge is not a swap. When you bridge, you do not move ETH to æternity — nothing can. You
+give ETH to a contract on Ethereum, and a corresponding amount of aeETH is issued to you on
+æternity. **aeETH is a claim, not ether.** Its value depends entirely on the bridge remaining
+solvent and honest.
+
+That means:
+
+- **Custody moves.** The Ethereum-side contract holds the real asset. If it is drained or the
+  operator misbehaves, aeETH is backed by nothing.
+- **The peg is operational, not mathematical.** Unlike [WAE](/defi/wrapped-ae), which holds
+  exactly the AE backing it in one contract on one chain, a bridge peg depends on
+  cross-chain attestation working correctly.
+- **Bridges are the most attacked component in crypto.** They concentrate value behind a
+  verification mechanism, which is precisely the shape attackers look for.
+- **Settlement is not atomic.** The disabled flow has distinct stages — bridging, waiting for
+  the æternity-side deposit, then swapping — and a failure between them leaves you holding an
+  intermediate asset rather than reverting.
+
+## If you need to bridge today
+
+Superhero cannot do it for you. æternity operates a separate bridge outside the Superhero
+app, documented on the æternity documentation hub and hosted at `ae-bridge.com`; the
+foundation's announcement describes it as built with Acurast using secure enclaves to observe
+state changes between the two chains. That is the path to investigate — but verify it
+independently before sending funds, because this documentation cannot confirm its current
+operational status either.
+
+For simply acquiring AE without bridging, see [Buying AE](/defi/buy-ae), which lists the
+third-party routes the app itself points at — including two ETH-to-AE swap aggregators that
+sidestep bridging entirely.
+
+## Open questions
+
+- **Why was the bridge disabled, and will it return?** The code carries re-enable
+  instructions but no reason and no date. Nothing in the repository says whether this is
+  temporary maintenance, a security response, or an abandonment.
+- **Are the configured bridge contracts still live?** The addresses above are what the
+  disabled code points at. Whether those contracts are deployed, funded and operating right
+  now is not something the app can tell you.
+- **Is `ae-bridge.com` the officially supported replacement?** It appears in æternity's own
+  documentation and announcements, but nothing in the Superhero codebase points to it.
+- **What were the fees and settlement times?** The disabled code documents a 12-hour cooldown
+  on æternity-originated transfers and balance thresholds, but no fee schedule and no
+  expected settlement window in either direction.
+
+## Read more
+
+- [Buying AE](/defi/buy-ae) — the routes that actually work today, including ETH-to-AE swap
+  providers.
+- [Wrapped AE](/defi/wrapped-ae) — a wrapper with a genuinely mechanical peg, for contrast.
+- [Swapping](/defi/swap) — where aeETH you already hold can still be traded.
+- [DeFi & DEX overview](/defi) — the full route map, with the disabled routes marked.
+- [ærc Bridge on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/aerc-bridge)
+  — æternity's own bridge documentation.
+- [aepp-bridge](https://github.com/aeternity/aepp-bridge) — the source of æternity's bridge
+  application.
