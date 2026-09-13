@@ -5,29 +5,163 @@ description: "Delegate your voting stake to someone else, and take it back."
 
 # Delegation
 
-> **Page brief** — Document the delegation model in the Registry contract and what it means for stake weighting.
->
-> `status: outline` · `depth: standard`
+Delegation lets you hand your AE voting weight to another account so that their vote speaks
+for your balance on polls you do not vote in yourself. It is stored in the governance
+`Registry`, applies to **every** poll at once, and is undone whenever you choose. It moves no
+coins: your AE stays in your wallet, spendable, the entire time.
+
+## The rules
+
+| Rule | Detail |
+| --- | --- |
+| Scope | Global. One delegation applies to every poll, present and future. |
+| Cardinality | **One delegation out** per account; any number in. |
+| Duration | Until you change or revoke it. Nothing expires it. |
+| Override | Voting on a poll yourself overrides your delegation **for that poll only**. |
+| Transitivity | Chains resolve. A delegatee who has themselves delegated passes the weight along. |
+| Custody | None. No coins move, nothing is locked, no allowance is needed. |
+| Counting | Delegations and balances are read at the poll's close height. |
+| Self-delegation | Rejected. You cannot delegate to your own address. |
+
+## The entrypoints
+
+Delegation lives on the `Registry`, not on individual polls — which is exactly why it is
+global.
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `delegate(delegatee)` | Delegate your voting power. Stateful. |
+| `revoke_delegation()` | Take it back. Stateful. |
+| `delegatee(account)` | Who an account delegates to, as `option(address)` |
+| `delegators(account)` | The accounts delegating **directly** to this one |
+| `delegations()` | The full delegation map, `map(address, address)` |
+
+`delegate` on an account that already has a delegation replaces it — there is no need to
+revoke first, and no way to have two. The registry stores `delegations` as a plain
+address-to-address map, which is the structural reason one account can have only one outgoing
+delegation.
+
+Two events record every change: `Delegation(delegator, delegatee)` and
+`RevokeDelegation(delegator)`.
+
+## Delegating
 
 ```bash
 node scripts/superhero-governance.mjs delegate <ak_address>
+node scripts/superhero-governance.mjs revoke-delegation
 ```
 
-| `Registry` entrypoint | Purpose |
+```bash
+node scripts/superhero-governance.mjs delegate ak_xyz456...
+```
+
+The script validates that the target is a well-formed `ak_` account address and refuses to
+delegate to your own address. Both commands are a single transaction, roughly 0.0001 AE.
+
+Inspect the current state — both default to your own wallet when you pass no address:
+
+```bash
+node scripts/superhero-governance.mjs delegatee            # who do I delegate to?
+node scripts/superhero-governance.mjs delegatee ak_xyz...  # who do they delegate to?
+node scripts/superhero-governance.mjs delegators           # who delegates to me?
+node scripts/superhero-governance.mjs delegators ak_xyz... # who delegates to them?
+```
+
+In the app, delegation lives on the **My Account** tab at
+[superhero.com/voting/account](https://superhero.com/voting/account): paste an address, save
+the delegation, or revoke it. The same screen shows your AE balance, your current delegation,
+and how many accounts delegate to you. Your delegation status also appears on every individual
+poll page, under **Your Governance Power**.
+
+## Is delegation transitive?
+
+**Yes.** Delegations are recursive: a delegatee who has themselves delegated passes the weight
+along the chain, so delegating to someone means your weight can end up with whoever they
+delegate to.
+
+Two independent lines of evidence agree:
+
+- The governance aepp's own documentation states that delegations can be recursive — a
+  delegatee can delegate to another delegatee.
+- The governance API models delegation as a tree, not a list. `GET delegatedPower/:address`
+  returns `delegatedPower`, a `delegationTree` and a `flattenedDelegationTree`, and the
+  per-account stake records in `pollOverview` carry a `delegationTree` of their own. A flat,
+  one-hop model would not need either structure.
+
+The practical consequence: **check who your delegatee delegates to before you delegate.** If A
+delegates to B and B delegates to C, then C votes with A's weight on any poll where neither A
+nor B has voted. Follow the chain with repeated `delegatee` calls:
+
+```bash
+node scripts/superhero-governance.mjs delegatee ak_your_delegatee...
+```
+
+Note that `delegators(account)` returns only **direct** delegators — the accounts pointing
+straight at that address. It does not include the accounts further up a chain whose weight
+also reaches them. The app's account screen counts delegators from the flattened delegation
+tree returned by the governance API, which is why that number can exceed the direct count from
+the contract.
+
+## Voting yourself overrides delegation
+
+If you vote on a poll, your own vote counts for your balance on that poll and your delegatee's
+vote does not. The override is per-poll and lasts only while your vote stands: revoke your vote
+and your delegation takes effect again for that poll.
+
+That combination gives you the useful default — delegate once to someone whose judgement you
+trust, then vote yourself on the specific questions you care about, without touching the
+delegation.
+
+It also creates the failure mode to watch for. If you want to **abstain** from a poll, revoking
+your vote is not enough: your weight falls back to your delegatee. To abstain you must revoke
+the delegation as well, or vote for an abstain option if the poll offers one.
+
+## Risks worth stating plainly
+
+- **A delegation is indefinite.** It does not lapse, and nothing prompts you to review it.
+  Delegations made years ago still vote today.
+- **It is transitive.** You are trusting your delegatee's judgement *and* their choice of
+  delegatee, recursively.
+- **It applies to polls that do not exist yet.** You are delegating on every future question,
+  not just the current one.
+- **Your weight follows your balance.** If your AE balance grows, so does what your delegatee
+  votes with — automatically, with no further consent.
+
+None of this puts your coins at risk. A delegatee cannot spend, move or lock your AE; the
+registry stores an address-to-address mapping and nothing more. The exposure is to your voting
+influence, not your funds.
+
+## Delegation history
+
+The Superhero backend indexes delegation transactions, including revoked ones:
+
+| Endpoint | Returns |
 | --- | --- |
-| `delegate(delegatee)` | Delegate your stake |
-| `revoke_delegation()` | Take it back |
-| `delegatee(account)` | Who an account delegates to |
-| `delegators(account)` | Who delegates to an account |
-| `delegations()` | The full delegation map |
+| `GET /api/governance/delegations` | Paginated delegations; `includeRevoked=true` to include revoked ones |
+| `GET /api/governance/delegations/:accountAddress` | One account's delegation and revocation history, in chronological order |
 
-## What this page still needs
+Each record carries the delegator, the delegatee, the transaction hash and block height, and —
+if it was later revoked — `revoked`, `revoked_hash`, `revoked_block_height` and `revoked_at`.
+Use this when you need to know what the delegation graph looked like at some past height; the
+contract only holds the present state.
 
-- Explain whether delegation is transitive and how cycles are handled.
-- Explain what happens if you vote directly while having delegated.
-- Document the delegation tab in the `/voting` UI.
+## Open questions
 
-## Sources to mine
+- How the backend handles a **delegation cycle** — A delegates to B and B delegates back to A —
+  is not documented in either repository. The contract cannot prevent one, since each
+  `delegate` call sees only its own edge. The weighting is computed off-chain over the
+  delegation tree, so some cycle handling must exist, but whether it drops the cycle, breaks it
+  at an arbitrary edge, or counts the balances once is not determinable from the sources here.
+  The `aepp-governance` backend source would settle it.
+- Whether a delegatee's weight is capped, or whether there is any limit on chain depth, is not
+  stated anywhere we could verify.
 
-- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`
-- `superhero-agent-skill/scripts/superhero-governance.mjs`
+## Read more
+
+- [Polls](/governance/polls) — how delegated weight is folded into the stake-weighted result.
+- [Voting on Polls](/governance/voting) — the per-poll override, and what happens when you revoke a vote.
+- [The Governance Registry](/governance/registry) — the contract that stores the delegation map, and its addresses.
+- [Governance and Voting](/governance) — why community DAOs have no equivalent of this.
+- [Manage your delegation](https://superhero.com/voting/account) — the live My Account tab.
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference implementation, and the source for recursive delegation.
+- [æternity governance](https://docs.aeternity.com/aeternity-core-concepts/aeternity-governance) — the protocol's account of delegative, coin-weighted governance.

@@ -5,21 +5,78 @@ description: "Each token's treasury and the on-chain governance that controls it
 
 # Community DAOs
 
-> **Page brief** — Document the DAO layer completely — treasury, proposal types, voting rules, execution, and migration.
->
-> `status: outline` · `depth: overview`
+Every community token created through the Superhero factory gets its own DAO. The `DAO.aes`
+contract is both the **owner** and the **beneficiary** of that token's sale: it receives the
+trading proceeds and holds administrative authority over the sale contract. Token holders
+decide what happens to that money by opening proposals and voting with their tokens.
 
-Every community token has a DAO. The `DAO.aes` contract is both the **owner** and the
-**beneficiary** of the token sale: it receives the trading proceeds and holds administrative
-authority over the sale. Token holders decide what happens to that money.
+This section documents that system end to end — where the money comes from, what can be
+proposed, how voting and token locking work, the exact thresholds a proposal must clear, and
+how a community can replace its DAO with a different implementation.
+
+## Community DAOs are not æternity governance polls
+
+These are two separate systems with separate contracts, separate voting power and separate
+user interfaces. Readers confuse them constantly.
+
+| | Community DAO | æternity governance poll |
+| --- | --- | --- |
+| Contracts | `DAO.aes`, `DAOVote.aes` | `Registry.aes`, `Poll.aes` |
+| Scope | One community token's treasury | The æternity ecosystem as a whole |
+| Voting power | That community's AEX-9 token balance | AE balance, plus delegated AE |
+| Tokens locked while voting | Yes — an AEX-9 allowance locks your stake | No |
+| Ballot shape | Binary: in favour or against | Any list of at least two options |
+| Outcome | Executes an on-chain action | Signalling; no automatic execution |
+| Where in the app | `/trends/daos` and `/trends/dao/:saleAddress` | `/voting` |
+| Documented in | This section | [Governance and Voting](/governance) |
+
+If you are looking for stake-weighted ecosystem polls, delegation, or the `/voting` tab,
+go to [Governance and Voting](/governance) instead.
+
+## The shape of a community DAO
+
+A community's contracts are deployed together, in one transaction, by
+`CommunityFactory.create_community`. Four of them matter here:
+
+| Contract | Role in governance |
+| --- | --- |
+| `FungibleTokenFull` (AEX-9) | The community token. Balances are voting power. |
+| `AffiliationBondingCurveTokenSale` | Mints and burns tokens; sends the DAO its fee share. |
+| `DAO` | Holds the treasury, registers votes, executes passed proposals. |
+| `CommunityManagement` | Moderators, mute list, write threshold, community metadata. |
+
+`DAO` is the owner and beneficiary of the token sale, and it can reach
+`CommunityManagement` through `get_community_management()`. That is why a single vote can
+both pay out treasury AE and appoint a moderator — the DAO has authority over both.
+
+## The lifecycle in one pass
+
+1. Trading fees accumulate in the DAO treasury — 0.5% of every buy.
+2. A holder at or above the community threshold opens a vote, paying **555 AE** to the DAO.
+3. The vote stays open for **two weeks**, measured in key-blocks.
+4. Holders vote for or against by locking tokens in the vote contract.
+5. It passes with at least **55% of the voted stake in favour** and at least **10% of total
+   token stake participating**.
+6. A passed vote must be applied within roughly **two days** of closing. Any account can
+   trigger execution.
+7. Voters withdraw their locked tokens.
 
 ## In this section
 
-- [How DAOs Work](/dao/overview) — The DAO orientation page — the lifecycle from funding to execution.
-- [The Treasury](/dao/treasury) — Document treasury funding, balance visibility, and the `record_sale_transaction` path.
-- [Proposals & Vote Subjects](/dao/proposals) — Enumerate every vote subject with its parameters and its effect. This is a closed set — say so.
-- [Voting](/dao/voting) — Document the voting mechanics including the allowance and locking behaviour, which surprises people.
-- [Quorum & Thresholds](/dao/quorum-and-thresholds) — A short, precise reference page. People will link to it to settle arguments.
-- [Moderators & Write Thresholds](/dao/moderators) — Connect the governance layer to the moderation layer: moderators are appointed by vote, thresholds are changed by vote.
-- [Replaceable DAOs](/dao/replaceable-dao) — Document the upgrade path — this is the protocol's main forward-compatibility story.
-- [ProtocolDAO Token](/dao/protocol-dao) — Explain the ProtocolDAO token honestly — issuance is live, governance is not yet built.
+- [How DAOs Work](/dao/overview) — the full lifecycle, the contracts involved, and what happens at each step.
+- [The Treasury](/dao/treasury) — where the money comes from, how to read the balance, and what the 555 AE deposit does.
+- [Proposals and Vote Subjects](/dao/proposals) — the closed set of things a DAO can decide, with the exact parameter shapes.
+- [Voting](/dao/voting) — casting a vote, the AEX-9 allowance step, and what locking your tokens means.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds) — every number in one reference table.
+- [Moderators and Write Thresholds](/dao/moderators) — how governance controls who can post in a community.
+- [Replaceable DAOs](/dao/replaceable-dao) — the interface a custom DAO must satisfy, and the migration path.
+- [The ProtocolDAO Token](/dao/protocol-dao) — the platform-wide token minted on every buy, and the governance that does not exist yet.
+
+## Read more
+
+- [Governance and Voting](/governance) — the other system: æternity-wide stake-weighted polls at `/voting`.
+- [DAO contract reference](/contracts/dao) — every `DAO.aes` entrypoint and signature.
+- [DAO Vote contract reference](/contracts/dao-vote) — every `DAOVote.aes` entrypoint and signature.
+- [Bonding curve](/tokens/bonding-curve) — how the buy and sell prices that generate treasury fees are computed.
+- [Browse every DAO](https://superhero.com/trends/daos) — the live list of community treasuries, sortable by balance.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the "DAO and DAO Vote" section is the canonical description of these rules.

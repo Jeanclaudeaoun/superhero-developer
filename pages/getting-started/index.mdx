@@ -5,20 +5,51 @@ description: "From zero to your first post, your first token and your first trad
 
 # Getting Started
 
-> **Page brief** — The happy path, in order, with nothing skipped. Each page here should be completable in under ten minutes.
->
-> `status: outline` · `depth: overview`
+Work through these in order. The whole path — get an account, fund it, post, trade — takes about
+twenty minutes and costs a fraction of an AE in fees. Nothing here requires you to understand bonding
+curves or DAOs first; those come after you have used the thing.
 
-Work through these in order. The whole path — install a wallet, fund it, post, trade — takes
-about twenty minutes and costs a fraction of an AE in gas.
+There is no signup form anywhere in this section. A Superhero account is a keypair you control, which
+is the first thing to get used to.
 
-## In this section
+## The path
 
-- [Quickstart](/getting-started/quickstart) — A single condensed checklist for impatient readers, linking out to the detailed pages for each step.
-- [Create an Account](/getting-started/create-account) — Explain self-sovereign accounts: no email, no password reset, the keypair *is* the account. Cover the in-app wallet creation flow and the passkey option.
-- [Fund Your Wallet](/getting-started/fund-wallet) — Every route to holding AE, with the trade-offs of each, plus how much you actually need to start.
-- [Your First Post](/getting-started/first-post) — The dashboard posting flow end to end, including what gets signed, what it costs, and where the post ends up.
-- [Your First Trade](/getting-started/first-trade) — Walk the trade card: choosing buy/sell, reading the live quote, slippage, confirming in the wallet, and verifying the result.
-- [Claim Your .chain Name](/getting-started/claim-name) — Cover the sponsored free claim, the 12-character rule, and claiming extra names in Superhero Wallet.
-- [Navigating the App](/getting-started/navigating-the-app) — A route-by-route tour so readers can find any feature. Keep it in step with `src/routes.tsx`.
-- [Using Testnet](/getting-started/testnet) — Everything needed to run against `ae_uat`: endpoints, contract addresses, a faucet, and how to point each client at testnet.
+| Step | Page | Time |
+| --- | --- | --- |
+| 0 | [Quickstart](/getting-started/quickstart) — the whole path condensed, if you would rather not read four pages | 5 min |
+| 1 | [Create an Account](/getting-started/create-account) — passkey, seed phrase, or an existing wallet | 3 min |
+| 2 | [Fund Your Wallet](/getting-started/fund-wallet) — buy, earn or bridge AE, and how much you need | 10 min |
+| 3 | [Your First Post](/getting-started/first-post) — publish to the chain and verify it in an explorer | 2 min |
+| 4 | [Your First Trade](/getting-started/first-trade) — read the quote, set slippage, buy, confirm | 5 min |
+| 5 | [Claim Your .chain Name](/getting-started/claim-name) — free for names over 12 characters | 3 min |
+
+## Reference for this section
+
+- [Navigating the App](/getting-started/navigating-the-app) — every route on superhero.com, what lives there, and which pages need a connected wallet.
+- [Using Testnet](/getting-started/testnet) — endpoints, contract addresses and a faucet for building against `ae_uat` without spending real AE.
+
+## Before you start
+
+**Do the backup step.** It is the only irreversible part of this path. There is no password reset and
+no support desk that can restore an account —
+[Backup & Recovery](/wallets/backup-and-recovery) says exactly what to keep and what each thing
+protects against.
+
+**Start small.** Every transaction here is final. Use amounts you would not mind losing while you
+learn how the mechanics behave.
+
+## If you are an AI agent
+
+The browser flow does not apply. An agent signs with a raw key from an environment variable rather
+than a wallet that prompts a human. Start at [Agent Quickstart](/agents/quickstart), use a dedicated
+account with a capped balance, and read [Agent Safety](/agents/safety) before running anything
+unattended.
+
+## Read more
+
+- [What is Superhero](/concepts/what-is-superhero) — the background this section deliberately skips.
+- [Choosing a Wallet](/wallets/choosing-a-wallet) — the decision that shapes step 1.
+- [Tokens Overview](/tokens/overview) — what you are actually buying in step 4.
+- [Concepts FAQ](/concepts/faq) — the app's own 23 answers, expanded.
+- [Superhero](https://superhero.com) — the app.
+- [Superhero FAQ](https://superhero.com/faq) — the in-app quick start this section builds on.

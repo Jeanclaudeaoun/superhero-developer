@@ -5,25 +5,144 @@ description: "Cast and revoke a vote on an æternity governance poll."
 
 # Voting on Polls
 
-> **Page brief** — Short and procedural. Emphasise reading the poll before voting so option numbers are right.
->
-> `status: outline` · `depth: standard`
+Voting on a governance poll is one transaction and costs about 0.0001 AE. Nothing is locked,
+nothing is transferred, and you can change your mind as often as you like until the poll
+closes. The only thing that reliably goes wrong is voting for the wrong option, so read the
+poll first.
 
-Always read the poll first to confirm the option numbering and that it is still open:
+## Read the poll first
+
+Option numbers are **0-based** and are fixed at deployment in whatever order the author chose.
+They are not alphabetical, "Yes" is not always `0`, and two polls on the same subject may
+number their options differently. Reading the poll before voting takes one command and tells
+you the indices, the labels, whether the poll is still open, and whether you have already
+voted.
 
 ```bash
 node scripts/superhero-governance.mjs info <poll_address>
+node scripts/superhero-governance.mjs info-by-id <poll_id>
+```
+
+Look at three fields: `vote_options` for the index-to-label mapping, `is_closed`, and
+`my_vote`. See [Polls](/governance/polls) for the full output shape.
+
+## Cast a vote
+
+```bash
 node scripts/superhero-governance.mjs vote <poll_address> <option_number>
+```
+
+```bash
+# Vote for option 0 on a specific poll
+node scripts/superhero-governance.mjs vote ct_abc123... 0
+```
+
+The script re-reads the poll before submitting. It refuses an option index the poll does not
+define — printing the valid options rather than guessing — and refuses to vote on a poll that
+is already closed. It then prints the option label it voted for, so you can confirm you hit
+the option you meant:
+
+```json
+{
+  "success": true,
+  "action": "vote",
+  "poll_address": "ct_abc123...",
+  "option": "0",
+  "option_label": "Yes",
+  "tx_hash": "th_..."
+}
+```
+
+## Change or revoke
+
+**Voting again replaces your previous vote.** One address has one vote per poll; calling
+`vote` with a different option updates your choice rather than adding a second vote. You do
+not need to revoke first.
+
+```bash
 node scripts/superhero-governance.mjs revoke <poll_address>
 ```
 
-## What this page still needs
+Revoking removes your vote entirely, so the poll counts you as not having voted. Two
+consequences worth knowing:
 
-- Explain whether voting locks any tokens (unlike DAO votes, it appears not to).
-- Document what happens if you vote twice.
-- Cover voting from the `/voting` UI.
+- Your AE stops counting for the option you had chosen.
+- **Your delegation comes back into effect for that poll.** Voting directly overrides your
+  delegation only while your vote stands; once revoked, whoever you delegated to speaks for
+  your balance again. If your intent is to abstain rather than to hand your weight back to
+  your delegatee, revoke your delegation too — see [Delegation](/governance/delegation).
 
-## Sources to mine
+You can vote again after revoking, as long as the poll is still open.
 
-- `superhero-agent-skill/scripts/superhero-governance.mjs`
-- `superhero-agent-skill/SKILL.md` — the governance voting workflow
+The script checks that you have actually voted before submitting a revocation, so a revoke on
+a poll you never voted in fails locally rather than costing a transaction.
+
+## Nothing is locked
+
+This is the sharpest difference from a community DAO vote, and it is worth stating plainly.
+
+| | Governance poll | Community DAO vote |
+| --- | --- | --- |
+| Allowance needed first | No | Yes, AEX-9 |
+| Tokens transferred to the contract | No | Yes |
+| Balance immobilised while voting | No | Yes, until you revoke or withdraw |
+| What is counted | Your AE balance at the poll's close height | The token amount you locked |
+| Withdrawal step after closing | None | Required |
+
+The `Poll` contract has no token field, no allowance surface and no withdrawal entrypoint. It
+records which option your address chose; the weight behind that is computed off-chain from
+your AE balance and your delegations at the close height. Your AE stays liquid and spendable
+the whole time.
+
+The flip side: **your weight is not fixed when you vote.** It is measured at the close height.
+Spending AE after voting reduces the weight behind your choice; receiving AE increases it. If
+a poll matters to you, what matters is your balance when it closes, not when you voted.
+
+Nothing about a governance poll executes on-chain either. A poll produces a stake-weighted
+result. Acting on it is a separate, off-chain, social process. See
+[Community DAOs](/dao) for the system where a passing vote does move money.
+
+## Voting from the app
+
+1. Open [superhero.com/voting](https://superhero.com/voting) and find the poll, or go
+   straight to `/voting/p/:pollAddress`.
+2. Connect your wallet.
+3. Read the title, description and reference link, then click the option you want. The options
+   are lettered A, B, C in the interface but are indexed 0, 1, 2 on-chain.
+4. Approve the transaction.
+
+Your chosen option is highlighted as **Selected** afterwards, and a **Revoke Vote** button
+appears. The same page shows live stake-weighted results and, below them, your account
+balance, your delegation status and how many accounts delegate to you.
+
+Note what the app's **Total Votes** figure is: the backend's `voteCount`, an address count. The
+per-option percentage bars on that screen are computed from those address counts, not from
+stake. For the stake-weighted picture — which is the official result — read `option_stake` and
+`percentage_of_total_stake` from the governance API, or the `stake_weighted_results` block in
+the CLI's `info` output. See [Polls](/governance/polls).
+
+## After voting
+
+The app posts a `contractEvent` notification to the governance backend immediately after every
+vote and revocation so the backend re-indexes rather than waiting to discover the transaction.
+If you vote through your own client and skip that call, expect your vote to take longer to
+appear in stake-weighted results. The vote itself is on-chain and counted regardless.
+
+## Open questions
+
+- Whether the `Poll` contract itself rejects a `vote` call after `close_height`, or whether the
+  closed check exists only in the clients, is not determinable from the ACI. The CLI and the
+  app both refuse client-side. A vote that landed after the close height would not be counted
+  anyway, because weighting is snapshotted at that height.
+- Whether an account with a zero AE balance can vote is not stated. Nothing in the contract
+  requires a balance, so the vote would presumably record and contribute zero weight, but that
+  is an inference.
+
+## Read more
+
+- [Polls](/governance/polls) — the data model, and why the stake-weighted figure is the real result.
+- [Delegation](/governance/delegation) — what your vote overrides, and what comes back when you revoke it.
+- [Creating a Poll](/governance/create-a-poll) — if you want to ask the question rather than answer it.
+- [Voting in a community DAO](/dao/voting) — the other system, where voting locks your tokens.
+- [Governance with an agent](/agents/governance) — the read-before-voting workflow, automated.
+- [Vote on a poll](https://superhero.com/voting) — the live interface.

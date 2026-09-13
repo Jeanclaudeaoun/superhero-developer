@@ -1,36 +1,144 @@
 ---
 title: "Claim Your .chain Name"
-description: "Turn your ak_ address into a human-readable on-chain username."
+description: "Turn your ak_ address into a human-readable on-chain username, free for names over 12 characters."
 ---
 
 # Claim Your .chain Name
 
-> **Page brief** — Cover the sponsored free claim, the 12-character rule, and claiming extra names in Superhero Wallet.
->
-> `status: outline` · `depth: deep`
+A `.chain` name is an æternity Naming System (AENS) record that points at your account, so people
+see `yourname.chain` instead of `ak_2a1j2Mk4…`. Superhero sponsors one free claim per address, and
+the rule that decides whether yours is free is the name's length.
 
-Superhero sponsors **one free `.chain` name claim per address**. Two rules matter:
+## The two rules that matter
 
-- The name must be **longer than 12 characters** (excluding the `.chain` suffix). Names of
-  12 characters or fewer go to auction instead of registering instantly.
-- Only one claim per address is sponsored. Further names can be claimed directly in
-  Superhero Wallet (extension, mobile, or `wallet.superhero.com`).
+- **The name must be longer than 12 characters**, excluding the `.chain` suffix. Names of 12
+  characters or fewer go to auction instead of registering instantly — that is an AENS protocol rule,
+  not a Superhero policy.
+- **One sponsored claim per address.** Further names can be claimed directly in Superhero Wallet —
+  the browser extension, the native mobile app, or the web wallet at `wallet.superhero.com`.
 
-From an agent or the command line the same registration runs preclaim → claim → pointer
-update in one step:
+The app's own hint text says it plainly: *"Use letters, numbers, or hyphens. Names longer than 12
+characters are free."* The claim field shows a live counter against 13 characters as you type.
+
+### Allowed characters
+
+Lowercase letters, digits and hyphens. A name cannot start or end with a hyphen, and the label is at
+most 63 characters. The app validates this before it will let you submit.
+
+## Claim it in the app
+
+1. Open your profile and edit it, then choose to claim a `.chain` name.
+2. Type the name you want. The field checks availability as you type and tells you whether the name
+   is sponsored (**Free**) or has a price.
+3. If the name is 13 or more characters, it shows **Free**. If it is shorter, it shows an approximate
+   AE price with the note *"Paid from your wallet"* — that is the self-funded path, not the sponsored
+   one.
+4. Press **Claim**. Your wallet asks you to sign a message — this proves you control the address
+   without spending anything.
+5. The app reports *"Claim submitted. Waiting for sponsorship and transfer…"* and then tracks the
+   claim's progress.
+
+### What happens behind that message
+
+The sponsored claim is executed by Superhero's backend on your behalf and reported back as a series
+of steps:
+
+| Step | What is happening |
+| --- | --- |
+| `wallet` | You sign the challenge message in your wallet |
+| `queued` | The signed claim is accepted and queued |
+| `preclaim` | The commitment transaction is submitted — AENS requires this to prevent front-running |
+| `claim` | The name is claimed in a later block |
+| `update` | The name's pointer is set |
+| `transfer` | The name is transferred to **your** address |
+
+The transfer step is the important one: the sponsor pays and then hands ownership to you. When it
+completes, the name is yours, not Superhero's.
+
+### What the price means when a name is not free
+
+For a name short enough to need paying for, the figure shown is the **preclaim transaction fee plus
+the claim's execution cost**, which includes the protocol's minimum name fee for a name of that
+length. The app computes it the same way Superhero Wallet's own claim screen does, so the two agree.
+
+Short names are expensive by design — that is the AENS mechanism for allocating scarce names, and it
+is why the free tier starts at 13 characters.
+
+### Errors you may see
+
+| Message | Meaning |
+| --- | --- |
+| "Sponsored claims require more than 12 characters before .chain" | Your name is auction-length; pick a longer one or pay |
+| "This wallet already has a sponsored .chain name" | You have used your one free claim |
+| "You already have a sponsored .chain claim in progress" | Wait for the current one to finish |
+| "That .chain name is already taken" | Registered by someone else |
+| "That .chain name is currently being claimed" | Another sponsored claim is mid-flight for the same name |
+| "Your claim session expired" | The signed challenge timed out; start again |
+| "Sponsored .chain claiming is temporarily unavailable" | The sponsor service is down; try later |
+
+## Claim it from the command line
+
+An agent or a script registers a name itself, paying its own fees. The same three protocol steps run
+in one command:
 
 ```bash
 node scripts/superhero-name.mjs available myagentname123
 node scripts/superhero-name.mjs register myagentname123
 ```
 
-## What this page still needs
+`register` refuses outright if the name is 12 characters or fewer — the CLI does not support the
+auction path — and then runs:
 
-- Document the auction process for short names, which the CLI does not support.
-- Cover renewal/expiry of AENS names and what happens when one lapses.
-- Explain how a chain name interacts with the ProfileRegistry display source.
+1. **Preclaim**, and wait for it to be mined.
+2. **Wait for a different block.** AENS requires the claim to land in a later block than its
+   commitment; the script polls the chain height every 30 seconds until it advances.
+3. **Claim**, and wait for it to be mined.
+4. **Update the pointer** to your wallet address, setting the `account_pubkey` pointer.
 
-## Sources to mine
+The rest of the command surface:
 
-- `superhero-agent-skill/scripts/superhero-name.mjs`
-- `superhero/server/lib/faq-content.cjs` — `qSponsoredNameClaim`, `qClaimMoreNames`
+| Command | What it does |
+| --- | --- |
+| `available <name>` | Whether the name is free, its length, and whether it needs an auction |
+| `register <name>` | Preclaim, claim and point, in one run |
+| `update <name> [address]` | Repoint the name; defaults to your own address |
+| `extend <name>` | Extend the name's TTL before it expires |
+| `resolve <name>` | Look up the address a name points at |
+| `lookup <address>` | Every name owned by an address |
+| `list` | Your own names |
+
+Names are lowercased and get `.chain` appended automatically if you leave it off. Registration costs
+gas plus the name fee, so run `available` first.
+
+The script targets **mainnet** with hardcoded endpoints — see [Using Testnet](/getting-started/testnet).
+
+## After you have one
+
+**Point it where you want.** The registration flow sets the `account_pubkey` pointer to your address.
+You can repoint it later with `update`, which preserves existing pointers rather than replacing them.
+
+**Use it as your display name.** A `.chain` name can be your profile's display source, so it appears
+instead of your address across the app. You have to own one before you can select that option.
+
+**Keep it alive.** AENS names have a time to live measured in blocks and expire if not extended. Use
+`extend` before the expiry height, which `available` reports as `expires_at_height`. Nothing in the
+repositories describes an automatic renewal, so treat this as your responsibility.
+
+## Read more
+
+- [Chain Names](/identity/chain-names) — how names integrate with Superhero identity and profiles.
+- [Superhero ID](/identity/superhero-id) — the wider identity model a name plugs into.
+- [AENS on æternity](/aeternity/aens) — the naming system at the protocol level, including auctions.
+- [Profiles](/identity/profiles) — setting the name as your display source.
+- [Superhero FAQ](https://superhero.com/faq) — the sponsored-claim answer in the project's own words.
+- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the upstream specification, including the commitment scheme and the Lima and Ceres upgrades.
+
+## Open questions
+
+- What is the auction process for names of 12 characters or fewer, in practice on Superhero? The CLI
+  refuses them and the sponsored claim excludes them; the app's own claim field prices them but the
+  bidding flow itself was not traced. The AENS documentation above describes the protocol mechanism.
+- What is a name's default TTL in blocks, and does Superhero warn you before one lapses? The profile
+  modal reads a `chain_expires_at` value, but no expiry notification was found in the app.
+- What happens to a lapsed name's pointer and to a profile that used it as its display source? Not
+  documented anywhere in the repositories.

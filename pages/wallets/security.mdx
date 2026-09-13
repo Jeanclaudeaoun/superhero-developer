@@ -1,15 +1,17 @@
 ---
 title: "Wallet Security"
-description: "Rules that keep your keys yours — for humans and for agents."
+description: "Rules that keep your keys yours — phishing, approvals, agent keys and what signing actually commits you to."
 ---
 
 # Wallet Security
 
-> **Page brief** — Practical, opinionated security guidance. Reuse the DO/DON'T table from the agent skill and extend it to human users.
->
-> `status: outline` · `depth: deep`
+Superhero is non-custodial. That is the feature and the risk: nobody can freeze your account, and
+nobody can restore it either. This page is the practical set of rules — for people typing in a
+browser and for agents running unattended — that keeps a self-sovereign account yours.
 
-The agent skill ships this table; it applies just as well to people.
+## The base rules
+
+The agent skill ships this table. It applies just as well to people.
 
 | ✅ Do | ❌ Don't |
 | --- | --- |
@@ -19,13 +21,127 @@ The agent skill ships this table; it applies just as well to people.
 | Share invite links directly with the recipient | Log or commit invite links (they contain one-time secrets) |
 | Verify the address and amount before signing | Sign a transaction you do not understand |
 
-## What this page still needs
+Two of those deserve expanding, because the reason is not obvious.
 
-- Add phishing guidance: the real domains, how to verify you are on superhero.com.
-- Cover approval/allowance hygiene for AEX-9 tokens used in DAO voting.
-- Add a dedicated section on running an agent's key safely (separate hot wallet, funded with a capped amount).
+**Invite links are bearer secrets.** A funded invitation link carries a one-time claim secret;
+anyone who reads it can redeem it. A link pasted into a public channel, a CI log or a commit is
+already spent by someone else. Send them directly to the person you meant.
 
-## Sources to mine
+**"Do not sign what you do not understand" is enforceable, not just advice.** Superhero's built-in
+wallet decodes every transaction before asking you, and **refuses to offer approval at all** when a
+payload cannot be decoded. If a wallet you use offers "show raw bytes and sign anyway", treat that
+button as a hazard.
 
-- `superhero-agent-skill/SKILL.md` — the Security First table
-- `superhero/server/lib/faq-content.cjs` — `qRisks`
+## Phishing: the domains that are real
+
+The attack that empties accounts is not a broken cipher; it is a convincing page.
+
+| Real | What it is |
+| --- | --- |
+| `superhero.com` | The app. All routes documented in [Navigating the App](/getting-started/navigating-the-app) live here. |
+| `wallet.superhero.com` | The hosted Superhero Wallet, and the deep-link fallback target. |
+| `aescan.io` | The block explorer the app links to on mainnet. |
+
+Rules that follow:
+
+- **Nobody ever needs your seed phrase.** Not support, not a "validator", not an airdrop checker, not
+  a migration tool. There is no legitimate flow anywhere in Superhero that asks you to type your
+  phrase into a website you did not deliberately install as a wallet.
+- **Type the domain or use a bookmark.** Do not reach the app from a link in a DM.
+- **Check the URL before the connect prompt, not after.** A wallet prompt tells you *what* is being
+  signed, not *who* asked.
+- On the built-in wallet there is one extra signal: passkeys are pinned to a single Relying Party ID
+  baked into the build. A clone on another domain cannot use your Superhero passkey — the ceremony
+  fails before it starts. That is a side effect of the design, not a substitute for checking the URL.
+
+## Approvals and allowances
+
+AEX-9 tokens use an allowance mechanism: you grant another contract permission to move a specific
+amount of your tokens. Superhero uses it in two places — **DEX swaps** of non-AE tokens, and
+**vote locking** in DAO governance, where the allowance is what stops the same tokens being
+double-spent across concurrent votes.
+
+What to actually do:
+
+- **Read the amount in the prompt.** The built-in wallet names these calls explicitly — "Lets
+  another account spend your tokens up to this amount" for `create_allowance`, "Increases or
+  decreases how many of your tokens another account may spend" for `change_allowance`, and "Removes
+  another account's permission to spend your tokens" for `reset_allowance`.
+- **Remember that amounts are shown in raw base units**, not scaled by the token's decimals. The
+  decoder deliberately does not guess a scale it cannot verify on chain. Count the digits.
+- **Reset allowances you no longer need**, especially after you finish voting or stop using a pool.
+  `reset_allowance` exists for this.
+- Note that AE itself needs no allowance — only AEX-9 tokens do.
+
+## Running an agent's key safely
+
+An agent holds a raw private key in an environment variable and signs without a human in the loop.
+That is a different threat model from a browser wallet, and it deserves different handling.
+
+- **Use a separate hot wallet.** Generate a fresh account for the agent rather than handing it the
+  key to your main one:
+
+  ```bash
+  node scripts/superhero-wallet.mjs generate
+  export AE_PRIVATE_KEY=<the_key_it_printed>
+  ```
+
+- **Cap the balance.** Fund it with what you are willing to lose to a bug or a bad prompt, and top
+  it up deliberately. There is no spending limit enforced anywhere in the stack — the balance *is*
+  the limit.
+- **Keep the key out of the process list and the shell history.** `export` in a shell, or a secrets
+  manager; never an argument on a command line, never a file in the repository.
+- **Never echo it.** The skill's own rule against `console.log(privateKey)` is there because a key
+  printed once is a key in a CI log forever.
+- **Separate agent identity from personal identity.** An agent that posts, trades and claims a
+  `.chain` name under its own address keeps your main account out of whatever it does.
+- **Review what it can do before you let it run unattended**, and read
+  [Agent Safety](/agents/safety) alongside this page.
+
+## What signing actually commits you to
+
+The app's own FAQ is blunt about it, and so should this page be: *"Volatility and smart-contract
+risk are real. Double-check addresses and amounts before signing. Never risk funds you cannot afford
+to lose."*
+
+Concretely:
+
+- **Transactions are final.** There is no reversal and no chargeback.
+- **Gas is charged on top of the fee**, up to the gas limit — which is why a good prompt shows both
+  a network fee and a "gas, at most" figure. A failed contract call still costs gas.
+- **A bonding-curve trade carries a 1% spread** between buy and sell price, split 0.5% to the
+  community DAO and 0.5% to the affiliation system. That is a structural cost, not a fee you can
+  avoid by timing.
+- **Community tokens are not equity and carry no promise.** Read [Token Risks](/tokens/risks)
+  before treating them as anything else.
+
+## Device and storage hygiene
+
+For the built-in wallet specifically, storage is part of your security model:
+
+- The encrypted vault lives in this browser's IndexedDB for this origin. **Clearing site data
+  deletes it**, and your passphrase and recovery code cannot bring it back — only the written phrase
+  or a syncing passkey can.
+- The vault's confidentiality equals its **weakest enrolled factor**, because any one factor opens
+  it. A strong passphrase does not compensate for a weak one being enrolled alongside.
+- Choose a real passphrase. The app enforces a zxcvbn score of at least 3, rejects numeric-only
+  strings outright, and offers a five-word generated phrase — take the generated one unless you have
+  a reason not to.
+- Do not use a shared or public computer for a wallet you intend to keep.
+
+## Read more
+
+- [Backup & Recovery](/wallets/backup-and-recovery) — the other half of this page: what survives when something goes wrong.
+- [The Built-In Wallet](/wallets/built-in-wallet) — the enforcement mechanisms referenced above, in detail.
+- [Managing AEX-9 Tokens](/wallets/aex9-tokens) — allowances in practice, including the DAO voting case.
+- [Agent Safety](/agents/safety) — the unattended-execution rules that pair with the agent-key section.
+- [Token Risks](/tokens/risks) — the market-side risks signing exposes you to.
+- [Superhero FAQ](https://superhero.com/faq) — the in-app risk answer, in the project's own words.
+
+## Open questions
+
+- Does Superhero publish a security contact or a vulnerability disclosure policy? No
+  `SECURITY.md` or disclosure address was found in the app or agent-skill repositories; the FAQ
+  points only at "official channels listed in the app".
+- Have the community token sale, DAO and affiliation contracts been externally audited, and are
+  those reports public? The whitepaper describes the security model but names no audit.

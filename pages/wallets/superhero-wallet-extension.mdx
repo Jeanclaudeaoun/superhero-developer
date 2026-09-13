@@ -1,22 +1,107 @@
 ---
 title: "Superhero Wallet — Browser Extension"
-description: "Install and set up the Superhero Wallet browser extension."
+description: "Install the Superhero Wallet browser extension, set it up, and connect it to superhero.com."
 ---
 
 # Superhero Wallet — Browser Extension
 
-> **Page brief** — Step-by-step install for Chrome/Brave/Firefox, first-run setup, and connecting it to superhero.com.
->
-> `status: outline` · `depth: standard`
+On a desktop browser the extension is the standard way to use Superhero: it holds your key, it
+signs, and superhero.com only ever receives the signed result. This page covers installing it,
+first-run setup, and the connection handshake — including why the app sometimes opens a web page
+instead of your extension.
 
-## What this page still needs
+## Install
 
-- Exact store links for each browser and the current version.
-- First-run flow: create vs import, seed phrase backup, password.
-- How the extension is detected by the web app and what the connect prompt looks like.
-- Troubleshooting: extension not detected, wrong network, locked wallet.
+| Browser | Listing |
+| --- | --- |
+| Chrome, Brave, Opera and other Chromium browsers | [Chrome Web Store](https://chromewebstore.google.com/detail/superhero-wallet/mnhmmkepfddpifjkamaligfeemcbhdne) |
+| Firefox | [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/superhero-wallet/) |
 
-## Sources to mine
+The Chrome extension ID is `mnhmmkepfddpifjkamaligfeemcbhdne`. superhero.com links exactly these two
+listings from its own connect dialog, and shows you the one matching your browser.
 
-- `wallet.superhero.com` and the Superhero Wallet repository
-- `superhero/src/config.ts` — `WALLET_URL`
+After installing, pin the extension so its icon is visible — a wallet you cannot see is a wallet you
+will forget to unlock, and an unlocked wallet is what the detection step below needs.
+
+## First run
+
+The extension is a multi-chain wallet — æternity plus Bitcoin, Ethereum and others — so its
+onboarding is not Superhero-specific. Two paths:
+
+**Create a new wallet.** Open the extension, choose to create a wallet, and follow the prompts. It
+shows you a seed phrase. Write it down — by hand, offline, in two places — before continuing. That
+phrase is the only thing that restores this wallet on another machine.
+
+**Import an existing wallet.** Choose to import, and enter the seed phrase of an account you already
+hold. Superhero's built-in wallet, the Superhero mobile app and this extension all derive accounts
+from the same path, so the same phrase gives you the same addresses in all of them.
+
+Either way, set a wallet password when asked. That password unlocks the extension on this machine;
+it is not a backup and it does not restore anything elsewhere.
+
+## Connect it to superhero.com
+
+1. Unlock the extension.
+2. Open [superhero.com](https://superhero.com) and press **Connect**.
+3. Choose **Superhero Wallet** in the dialog, then **Connect**.
+4. Approve the connection in the extension.
+5. Your `ak_...` address appears in the app header.
+
+Underneath, the app opens a browser message connection and runs the SDK's wallet detector for **4
+seconds**. If the extension announces itself in that window, an RPC session opens and the app
+subscribes to your address. If nothing answers and the page is not framed inside a wallet, the app
+falls back to opening `wallet.superhero.com` — so *"it opened a web page instead of my extension"*
+means the detector timed out, not that the extension was ignored.
+
+After a page reload, the app tries to re-establish the session silently, with a longer **15-second**
+window, because the extension's content script can be injected after the app has already booted.
+
+## What the connection grants
+
+The extension keeps the key. Connecting lets the app read your address, your account list and your
+balances, and lets it **request** signatures — each of which you approve individually in the
+extension. There is no blanket spending approval and no session token. Full detail in
+[Connecting a Wallet](/wallets/connecting).
+
+## Switching accounts
+
+With a live connection, account changes made in the extension are pushed to the app and the active
+account follows your selection. Without one — a restored read-only session after a refresh — the app
+will not notice the switch. Press Connect again to get the live session back.
+
+## Networks
+
+superhero.com is pinned to a single network at build time. The public site is mainnet, so keep the
+extension on mainnet. There is no in-app switcher that can reconcile a mismatch; you change it in the
+extension. See [Using Testnet](/getting-started/testnet) for the testnet build.
+
+## Common problems
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| Extension not detected | Locked, disabled for this site, or slower than the 4-second window | Unlock, check site permissions, reload, press Connect again |
+| The web wallet opened instead | Detection timed out and the deep-link fallback fired | Same as above; use the web wallet as-is if you prefer |
+| Address shows but signing does nothing | Read-only static account, no RPC session | Press Connect to re-establish the session |
+| App says disconnected while the extension is open | The five-second health check found no accounts on the SDK | Reconnect |
+| Wrong network | The build is pinned; the wallet is not | Switch networks in the extension |
+
+More symptoms, including the ones specific to the built-in wallet, are in
+[Troubleshooting](/wallets/troubleshooting).
+
+## Read more
+
+- [Connecting a Wallet](/wallets/connecting) — the handshake, the detection windows and the deep-link fallback in full.
+- [Choosing a Wallet](/wallets/choosing-a-wallet) — when the extension is the right choice and when it is not.
+- [Backup & Recovery](/wallets/backup-and-recovery) — what to do with the phrase it showed you.
+- [Managing AEX-9 Tokens](/wallets/aex9-tokens) — how community tokens appear once you are connected.
+- [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the wallet's own documentation.
+- [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — the source.
+
+## Open questions
+
+- What is the current published extension version, and does the Firefox build track the Chrome one?
+  Store listings were confirmed to exist but version numbers were not read, and a docs page that
+  pins a version goes stale immediately — check the listing.
+- Are Brave and Opera officially supported, or merely Chromium-compatible? Search results describe
+  the wallet as available for Chrome, Brave, Opera and Firefox, but the app itself only links the
+  Chrome Web Store and Firefox Add-ons listings.

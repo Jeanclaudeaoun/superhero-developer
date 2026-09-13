@@ -5,37 +5,204 @@ description: "Deploy a poll contract and register it, from the UI or the CLI."
 
 # Creating a Poll
 
-> **Page brief** — The creation guide. It must front-load the constraints, because a poll is two transactions and cannot be edited afterwards.
->
-> `status: outline` · `depth: deep`
+Creating a poll takes **two on-chain transactions** — deploy the poll contract, then register
+it in the `Registry` — and costs roughly 0.02 AE. Allow 2–5 minutes for both to mine.
 
-Creating a poll takes **two on-chain transactions** — deploy the poll, then register it —
-and needs about 0.02 AE. Allow 2–5 minutes.
+Front-load the constraints, because **a poll cannot be edited after it is deployed**. There is
+no entrypoint to change the title, fix a typo in the description, add an option, or move the
+close height. The only correction is a new poll, which means two more transactions and a
+split, confusing record. Get the text and the options right before you sign.
+
+## Before you start
+
+| Check | Why |
+| --- | --- |
+| At least 0.02 AE in the wallet | Two transactions, and the deploy is the expensive one |
+| Final wording for title and description | Neither is editable afterwards |
+| A reference link | Required, and it must start with `http://` or `https://` |
+| The full option list, in order | Option indices are fixed at deployment and are 0-based |
+| A close height, or a decision to leave it open-ended | Also not editable |
+
+## Field limits
+
+| Field | Constraint |
+| --- | --- |
+| Title | Required. Maximum 50 characters. |
+| Description | Required. Maximum 300 characters. |
+| Reference link | Required. Must start with `http://` or `https://`. |
+| Options | At least 2, each a non-empty label. |
+| Close height | A future key-block height, or `0` for a poll that never closes. |
+| Listing | Listed by default; unlisted keeps it out of the public listing. |
+
+One inconsistency worth knowing: the CLI enforces the 300-character description limit and
+rejects anything longer, while the web form only requires the description to be non-empty and
+does not check its length. Stay within 300 characters either way — it is the documented limit,
+and exceeding it means the same poll cannot be reproduced through the CLI.
+
+The `link` is stored on-chain as an unvalidated string. Nothing checks that it resolves, and
+the `http`/`https` prefix rule is enforced by the clients rather than by the contract. Clients
+that render it must treat it as untrusted input; the Superhero app runs it through a
+URL-safety check before putting it in an `href`.
+
+## Choosing a close height
+
+`close_height` is a **key-block** height. æternity targets one key-block every three minutes,
+so:
+
+```text
+key-blocks per day = (24 * 60) / 3 = 480
+
+close_height = current_height + days * 480
+```
+
+| Poll length | Blocks to add |
+| --- | --- |
+| 1 day | 480 |
+| 7 days | 3,360 |
+| 14 days | 6,720 |
+| 30 days | 14,400 |
+
+The web form defaults to 30 days, computed as exactly `current_height + 14400`.
+
+Setting `0` — or omitting it in the CLI — creates a poll that **never closes**. That has a real
+consequence for the result: stake weighting is computed against the state at the close height,
+so an open-ended poll has no snapshot and produces a continuously moving figure rather than a
+settled outcome. Use it for standing sentiment, not for a decision.
+
+> **Do not use the three-second figure.** æternity's *micro*-blocks arrive about every three
+> seconds, but `close_height` is a key-block height. The agent skill's governance guide
+> currently derives close heights at one block per three seconds; a height computed that way
+> lands roughly sixty times too far in the future — a "7-day" poll would run for well over a
+> year.
+
+## Creating from the web app
+
+Go to [superhero.com/voting/create](https://superhero.com/voting/create), or open
+[superhero.com/voting](https://superhero.com/voting) and pick the **Create Poll** tab.
+
+1. Connect a wallet with at least 0.02 AE.
+2. Enter the **title** (50 characters) and the **description**.
+3. Enter the **link**. If it does not point at `forum.aeternity.com`, the form suggests opening
+   a forum thread and linking that instead — a hint, not a requirement.
+4. Choose **Publicly Listed** or **Not Listed**.
+5. Add your **options**. The form starts with two empty rows and adds another each time you
+   fill the last one.
+6. Set the **close height**. The form pre-fills 30 days ahead and shows an estimated close date
+   and time; editing either the date or the time recomputes the height at three minutes per
+   block, and editing the height recomputes the date.
+7. Submit, and approve **two** transactions in your wallet — the poll deployment, then the
+   registry entry.
+
+On success the app takes you to `/voting/p/:pollAddress`, the poll's own page.
+
+If the second transaction fails after the first succeeds, you have a deployed but unregistered
+poll. It exists on-chain and can be voted on by address, but it will not appear in any listing
+until somebody calls `add_poll` for it.
+
+## Creating from the CLI
 
 ```bash
 node scripts/superhero-governance.mjs create \
   "<title>" "<description>" "<link>" "<opt0,opt1,...>" [close_height] [--unlisted]
 ```
 
-| Field | Constraint |
+| Argument | Notes |
 | --- | --- |
-| Title | Max 50 characters |
-| Description | Max 300 characters |
-| Reference link | Must start with `http://` or `https://` |
-| Options | Comma-separated, minimum 2 |
-| `close_height` | A key-block height, or `0`/omitted for open-ended |
-| `--unlisted` | Keeps the poll out of the public listing |
+| `title` | Maximum 50 characters, trimmed |
+| `description` | Maximum 300 characters, trimmed |
+| `link` | Must start with `http://` or `https://` |
+| `options` | One comma-separated string, minimum 2 after trimming and dropping empties |
+| `close_height` | Optional. A future height; `0` or omitted means open-ended. |
+| `--unlisted` | Optional. Equivalent to `--listed false`. Listed by default. |
 
-On success you get `poll_address`, `poll_id` and both transaction hashes.
+A real invocation:
 
-## What this page still needs
+```bash
+node scripts/superhero-governance.mjs create \
+  "Should we upgrade to protocol v3?" \
+  "Proposal to activate the protocol upgrade described at the link." \
+  "https://forum.aeternity.com/t/upgrade-v3/123" \
+  "Yes,No,Abstain"
+```
 
-- Document the UI path at `/voting/create` alongside the CLI.
-- Explain how to choose a sensible `close_height` from the current block height.
-- Document `Registry.add_poll(poll, is_listed)` for anyone deploying without the script.
+And a 14-day, unlisted poll, assuming a current height of 1,000,000:
 
-## Sources to mine
+```bash
+node scripts/superhero-governance.mjs create \
+  "Which feature should ship next?" \
+  "Vote for the next milestone. Discussion at the link." \
+  "https://forum.aeternity.com/t/next-milestone/456" \
+  "Multisig wallets,State channels,NFT standard" \
+  1006720 \
+  --unlisted
+```
 
-- `superhero-agent-skill/scripts/superhero-governance.mjs`
-- `superhero-agent-skill/guides/governance.md`
-- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`
+The script validates every field before touching the chain, and checks a non-zero close height
+against the node's current height so it cannot be set in the past. On success it prints:
+
+```json
+{
+  "success": true,
+  "action": "create_poll",
+  "poll_id": "43",
+  "poll_address": "ct_...",
+  "is_listed": true,
+  "vote_options": { "0": "Yes", "1": "No", "2": "Abstain" },
+  "close_height": 1006720,
+  "deploy_tx_hash": "th_...",
+  "register_tx_hash": "th_..."
+}
+```
+
+Keep `poll_address` — it is what every other command takes. `poll_id` is the registry's
+sequential id, usable with `info-by-id`.
+
+## Deploying without the script
+
+If you are building your own client, the two calls are:
+
+```text
+1.  Poll.init(metadata, vote_options, close_height)
+      metadata     = { title, description, link, spec_ref }
+      vote_options = map(int, string)   -- 0-based indices to labels
+      close_height = option(int)        -- None for open-ended
+
+2.  Registry.add_poll(poll: Poll, is_listed: bool) : int
+      returns the poll's sequential registry id
+```
+
+Both Superhero paths leave `spec_ref` unset. The registry to call is the one for your network
+— see [The Governance Registry](/governance/registry).
+
+Deploy the poll from the **account that should be its author**: `Poll.state.author` is set at
+deployment and `is_author` checks against it. The author has no special power over the poll
+afterwards — they cannot close it, edit it or delete it — but the attribution is permanent.
+
+## Costs
+
+| Action | Transactions | Approximate cost |
+| --- | --- | --- |
+| Create a poll | 2 | 0.01–0.02 AE |
+| Vote | 1 | about 0.0001 AE |
+| Revoke a vote | 1 | about 0.0001 AE |
+
+## Open questions
+
+- Whether the governance backend will compute stake-weighted results for a poll deployed from
+  arbitrary bytecode, or only for a recognised `Poll_Iris.aes` build, is not documented. The
+  two poll bytecode artifacts in the repositories differ — the web app ships one labelled
+  version `8.0.0`, the agent skill one built with compiler `7.0.1`. If a poll you created
+  reports `stake_weighted_results` as `null`, this is the first thing to check.
+- There is no way to cancel or close a poll early, and none of the repositories mention a
+  moderation path for removing an abusive poll from listings. Whether the `is_listed` flag can
+  be changed after registration is not exposed by the `Registry` ACI, which has `add_poll` but
+  no update entrypoint.
+
+## Read more
+
+- [Polls](/governance/polls) — the data model you are populating, and which result figure counts.
+- [Voting on Polls](/governance/voting) — what happens once people start voting on it.
+- [The Governance Registry](/governance/registry) — `add_poll`, the registry addresses, and the governance API.
+- [Governance with an agent](/agents/governance) — the guarded workflow for creating polls from an agent.
+- [Create a poll](https://superhero.com/voting/create) — the live form.
+- [æternity forum](https://forum.aeternity.com) — where the app suggests hosting the discussion thread you link.

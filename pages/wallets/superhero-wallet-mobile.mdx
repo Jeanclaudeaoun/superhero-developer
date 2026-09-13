@@ -1,32 +1,113 @@
 ---
 title: "Superhero Wallet — Mobile"
-description: "Install Superhero on iOS and Android, with the wallet built in."
+description: "The native apps, the built-in wallet, and installing Superhero as a PWA with no app store."
 ---
 
 # Superhero Wallet — Mobile
 
-> **Page brief** — Cover the native apps, the built-in wallet, and the PWA install path for people who do not want an app store.
->
-> `status: outline` · `depth: deep`
+On a phone there are three ways to hold an account for Superhero, and they are easy to confuse
+because two of them are called "Superhero". This page separates them, then covers the install paths
+and what changes once the app is installed rather than opened in a tab.
 
-| Platform | Link |
-| --- | --- |
-| iOS | `https://apps.apple.com/us/app/superhero-web3-communities/id6758045846` |
-| Android | `https://play.google.com/store/apps/details?id=com.superhero.apps` |
+## Two different apps
 
-The app ships with a wallet built in, so you can post, trade, tip and govern without an
-extension. Superhero is also installable as a PWA — "Add to Home Screen" in Safari, or the
-install prompt on Android — which gives a full-screen experience, an integrated wallet and
-push notifications without an app store.
+| App | Stores | What it is |
+| --- | --- | --- |
+| **Superhero — Web3 Communities** | [App Store](https://apps.apple.com/us/app/superhero-web3-communities/id6758045846) · [Google Play](https://play.google.com/store/apps/details?id=com.superhero.apps) | The Superhero social app, **with a wallet built in** |
+| **Superhero Wallet** | [App Store](https://apps.apple.com/us/app/superhero-wallet/id1502786641) · [Google Play](https://play.google.com/store/apps/details?id=com.superhero.cordova) | The standalone multi-chain wallet, which signs for other æpps too |
 
-## What this page still needs
+If you want to use Superhero, install the first. If you already have an æternity account elsewhere,
+or you want one wallet across several chains, install the second and connect it.
 
-- Screenshots of onboarding on both platforms.
-- Document the iOS PWA install steps (Share → Add to Home Screen) as shown by the in-app prompt.
-- Cover push notification setup and permissions.
-- Note any feature differences between mobile and web.
+The Superhero app's own description: a built-in wallet so you can post, trade, tip and govern
+without leaving the app — no extensions, no friction.
 
-## Sources to mine
+## Install Superhero as a PWA — no app store
 
-- `superhero/src/locales/en.json` — `common.views.landing.pwaInstall.*`
-- `superhero/src/views/Landing.tsx` — the Mobile App section
+Superhero is also installable straight from the browser. The installed app gets a home-screen icon,
+a full-screen experience, an integrated wallet and push notifications.
+
+### iOS
+
+**Safari only.** Chrome and Firefox on iOS cannot install a PWA — the app says so explicitly in its
+install guide.
+
+1. Open [superhero.com](https://superhero.com) in Safari.
+2. Open the page menu — the app's install guide points at the **⋯** menu in the top-right; on older
+   iOS versions this is the **Share** button. Whichever your Safari shows, it is the menu containing
+   sharing actions.
+3. Scroll and tap **Add to Home Screen**.
+4. Tap **Add** in the top right. The icon appears on your home screen.
+5. **Launch it from the home-screen icon**, not from Safari — the extra capabilities only exist in
+   standalone mode.
+
+### Android
+
+1. Open [superhero.com](https://superhero.com) in Chrome.
+2. Tap the **⋮** menu in the top right.
+3. Tap **Add to Home screen** or **Install app**.
+4. Confirm with **Install**.
+5. Launch from the home screen.
+
+On desktop, the same install is available from the install button in your browser's address bar.
+
+## What changes once it is installed
+
+Running as an installed app is not cosmetic. Several behaviours are gated on it:
+
+| Behaviour | Browser tab | Installed app |
+| --- | --- | --- |
+| Create a built-in wallet (passkey or new phrase) | Yes | Yes |
+| **Import** an existing seed phrase or private key | No — Connect instead | **Yes** |
+| In-page signing by the built-in wallet | Not installed as the signer | **Yes** |
+| Token community chat entry points | Hidden | **Shown** |
+| Location sharing on iOS | Not available | Available |
+| Push notifications | No | Yes |
+
+The import restriction is deliberate rather than an oversight. In a browser tab the answer to "I
+already have a wallet" is Connect, which hands signing to the extension or the wallet app and never
+asks for your secret. That handoff is a redirect, and a redirect out of an installed app does not
+come back cleanly — which is exactly why the installed app needs a way to take the key directly and
+the web does not.
+
+## The built-in wallet on mobile
+
+Tapping **Connect** in the installed app offers a passkey option first. On a phone that means Face
+ID, Touch ID, a fingerprint or your device PIN, and it creates a real æternity account in one
+ceremony — no seed-phrase screen, because the seed is *derived* from the passkey rather than stored
+beside it.
+
+The caveat to internalise before you fund it: **that only works as a backup if the passkey syncs**
+(iCloud Keychain, Google Password Manager). There is no phrase reveal or export screen in the app
+today. Enroll the recovery code the flow offers you, and read
+[The Built-In Wallet](/wallets/built-in-wallet) for what each factor does and does not survive.
+
+## Connecting the standalone Superhero Wallet app instead
+
+On a mobile browser the app cannot detect an extension — there are none — so it uses a deep link.
+Pressing Connect tries the `superhero://` scheme first; if the native app does not take over within
+about 1.5 seconds, it falls back to opening `wallet.superhero.com`. The wallet signs and returns to
+the app through the transaction queue route, described in
+[Connecting a Wallet](/wallets/connecting).
+
+## Read more
+
+- [The Built-In Wallet](/wallets/built-in-wallet) — what the "wallet built in" actually is, and where its keys live.
+- [Connecting a Wallet](/wallets/connecting) — the deep-link path mobile uses instead of extension detection.
+- [Choosing a Wallet](/wallets/choosing-a-wallet) — built-in versus standalone, decided by recovery model.
+- [Backup & Recovery](/wallets/backup-and-recovery) — especially the passkey-sync rule above.
+- [Superhero — Web3 Communities on Google Play](https://play.google.com/store/apps/details?id=com.superhero.apps) — the app listing, with its current feature description.
+- [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet's documentation.
+
+## Open questions
+
+- Which iOS Safari control is current for **Add to Home Screen**? The app ships two versions of this
+  copy — the landing-page prompt says "Tap the Share button" while the install guide says "Tap the
+  three-dot menu (⋯)". Both live in `src/locales/en.json`. Someone should test on a current iOS and
+  reconcile them.
+- How are push notifications enabled and what permissions do they request? The install copy lists
+  push notifications as a benefit of installing, but no permission-request flow was documented in the
+  files read for this page.
+- Do the native apps and the installed PWA differ in any feature beyond the store wrapper? No
+  comparison was found in the repository, and a screenshot-based walkthrough of native onboarding is
+  still wanted for this page.

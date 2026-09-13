@@ -5,19 +5,48 @@ description: "The mental model behind Superhero: attention markets, on-chain soc
 
 # Core Concepts
 
-> **Page brief** — Conceptual grounding. A reader who finishes this section should be able to explain Superhero to someone else without using the word 'blockchain' more than once.
->
-> `status: outline` · `depth: overview`
+Superhero is a social network whose posts live in a smart contract and whose topics are tradable
+markets. That is an unusual combination, and most of the confusion people have with the product
+comes from applying a mental model borrowed from either a social app or an exchange, when neither
+fits on its own. These pages build the model you need before the how-to guides make sense.
 
-Read this section before the how-to guides. Everything else on this site assumes the
-vocabulary defined here.
+Read them in order if you are new. If you already know what a bonding curve is, start with
+[Where the Money Goes](/concepts/value-flow) — it is the page that answers the question people
+actually ask first.
 
 ## In this section
 
-- [What is Superhero?](/concepts/what-is-superhero) — Define Superhero for a newcomer — what it replaces, what it adds, and what it is not.
-- [Attention Markets](/concepts/attention-markets) — Explain the core thesis: trends are the asset, and a bonding curve turns conviction into a price without an order book.
-- [Architecture Overview](/concepts/architecture) — One diagram plus a walkthrough of every layer, from the Sophia contracts up to the React app and the agent skill.
-- [On-Chain Social](/concepts/on-chain-social) — Explain permanence, censorship resistance, provenance, and the practical trade-offs (no deletion, public by default, gas per post).
-- [Where the Money Goes](/concepts/value-flow) — Follow one purchase end to end and account for every fraction of it. This is the page people will link to when they ask 'what are the fees'.
-- [Glossary](/concepts/glossary) — The single authoritative definition list. Every other page links here rather than re-defining terms.
-- [FAQ](/concepts/faq) — Mirror and expand superhero.com/faq. Keep the answers in step with `server/lib/faq-content.cjs`, which feeds the page's schema.org JSON-LD.
+| Page | What it answers |
+| --- | --- |
+| [What is Superhero?](/concepts/what-is-superhero) | What the product is, what it is not, and how superhero.com, the mobile apps and the wallet relate. |
+| [Attention Markets](/concepts/attention-markets) | Why a bonding curve is used to price a hashtag, and what the resulting price does and does not tell you. |
+| [Architecture Overview](/concepts/architecture) | Which contract holds what, which service serves what, and the exact path a post and a trade take. |
+| [On-Chain Social](/concepts/on-chain-social) | What it means for a post to be a contract call — permanence, provenance, and the costs. |
+| [Where the Money Goes](/concepts/value-flow) | Every fraction of AE on a buy and on a sell, traced to the contract that receives it. |
+| [Glossary](/concepts/glossary) | Every term used across this site, defined once, linked to the page that goes deeper. |
+| [FAQ](/concepts/faq) | The canonical user answers from superhero.com/faq, plus developer and agent questions. |
+
+## The short version
+
+Three mechanisms account for almost everything Superhero does.
+
+**Posts are contract calls.** A post is a `post_without_tip` call on the `Tipping.aes` v3 contract.
+The author's address, the text and a list of media URLs are written into contract state and indexed
+by a `tip_id`. Nobody — including Superhero — can delete it afterwards.
+
+**Topics are tokens.** Any hashtag can be turned into an AEX-9 token whose price is a deterministic
+function of its own circulating supply. There is no order book and no counterparty: you buy from the
+curve and sell back to it, and the contract holds a reserve large enough to redeem the entire supply.
+
+**The spread funds the community.** The gap between the buy curve and the sell curve is 1%. Half
+goes to the token's own DAO treasury, half to a four-level referral chain. Token holders vote on
+what the treasury does with it.
+
+## Read more
+
+- [Community Tokens](/tokens/overview) — the practical guide to what a community token is once you stop describing it and start trading it.
+- [How DAOs Work](/dao/overview) — what token holders can actually decide, and the thresholds that gate it.
+- [Getting Started](/getting-started) — the first-run path: wallet, funds, first post, first trade.
+- [Agent Quickstart](/agents/quickstart) — the same model, driven by an AI agent through a CLI instead of a browser.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the protocol specification these pages are built from.
+- [æternity Documentation Hub](https://docs.aeternity.com/) — the chain everything here runs on.

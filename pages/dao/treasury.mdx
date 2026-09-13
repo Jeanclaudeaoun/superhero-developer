@@ -5,24 +5,140 @@ description: "Where community money comes from and how it is held."
 
 # The DAO Treasury
 
-> **Page brief** — Document treasury funding, balance visibility, and the `record_sale_transaction` path.
->
-> `status: outline` · `depth: standard`
+A community DAO holds plain AE. It has no separate vault contract, no wrapped balance and no
+staking position — the treasury is simply the AE balance of the `DAO` contract, and the only
+way it leaves is a payout vote that passes and is applied in time. This page covers how it is
+funded, how to read it, and what the 555 AE vote deposit does.
 
-The treasury is funded by 0.5% of every buy on the community's bonding curve, plus the 555 AE
-deposit from every vote that is opened.
+## Where the money comes from
 
-Proceeds reach the DAO through `record_sale_transaction(buyer, buy_price)` rather than a bare
-`Chain.spend`, which is what makes upgraded DAOs able to add their own logic for splitting or
-using proceeds.
+| Source | Amount | Path into the DAO |
+| --- | --- | --- |
+| Buys on the bonding curve | 0.5% of every buy | `record_sale_transaction(buyer, buy_price)` |
+| Opening a proposal | 555 AE per vote opened | `add_vote(metadata)`, which is payable |
 
-## What this page still needs
+Nothing else pays the treasury. Sells do not, because the 1% spread is charged on the buy
+side; tips and posts do not, because they settle through `Tipping_v3`, not the token sale.
 
-- Document how to read the treasury balance on-chain and via the API (`dao_balance` on the token DTO).
-- Explain whether the 555 AE vote deposit is refundable.
-- Cover the DAO list and detail views at `/trends/daos` and `/trends/dao/:saleAddress`.
+The 1% buy spread is split evenly: half to the community DAO, half to the affiliation system.
+The affiliation half is burned when the buyer has no referrer. See
+[Value flow](/concepts/value-flow) and [Affiliation rewards](/rewards/affiliation).
 
-## Sources to mine
+## Proceeds arrive with metadata, not as a bare spend
 
-- `superhero/src/features/dao/views/` — `DaoListView`, `TokenDaosListView`, `DaoVoteDetailsView`
-- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote
+The token sale does not `Chain.spend` into the DAO. It calls:
+
+```text
+stateful payable entrypoint record_sale_transaction(buyer: address, buy_price: int) : unit
+```
+
+The AE rides along with the call, and the buyer's address and the buy price arrive as
+arguments. Two things follow from that design:
+
+- A DAO can react to income, not just accumulate it. The default `DAO.aes` records the
+  transfer; a replacement DAO could split it, forward part of it, or account for it per
+  buyer.
+- `record_sale_transaction` is part of the `ReplaceableDAO` interface, so every DAO that is
+  eligible for a `ChangeDAO` migration must implement it. See
+  [Replaceable DAOs](/dao/replaceable-dao).
+
+## Is the 555 AE refundable?
+
+No. The whitepaper describes it as "a donation of 555 AE towards the DAO". It is paid on
+`add_vote`, it lands in the treasury, and no entrypoint returns it — not on rejection, not on
+expiry, and not on success. There is no `refund`, no `cancel_vote` and no author-only
+withdrawal in the `DAO` or `DAOVote` ACI.
+
+The practical consequences are worth stating plainly:
+
+- A failed proposal costs its author 555 AE, which stays with the community.
+- The treasury grows every time somebody proposes something, whatever the outcome.
+- If a passed vote is not applied within the roughly two-day execution window, the 555 AE is
+  still gone and the proposal has to be opened again at full price.
+
+That is the intended anti-spam property: governance participation carries a real economic
+commitment. It also means a community with a low-value treasury can end up with proposals
+that cost more to open than they distribute.
+
+## Reading the balance
+
+### On-chain
+
+The DAO contract is `payable`, so the treasury is simply the AE held at the DAO's contract
+address. Take that address from the token's `dao_address` field, then look it up in
+[æScan](https://aescan.io) — the app links contracts there directly — or read it with
+whatever balance call your SDK exposes for a contract address.
+
+Everything else about the DAO is read through its entrypoints:
+
+| Read | Returns |
+| --- | --- |
+| `get_state()` | The whole `DAO.state` record |
+| `votes()` | Every vote, keyed by sequential id, with an applied flag |
+| `vote_timeout()` | The execution window, in key-blocks |
+| `get_token()` | The community AEX-9 token contract |
+| `get_token_sale()` | The sale contract this DAO owns |
+| `get_community_management()` | The linked `CommunityManagement`, as an option |
+| `factory()` | The factory that deployed it |
+
+### Through the Superhero API
+
+`GET /api/tokens/{address}` returns the token DTO, which carries the treasury directly:
+
+| Field | Meaning |
+| --- | --- |
+| `dao_address` | The DAO contract address for this token |
+| `dao_balance` | The treasury balance, as a string in aettos |
+| `sale_address` | The token sale contract, used as the route key in the app |
+| `total_supply` | Needed to evaluate the 10% participation quorum |
+| `holders_count` | How many addresses hold the token |
+
+`dao_balance` is in aettos — divide by `10^18` to get AE. The app does exactly that before
+displaying it. See [Tokens API](/api/tokens) for the rest of the DTO.
+
+## The treasury in the app
+
+| View | Route | What it shows |
+| --- | --- | --- |
+| DAO list | `/trends/daos` | Every community DAO as a card: treasury balance, holders, creation date, market cap. Sortable and searchable. |
+| One DAO | `/trends/dao/:saleAddress` | That community's treasury, its proposal list, and the create-vote form. |
+| One proposal | `/trends/dao/:saleAddress/vote/:voteId/:voteAddress` | The ballot, the voters table, and the vote, revoke, withdraw and apply actions. |
+
+The DAO list is keyed by `sale_address`, not by the DAO address — the sale contract is the
+stable public identifier for a community across the app.
+
+Both list views describe the treasury the same way the protocol does: DAOs hold the protocol
+fees collected from trades, and each card shows the treasury balance for that token.
+
+## What the treasury can be spent on
+
+Only two of the seven vote subjects move money:
+
+- `VotePayout(recipient)` — send the **entire** DAO balance to one account.
+- `VotePayoutAmount(recipient, amount)` — send a **specified** amount to one account.
+
+There is no multi-recipient payout, no streaming, no vesting and no budget primitive. A
+community that wants to split a grant between three contributors runs three proposals, or
+pays one address that then distributes off-protocol. A `ChangeDAO` vote also moves the whole
+balance, but as part of a migration rather than a payout — see
+[Replaceable DAOs](/dao/replaceable-dao).
+
+## Open questions
+
+- Whether `record_sale_transaction` is callable by anyone or restricted to the linked token
+  sale is not visible in the ACI. The signature is `stateful payable` with no access
+  qualifier exposed; settle it from the `DAO.aes` source before assuming a DAO can be funded
+  by arbitrary callers.
+- The ACI does not expose an entrypoint that returns the treasury balance, so the app reads it
+  from the chain and the indexer reads it into `dao_balance`. If you need a balance that is
+  consistent with a specific block, read the account balance at that height rather than the
+  API field, whose freshness depends on indexer sync.
+
+## Read more
+
+- [Proposals and Vote Subjects](/dao/proposals) — the two payout subjects and their exact parameters.
+- [How DAOs Work](/dao/overview) — the funding step in the context of the whole lifecycle.
+- [Replaceable DAOs](/dao/replaceable-dao) — why `record_sale_transaction` exists at all.
+- [Value flow](/concepts/value-flow) — where the other 99.5% of a buy goes.
+- [Tokens API](/api/tokens) — the full token DTO including `dao_address` and `dao_balance`.
+- [Browse every DAO treasury](https://superhero.com/trends/daos) — the live list.

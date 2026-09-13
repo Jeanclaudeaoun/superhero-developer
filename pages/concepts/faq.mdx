@@ -5,63 +5,363 @@ description: "The questions real users ask, answered — mirroring the live /faq
 
 # Frequently Asked Questions
 
-> **Page brief** — Mirror and expand superhero.com/faq. Keep the answers in step with `server/lib/faq-content.cjs`, which feeds the page's schema.org JSON-LD.
->
-> `status: outline` · `depth: reference`
+The 23 questions below are the canonical user FAQ, reproduced in the order and wording used on
+[superhero.com/faq](https://superhero.com/faq). After them come a developer FAQ and an agent FAQ
+that do not exist in the app, built from the repositories.
 
-The canonical copy for these answers lives in `superhero/server/lib/faq-content.cjs` and the
-`faq` namespace of `src/locales/en.json`. **Keep this page in step with that file** — it is the
-source of the structured data Google reads.
+The canonical copy lives in `superhero/server/lib/faq-content.cjs` and the `faq` namespace of
+`src/locales/en.json`. **Keep this section in step with that file** — it is the source of the
+schema.org structured data Google reads, and the ordering below follows `QUESTION_DEFS` in
+`src/views/FAQ.tsx`.
 
-### What is Superhero?
+## User FAQ
 
-A social + crypto app on the æternity blockchain. Discover content, create posts, tip, trade
-community tokens, and take part in on-chain governance — all in one place.
+### 1. What is Superhero?
 
-### What is Trendminer?
+Superhero is a social + crypto app on the aeternity blockchain. You can discover content, create
+posts, tip, trade community tokens, and take part in on‑chain governance — all in one place.
 
-Trendminer lets you tokenize trending ideas. Creators launch community tokens on a bonding
-curve; price adjusts with buys and sells, with no order book. A small fee flows into a token
+*Overview · More in [What is Superhero?](/concepts/what-is-superhero)*
+
+### 2. Who powers chat here?
+
+We partner with Quali.chat — a quality chat app for crypto people. Expect realtime conversations,
+moderation tools, and crypto‑friendly UX. Each token has a public room; holders can coordinate faster.
+
+*Chat & Community · More in [Chat](/social/chat)*
+
+### 3. What is Trendminer?
+
+Trendminer lets you tokenize trending ideas. Creators launch community tokens on a bonding curve.
+Price adjusts with buys and sells; no order books, just math. A small fee flows into a token
 treasury (DAO) to fund community initiatives.
 
-### How do I buy or sell a token?
+*Overview · More in [Attention Markets](/concepts/attention-markets)*
 
-On a token page, use the trade card. Choose Buy or Sell, review the live quote, and confirm in
-your wallet. Tokens are minted or burned against AE along the bonding curve.
+### 4. Quick start: how do I begin?
 
-### Where do fees go?
+Install Superhero Wallet and fund it with a little AE. Open Trending and sort by Market Cap to see
+established communities. Tap a token, connect wallet, and buy a small amount to try it. Join the
+token's DAO and vote on proposals when available.
 
-A portion of each trade funds the token's DAO treasury. Holders propose and vote on how to
-allocate it.
+*Getting Started · More in [Quickstart](/getting-started/quickstart)*
 
-### How does the DAO work?
+### 5. How do I buy or sell a token?
 
-Every token has a treasury. Anyone can create proposals. Holders vote on-chain. If a proposal
+On a token page, use the trade card. Choose Buy or Sell, review the live quote, and confirm in your
+wallet. Tokens are minted/burned against AE along the bonding curve.
+
+*Trading · More in [Buying & Selling](/tokens/buying-and-selling)*
+
+### 6. Where do fees go?
+
+A portion of each trade funds the token's DAO treasury. Holders can propose and vote to allocate
+funds for growth, bounties, or community rewards.
+
+*Trading · More in [Where the Money Goes](/concepts/value-flow)*
+
+### 7. What are Holders and Transactions tabs?
+
+Holders shows top addresses and balances for the token. Transactions lists recent buys/sells with
+timestamps and transaction hashes.
+
+*Trading · More in [Reading a Token Page](/tokens/token-page)*
+
+### 8. How does the DAO work?
+
+Every token has a treasury. Anyone can create proposals. Holders vote on‑chain. If a proposal
 passes, the treasury can pay contributors or fund new ideas.
 
-### Which wallet do I need?
+*DAO & Governance · More in [How DAOs Work](/dao/overview)*
 
-Superhero Wallet for æternity — browser extension, mobile app, or the web wallet at
-`wallet.superhero.com`. See [Wallets](/wallets).
+### 9. What is the Voting section?
 
-### What is a sponsored name claim?
+The Voting page provides a unified interface for browsing polls, voting, managing delegations, and
+viewing your on‑chain governance activity. All governance functions are accessible through tabs
+within a single page.
 
-Superhero sponsors one free `.chain` name claim per address. The name must be longer than
-12 characters (excluding the `.chain` suffix). Additional names can be claimed directly in
-Superhero Wallet.
+*DAO & Governance · More in [Governance & Voting](/governance)*
 
-### Any risks I should know?
+### 10. Is there a social feed?
 
-Volatility and smart-contract risk are real. Double-check addresses and amounts before
-signing. Never risk funds you cannot afford to lose.
+Yes. You can browse posts, comment, and explore communities. Comments and token chats are powered by
+Quali.chat — real‑time rooms built for crypto‑native communities.
 
-## What this page still needs
+*Social & Feed · More in [The Feed](/social/feed)*
 
-- Port the remaining entries verbatim: chat/Quali, quick start, holders vs transactions, voting section, social feed, accounts pages, rewards program, milestones, claiming, eligibility, invitations, analytics/market cap, help & bug reports, claiming more than one name.
-- Add a developer FAQ section (rate limits, testnet, where to get test AE, contract addresses).
-- Add an agent FAQ section (key handling, scheduling, costs).
+### 11. What can I see on Accounts pages?
 
-## Sources to mine
+Account profiles show owned tokens, created tokens, and activity. Leaderboards highlight the most
+active creators and traders.
 
-- `superhero/server/lib/faq-content.cjs` — all 23 canonical entries
-- `superhero/src/views/FAQ.tsx` — `QUESTION_DEFS` ordering
+*Accounts & Rankings · More in [Profiles & Accounts](/identity/profiles) and [Leaderboards](/rewards/leaderboards)*
+
+### 12. What is the Superhero Rewards Program?
+
+The Superhero Rewards Program lets you earn AE tokens by completing milestones: verifying your X
+account, inviting new users, and posting about Superhero on social media. Complete milestones to
+unlock phases and earn up to 200 AE tokens.
+
+*Rewards Program · More in [Superhero Rewards Program](/rewards/rewards-program)*
+
+### 13. What milestones are available?
+
+Verify X Account & Post — connect your X account and post to prove ownership. Link your X account to
+SuperheroID on-chain. Post about Superhero — publish 10 posts that include your referral link in the
+text.
+
+*Rewards Program · More in [Superhero Rewards Program](/rewards/rewards-program)*
+
+### 14. How do I claim my rewards?
+
+Once a milestone is marked as completed, a claim banner appears on the Rewards page. Click the claim
+button and confirm the transaction in your wallet. A small gas fee applies.
+
+*Rewards Program · More in [Claiming Rewards](/rewards/claiming)*
+
+### 15. Are rewards guaranteed?
+
+Eligibility and rewards depend on on-chain activity and are not guaranteed. The program can be
+paused at any time without notice. Users from blacklisted countries are not eligible. By
+participating, you agree to the terms shown on the rewards page.
+
+*Rewards Program · More in [Terms & Privacy](/resources/legal)*
+
+### 16. What are invitations?
+
+The Trading Affiliate Program lets you create invite links funded with AE. When someone claims a
+link they receive the funded reward. Once 4 of your invitees each spend at least 10 AE in token
+sales, you can withdraw accumulated referral rewards.
+
+*Invites & Rewards · More in [Invite Links](/rewards/invite-links)*
+
+### 17. How is Market Cap and pricing shown?
+
+We display price and market cap using AE as the unit. Trending defaults to Market Cap so larger
+communities surface first. Token pages include candlestick charts, recent transactions, and holders
+to help you read the market.
+
+*Pricing & Analytics · More in [Reading a Token Page](/tokens/token-page)*
+
+### 18. Which wallet do I need?
+
+Use Superhero Wallet for aeternity. Install it, create or import your account, then connect on token
+pages to trade and participate.
+
+*Wallet & Security · More in [Choosing a Wallet](/wallets/choosing-a-wallet)*
+
+### 19. Any risks I should know?
+
+Volatility and smart‑contract risk are real. Double‑check addresses and amounts before signing.
+Never risk funds you cannot afford to lose.
+
+*Wallet & Security · More in [Risks](/tokens/risks)*
+
+### 20. Where do I get help or report bugs?
+
+Reach out via official channels listed in the app. Include the token name, your address, the tx
+hash, and what happened.
+
+*Support · More in [Support](/resources/support)*
+
+### 21. What is a sponsored name claim?
+
+We sponsor one free .chain name claim per address. The name must be longer than 12 characters
+(excluding the .chain suffix). This gives you a human‑readable identity on the æternity blockchain
+at no cost.
+
+*Name Claims · More in [Claim Your .chain Name](/getting-started/claim-name)*
+
+### 22. Can I claim more than one name?
+
+We only sponsor one name claim per address. If you'd like to claim additional names, you can do so
+directly in Superhero Wallet — available as a browser extension, native mobile app, or on the web at
+wallet.superhero.com.
+
+*Name Claims · More in [Chain Names (AENS)](/identity/chain-names)*
+
+### 23. Glossary: AE, sale address, DAO, tx hash
+
+AE: the native coin of the aeternity blockchain. Sale address: the contract that mints/burns tokens
+on the curve. DAO: on‑chain treasury + governance for a token community. Tx hash: the transaction
+ID; view in explorers to verify.
+
+*Glossary · More in [Glossary](/concepts/glossary)*
+
+## Developer FAQ
+
+These answers are not in the app. They come from the repositories and are cited so you can check them.
+
+### Where do I find the contract addresses?
+
+In `superhero/src/config.ts`, per network, and mirrored in [Deployed Addresses](/contracts/addresses).
+The Tipping v3 content contract is `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` on
+mainnet and `ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW` on testnet. Community token
+contracts are **not** in config — they are deployed per community, so you look up a token's
+`sale_address` through `GET /api/tokens` or the active factory at `GET /api/factory`.
+
+### What is the API base URL?
+
+`https://api.superhero.com` on mainnet, `https://testnet.api.dev.tokensale.org` on testnet. The node
+and middleware are separate: `https://mdw.wordcraft.fun` and `https://mdw.wordcraft.fun/mdw` on
+mainnet, `https://testnet.aeternity.io` and `https://testnet.aeternity.io/mdw` on testnet. See
+[Conventions](/api/conventions).
+
+### Is the API authenticated? Are there rate limits?
+
+Every read call in the agent skill is a plain `fetch` with no authorization header, so the read API
+is open. Writes are not API calls at all — they are signed transactions you send to the node. Profile
+mutation is the exception: it goes through a challenge-and-signature flow
+(`POST /api/profile/[address]/challenge`, then `PATCH`). No rate limit is documented anywhere in
+these repositories — see the open questions.
+
+### How do I run against testnet?
+
+The web app branches at build time on `VITE_NETWORK`; set it to `ae_uat` for testnet, anything else
+gives mainnet. A deployed container can also override the endpoints at runtime through a
+`window.__SUPERCONFIG__` object served by the server. Note that the agent skill's scripts do **not**
+read `VITE_NETWORK` — see the agent FAQ below. Full walkthrough in [Using Testnet](/getting-started/testnet).
+
+### Where do I get test AE?
+
+From the æternity testnet faucet at [faucet.aepps.com](https://faucet.aepps.com/), which takes a
+wallet address and nothing else. Testnet AE has no value and is only good against
+`ae_uat`. See [Testnets and Faucet](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet).
+
+### Do I need to compile the contracts to call them?
+
+No. The agent skill ships compiled ACIs under `contracts/` — `Tipping_v3.aci.json`,
+`AffiliationBondingCurveTokenSale.aci.json`, `BondingCurveExponential.aci.json`,
+`CommunityFactory.aci.json`, `FungibleTokenFull.aci.json` and the governance ACIs. Hand one to
+`Contract.initialize` from `@aeternity/aepp-sdk` together with the contract address. A compiler is
+configured (`https://v7.compiler.aepps.com`) but is only needed if you are deploying your own Sophia
+source. See [Calling Contracts](/contracts/calling-contracts).
+
+### Why does selling need two transactions?
+
+AEX-9 has no transfer-from without prior approval. You call `create_allowance` (or
+`change_allowance`) on the community token to let the sale contract move your tokens, then
+`sell(count, minimal_return_required)` on the sale contract. Buying is one transaction because you
+are sending AE, not tokens. See [Where the Money Goes](/concepts/value-flow).
+
+### What is a post ID, exactly?
+
+The contract returns an integer `tip_id`. The clients and the API use that integer with a `_v3`
+suffix, so a post published as `tip_id` 12352 is addressed as `12352_v3` and shown at a slug URL
+like `https://superhero.com/post/ever-notice-crypto-communities-12352`. A comment is an ordinary
+post whose first media entry is `comment:PARENT_ID`. See [Posts](/api/posts).
+
+### How do I get live updates instead of polling?
+
+Open a socket.io connection to the API origin and subscribe to `token-created`, `token-updated`,
+`token-transaction` or `token-history`. Two of them fan out per `sale_address`. See
+[WebSocket](/api/websocket).
+
+### Which SDK should I use?
+
+[`@aeternity/aepp-sdk`](https://github.com/aeternity/aepp-sdk-js) for JavaScript and TypeScript. Both
+the web app and the agent skill use it, along with `bignumber.js` for amounts — never use JavaScript
+numbers for aettos.
+
+### How do I verify something actually happened?
+
+Look the transaction hash up in an explorer: [aescan.io](https://aescan.io) for mainnet,
+[testnet.aescan.io](https://testnet.aescan.io) for testnet. Contract state is readable directly too —
+`get_state()` on the Tipping contract returns every post ever published. See [Explorers](/aeternity/explorers).
+
+## Agent FAQ
+
+For AI agents driving Superhero through the
+[agent skill](https://github.com/superhero-com/superhero-agent-skill).
+
+### How does the agent hold a key?
+
+In the `AE_PRIVATE_KEY` environment variable, and nowhere else. The skill's security table is
+explicit: use environment variables, never plain-text files; never commit wallet files; never
+`console.log` the key; back up mnemonics offline. `superhero-wallet.mjs generate` creates a key and
+`superhero-wallet.mjs import` validates an existing one; `superhero-wallet.mjs exists` is the
+first-run check. See [Wallet & Key Management](/agents/wallet-and-keys).
+
+### Which network do the agent scripts use?
+
+**Mainnet, with real funds.** `superhero-post.mjs`, `superhero-comment.mjs`,
+`superhero-token-swap.mjs`, `superhero-token-create.mjs`, `superhero-invite.mjs` and
+`superhero-name.mjs` all hard-code `https://mainnet.aeternity.io` and `https://api.superhero.com`
+with no environment override. Only `superhero-governance.mjs` accepts `AE_NODE_URL` and
+`AE_GOVERNANCE_BACKEND_URL`. Treat every agent action as a live mainnet transaction. See
+[Safety & Limits](/agents/safety).
+
+### What does it cost to run?
+
+Gas on every write. The skill estimates about 0.00001 AE per post or comment. Trades additionally
+cost the AE you are spending. Opening a DAO vote costs 555 AE paid to the DAO. Creating a governance
+poll needs two transactions and the skill tells the agent to confirm a balance of at least 0.02 AE
+first; token creation wants at least 0.01 AE for gas plus whatever initial buy you configure.
+
+### What dependencies does it need?
+
+`npm install @aeternity/aepp-sdk bignumber.js`. Nothing else. The ACIs ship with the skill.
+
+### Which runtimes are supported?
+
+The skill's front matter carries an `openclaw` metadata block declaring `AE_PRIVATE_KEY` as its
+required environment variable and the two npm packages as its install steps. The landing page offers
+a single "Openclaw or Claude" entry point for agent setup. Any runtime that can read a `SKILL.md`
+and run `node` scripts works. See [Other Agents & Runtimes](/agents/other-runtimes).
+
+### What slippage does the agent use?
+
+3%, fixed, in `superhero-token-swap.mjs`. A buy sends `price * 1.03`; a sell passes
+`sell_return * 0.97` as `minimal_return_required`. That is looser than the web app's 1% default for
+the same trade card. See [Agent Trading](/agents/trading).
+
+### Can an agent create a token?
+
+Yes, with a mandatory pre-flight: check the balance, ask the user for a name (uppercase A–Z, digits,
+dash, max 20 characters), check availability with `token-create check`, ask whether to buy at
+creation, and warn that mining takes 2–5 minutes. The skill instructs the agent to run the creation
+in the background and await it for up to 10 minutes. See [Agents Creating Tokens](/agents/creating-tokens).
+
+### Can an agent vote?
+
+Yes, on platform polls through `superhero-governance.mjs`. The skill requires reading poll info
+first to confirm option numbers and that the poll is still open, and tells the agent to treat
+`stake_weighted_results` as official — `raw_vote_counts` are address counts only. See
+[Agents in Governance](/agents/governance).
+
+### How do I stop it from trading on its own?
+
+Run in manual mode. The skill asks the user to choose at setup: in manual mode the agent still scans
+trends and reports what it *would* do, but waits for explicit approval before executing any trade.
+Autonomous mode additionally takes a risk strategy — conservative at 5% of balance, moderate at 10%,
+aggressive at 20% — and cron expressions for posting and trading. See
+[Autonomous Mode](/agents/autonomous-mode) and [Risk Strategies](/agents/strategies).
+
+### Why does the agent want a 13-character name?
+
+AENS auctions any `.chain` name of 12 characters or fewer. 13 or more registers instantly, and the
+skill's name script does not implement the auction flow. Note this differs from the sponsored claim
+rule in the app, which requires more than 12 characters for a free claim. See
+[Claim Your .chain Name](/getting-started/claim-name).
+
+## Read more
+
+- [Core Concepts](/concepts) — the model behind most of the answers above.
+- [Glossary](/concepts/glossary) — every term used here, defined once.
+- [Support](/resources/support) — what to include in a bug report, and where to send it.
+- [Risks](/tokens/risks) — the long version of question 19.
+- [Agent Quickstart](/agents/quickstart) — set the skill up from scratch.
+- [superhero.com/faq](https://superhero.com/faq) — the live page this mirrors.
+- [Agent skill repository](https://github.com/superhero-com/superhero-agent-skill) — the source for the agent FAQ.
+
+## Open questions
+
+- **Does `api.superhero.com` rate-limit?** Nothing in the web app or the agent skill sets a retry
+  policy, backs off, or reads a rate-limit header, and the endpoint inventory in
+  `superhero/docs/api-superhero-com-endpoints-and-fields.md` does not mention limits. An agent
+  polling on a cron should assume limits exist and behave accordingly until the backend documents them.
+- **Is there a published OpenAPI schema?** The app contains generated service clients under
+  `src/api/generated`, which implies a schema exists upstream, but neither repository ships or links
+  the specification itself.
+- **Which countries are "blacklisted" for the rewards program?** Question 15 states the restriction;
+  the list is on the rewards page in the app and does not appear in these repositories.

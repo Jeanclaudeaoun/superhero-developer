@@ -1,33 +1,175 @@
 ---
 title: "Proposals & Vote Subjects"
-description: "The six things a community DAO can decide."
+description: "The closed set of things a community DAO can decide."
 ---
 
 # Proposals & Vote Subjects
 
-> **Page brief** — Enumerate every vote subject with its parameters and its effect. This is a closed set — say so.
->
-> `status: outline` · `depth: deep`
+A community DAO cannot decide arbitrary things. A proposal's action is a value of the Sophia
+variant type `VoteSubjects.subject`, and that type has a fixed list of constructors compiled
+into the contract. **The set is closed.** If an action is not one of the constructors below,
+no vote can express it — not with creative metadata, not with a long description, not at all.
+Changing the set means deploying a different DAO implementation and migrating to it with a
+`ChangeDAO` vote.
 
-| Subject | Effect |
+## The subjects
+
+In ACI order, which is also the variant tag order used on the wire:
+
+| Tag | Subject | Parameters | Effect |
+| --- | --- | --- | --- |
+| 0 | `VotePayout` | `address` | Disburse the **entire** DAO balance to that account |
+| 1 | `VotePayoutAmount` | `address`, `int` | Disburse a **specified amount** to that account |
+| 2 | `ChangeDAO` | `address` | Transfer ownership, token-sale beneficiary rights and accumulated funds to another DAO |
+| 3 | `ChangeMetaInfo` | `map(string, string)` | Replace the community's metadata map in community management |
+| 4 | `ChangeMinimumTokenThreshold` | `int` | Change the minimum token threshold for write access |
+| 5 | `AddModerator` | `address` | Appoint a moderator |
+| 6 | `DeleteModerator` | `address` | Remove a moderator |
+
+The tag is the index: a decoded subject arrives on the wire as a bare object keyed by the tag
+number, so tag `5` with one address payload is an `AddModerator` proposal. The Superhero
+wallet's transaction summary decodes them in exactly this order before asking you to sign.
+
+### Seven, not six
+
+The Superhero whitepaper enumerates six subjects and omits `ChangeMetaInfo`. The contract ACI
+and the app's own `VOTE_TYPE` enum both carry seven. Treat the ACI as authoritative for what
+the contract accepts, and expect prose written from the whitepaper to describe six.
+
+## Parameter shapes
+
+The first three subjects all take an `address`, but they mean different things and the wrong
+one is unrecoverable.
+
+| Subject | What the address must be |
 | --- | --- |
-| `VotePayout` | Disburse the **entire** DAO balance to a specified account |
-| `VotePayoutAmount` | Disburse a **specified amount** to a specified account |
-| `ChangeDAO` | Transfer complete control — ownership, token-sale beneficiary rights and accumulated funds — to another DAO |
-| `ChangeMinimumTokenThreshold` | Change the minimum token threshold in community management |
-| `AddModerator` | Appoint a moderator |
-| `DeleteModerator` | Remove a moderator |
+| `VotePayout` | An account (`ak_`) that should receive the whole treasury |
+| `VotePayoutAmount` | An account (`ak_`) that should receive `amount` |
+| `ChangeDAO` | A **contract** (`ct_`) implementing the `ReplaceableDAO` interface |
+| `AddModerator` / `DeleteModerator` | An account (`ak_`) to appoint or remove as moderator |
 
-`ChangeDAO` has a safeguard: the target contract must implement `is_dao() = true`, which
-prevents an accidental or malicious transfer of treasury funds to a non-DAO address.
+`VotePayoutAmount`'s `int` is in aettos, the smallest unit of AE — `10^18` aettos to one AE.
+`ChangeMinimumTokenThreshold`'s `int` is in the community token's smallest unit, so divide by
+`10^decimals` to compare it against a displayed balance.
 
-## What this page still needs
+`ChangeMetaInfo` takes the whole metadata map and **replaces** it. The underlying
+`CommunityManagement.change_meta_info(meta_info)` takes a complete `map(string, string)`;
+there is no per-key update. A proposal that intends to change one field must carry every
+other field unchanged, or they are lost.
 
-- Document the exact `DAOVote.metadata` shape required by `add_vote`.
-- Explain who is allowed to open each subject type.
-- Show a worked example of creating a `VotePayoutAmount` proposal.
+## The `ChangeDAO` safeguard
 
-## Sources to mine
+`ChangeDAO` hands over everything: ownership of the token sale, beneficiary rights to all
+future proceeds, and the accumulated treasury. Sending that to a wrong or malicious address
+would end the community.
 
-- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote
-- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — `VoteSubjects.subject`
+The protocol's guard is a type check on the target. The new DAO contract must implement
+`is_dao()` returning `true`:
+
+```text
+ReplaceableDAO.is_dao() : bool
+```
+
+If the target does not answer `true` to `is_dao()`, the migration cannot be applied. That
+rules out the most common catastrophic mistakes — pasting an account address, a token
+address, or a random contract — because none of them will answer that call.
+
+Be clear about what the safeguard does **not** do. It is a shape check, not a safety check.
+Any contract can implement `is_dao() = true`, including one written specifically to drain the
+treasury. The guard proves the target is a DAO-shaped contract. It proves nothing about
+whether the target is trustworthy, whether it distributes proceeds fairly, or whether anyone
+other than its deployer controls it. Read [Replaceable DAOs](/dao/replaceable-dao) before
+voting on a `ChangeDAO` proposal.
+
+## The metadata record
+
+Every proposal is submitted as one record:
+
+```text
+DAOVote.metadata = { subject     : VoteSubjects.subject
+                   , description : string
+                   , link        : string }
+```
+
+| Field | Purpose |
+| --- | --- |
+| `subject` | The machine-readable action. This is what executes. |
+| `description` | Free text explaining the proposal to voters. |
+| `link` | A reference URL — a forum thread, a spec, a budget. |
+
+Only `subject` is enforced by the contract. `description` and `link` are strings the contract
+never inspects. **The link is unvalidated free text supplied by whoever opened the vote** —
+the app runs it through a URL-safety check before rendering it as a hyperlink, precisely
+because a `javascript:` or `data:` payload would otherwise reach an `href`. Apply the same
+caution anywhere you surface it.
+
+## Who may open which subject
+
+The contract makes no distinction between subjects. The same rule covers all seven: a holder
+who owns at least the community's `minimum_token_threshold` amount of tokens at that moment
+can open a vote by calling `DAO.add_vote(metadata)` with 555 AE attached. There is no
+moderator-only subject, no author privilege and no proposal whitelist — moderators are
+appointed by vote but hold no proposal rights of their own.
+
+## Opening a proposal
+
+```text
+stateful payable entrypoint add_vote(metadata: DAOVote.metadata) : (int, DAOVote)
+```
+
+The call deploys a new `DAOVote` contract, registers it in the DAO's `votes` map under the
+next sequential id, and returns both the id and the vote contract address. You need both
+later: the vote address to read and cast ballots, the id to call
+`apply_vote_subject(vote_seq_id)`.
+
+### A worked `VotePayoutAmount` proposal
+
+Paying 100 AE to a contributor, with the discussion thread as the reference link:
+
+```text
+subject     = VotePayoutAmount(ak_contributor..., 100000000000000000000)
+description = "Pay 100 AE to the contributor who built the community bot, \
+               per the scope agreed in the linked thread."
+link        = "https://forum.aeternity.com/t/..."
+```
+
+`100000000000000000000` is 100 AE expressed in aettos — `100 * 10^18`. Getting the exponent
+wrong is the single most common error in a payout proposal, and the vote is not editable
+after it is opened. Check the digit count before you sign; the Superhero wallet's transaction
+summary shows the decoded subject and its payload for exactly this reason.
+
+Then, from the app: open the community's DAO, fill in the create-vote form, and confirm the
+555 AE payment in your wallet.
+
+## A caveat about the web form
+
+The create-vote form on `/trends/dao/:saleAddress` currently offers a subset of subjects in
+its type selector — `VotePayout`, `ChangeDAO`, `ChangeMinimumTokenThreshold`, `AddModerator`
+and `DeleteModerator`. `VotePayoutAmount` and `ChangeMetaInfo` are deliberately left out
+because they need a second input field and a map editor respectively.
+
+More importantly, in the current web app source the form's selected type is not carried into
+the submitted metadata: `createVote` builds its subject as `VotePayout` regardless of what
+the selector shows. Until that is fixed, **treat the web form as a way to open a `VotePayout`
+proposal only**, and open every other subject through the SDK or a direct contract call,
+where you control the variant you are constructing. Verify what you signed on the vote's
+detail page — it decodes and displays the real subject.
+
+## Open questions
+
+- We could not verify whether `add_vote` rejects a `VotePayoutAmount` whose amount exceeds
+  the current treasury balance at proposal time, at execution time, or not at all. The ACI
+  does not show it. Settle it from the `DAO.aes` source before relying on either behaviour.
+- Whether a community may have more than one vote open on the same subject simultaneously —
+  and what happens if two conflicting payouts both pass — is not visible in the ACI. The
+  `votes` map is keyed by sequential id with no uniqueness constraint on subjects, which
+  suggests concurrent votes are allowed, but that is an inference rather than a verified fact.
+
+## Read more
+
+- [Voting](/dao/voting) — how holders actually vote on a proposal once it is open.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds) — the numbers a proposal must clear.
+- [Replaceable DAOs](/dao/replaceable-dao) — what a `ChangeDAO` target has to implement.
+- [Moderators and Write Thresholds](/dao/moderators) — what the moderator and threshold subjects actually change.
+- [DAO contract reference](/contracts/dao) — `add_vote` and `apply_vote_subject` in the full entrypoint table.
+- [Open a DAO and its proposals](https://superhero.com/trends/daos) — the live list of communities.

@@ -5,11 +5,22 @@ description: "How the on-chain contracts, the indexer, the API and the clients f
 
 # Architecture Overview
 
-> **Page brief** — One diagram plus a walkthrough of every layer, from the Sophia contracts up to the React app and the agent skill.
->
-> `status: outline` · `depth: deep`
+Superhero is a set of Sophia contracts on æternity, an off-chain indexer that turns their events
+into a queryable API, and three clients that talk to both. Every write goes to the chain; every read
+that needs to be fast goes to the API. This page walks the whole stack and traces the two flows that
+matter most — publishing a post and buying a token.
 
-### On-chain layer
+## The stack in one view
+
+| Layer | What it is | Where it lives |
+| --- | --- | --- |
+| Chain | æternity mainnet (`ae_mainnet`) or testnet (`ae_uat`) | Public nodes; see [Networks & Endpoints](/aeternity/networks) |
+| Contracts | Sophia contracts compiled to FATE | On-chain, addresses in [Deployed Addresses](/contracts/addresses) |
+| Indexer + API | Event subscriber and REST/WebSocket service | `api.superhero.com` (testnet: `testnet.api.dev.tokensale.org`) |
+| Node / middleware | Chain RPC and transaction history | `mdw.wordcraft.fun` and `mdw.wordcraft.fun/mdw` (testnet: `testnet.aeternity.io`) |
+| Clients | React/Vite web app, React Native mobile apps, agent skill | [superhero.com](https://superhero.com), app stores, [agent skill repo](https://github.com/superhero-com/superhero-agent-skill) |
+
+## On-chain layer
 
 | Layer | Contract | Responsibility |
 | --- | --- | --- |
@@ -23,23 +34,160 @@ description: "How the on-chain contracts, the indexer, the API and the clients f
 | Identity | `ProfileRegistry.aes` | Profiles, custom/chain/X names, display source |
 | Token standard | AEX-9 (`FungibleTokenFull.aes`) | Community tokens and the ProtocolDAO token |
 
-### Off-chain layer
+Two deployment facts follow from that table. The Tipping and factory contracts are **singletons** —
+one address per network, fixed in `src/config.ts` as `CONTRACT_V3_ADDRESS` and fetched from
+`GET /api/factory` respectively. Everything else is **per community**: creating a token deploys a
+fresh token, curve, sale, DAO and management contract in a single transaction.
 
-- **Indexer** — subscribes to contract events (for example `PostWithoutTipReceived`) and
-  builds the queryable index behind `api.superhero.com`.
-- **Backend relayer** — accepts signed messages and submits them, enabling gasless posting.
-- **Trendminer** — aggregates token activity into trending scores, charts and analytics.
+The factory's deployment sequence, from the whitepaper:
+
+1. A new AEX-9 token contract for the community.
+2. A `BondingCurveExponential` contract with the community's pricing parameters.
+3. An `AffiliationBondingCurveTokenSale` referencing the token and the curve.
+4. A `DAO` contract, which becomes the sale's owner and beneficiary.
+5. A `CommunityManagement` contract with initial moderator and threshold settings.
+6. Registration of the community in the factory's on-chain registry.
+7. An optional initial buy, executed in the same transaction.
+
+## Off-chain layer
+
+- **Indexer** — subscribes to contract events (for example `PostWithoutTipReceived`, `Buy`, `Sell`,
+  `PriceChange`) and builds the queryable index behind `api.superhero.com`.
+- **Backend relayer** — accepts signed messages and submits them, enabling gasless posting through
+  the contract's `post_without_tip_sig` entrypoint.
+- **Trendminer** — aggregates token activity into trending scores, charts and analytics. In the web
+  app this is a set of views (`/trends/*`) served from the same API.
+- **Attestation signer** — a backend key registered in `ProfileRegistry.aes` at deployment. It signs
+  X-handle attestations that the contract verifies with `Crypto.verify_sig`; the client obtains one
+  from `POST /api/profile/x/attestation`. See [Verifying Your X Account](/identity/x-verification).
 - **Clients** — the React/Vite web app, the React Native mobile apps, and the
   [agent skill](/agents) for AI agents.
 
-## What this page still needs
+## Publishing a post
 
-- An actual diagram (Mermaid) showing request/data flow for: publishing a post, buying a token, and opening a DAO vote.
-- Where each component is hosted and which are open source.
-- The WebSocket/live-update path used by the trending views.
+```mermaid
+flowchart LR
+  U["You: web app, mobile app<br/>or agent CLI"] -->|"1. sign post_without_tip"| N["æternity node"]
+  N --> T["Tipping v3 contract"]
+  T -->|"2. PostWithoutTipReceived event"| IX["Indexer"]
+  IX --> DB[("Post index")]
+  DB --> API["api.superhero.com<br/>GET /api/posts"]
+  API -->|"3. feed refresh"| U
+```
 
-## Sources to mine
+The path is deliberately short. The web app calls `post_without_tip` directly from the connected
+wallet (`src/features/social/components/PostForm.tsx`); the agent skill does the same from a
+`MemoryAccount` (`scripts/superhero-post.mjs`). The contract returns the new `tip_id` and emits
+`PostWithoutTipReceived`. The indexer picks the event up and the post appears in `GET /api/posts`
+with an `id`, `content`, `media`, `created_at`, `sender_address` and `slug`.
 
-- `superhero/src/views/Whitepaper.tsx` — System Architecture
-- `superhero/src/config.ts` — every service URL and contract address
-- `superhero/src/features/*` — feature-by-feature client structure
+The relayed variant substitutes step 1: you Blake2b-hash the concatenated title and media, sign the
+prefixed digest off-chain, and hand `(title, media, author, sig)` to a submitter who calls
+`post_without_tip_sig` and pays the gas. The chain still records you as the author. See
+[Delegated & Gasless Posting](/social/delegated-posting).
+
+## Buying a token
+
+```mermaid
+flowchart LR
+  U["You"] -->|"1. read-only quote: price"| S["AffiliationBondingCurveTokenSale"]
+  S -.->|"reads curve"| BC["BondingCurveExponential"]
+  U -->|"2. sign buy, send AE"| S
+  S -->|"mint to you"| TK["Community AEX-9 token"]
+  S -->|"0.5% spread"| DAO["DAO treasury"]
+  S -->|"0.5% fee"| AT["AffiliationTreasury"]
+  S -->|"mint_protocol_dao_token"| F["CommunityFactory"]
+  S -->|"3. Buy + PriceChange events"| IX["Indexer"]
+  IX --> API["api.superhero.com"]
+  API -->|"4. REST + socket.io"| U
+```
+
+Step 1 is a dry call — `price(count)` on the sale contract, or the client-side estimator in
+`src/utils/bondingCurve.ts` when the app wants an instant quote while you type. Step 2 is the only
+transaction. The app then decodes the receipt's events directly: it reads the `Buy` event for the AE
+amount, the token contract's `Mint` event for the tokens you received, and a *second* `Mint` on a
+different contract address for the ProtocolDAO tokens
+(`src/features/trending/hooks/useTokenTrade.ts`). That is why the success screen can show your
+balance before the indexer has caught up.
+
+**Selling takes two transactions**, because AEX-9 has no "transfer from" without prior approval:
+
+1. `create_allowance` (or `change_allowance`) on the community token, granting the sale contract
+   permission to move `count` tokens.
+2. `sell(count, minimal_return_required)` on the sale contract. `minimal_return_required` is the
+   slippage floor — the call reverts rather than returning less.
+
+The web app shows this as a two-step progress indicator; the agent CLI does it silently in
+`scripts/superhero-token-swap.mjs`.
+
+## The live-update path
+
+Token views do not poll. `src/libs/WebSocketClient.ts` opens a single socket.io connection to the
+`websocketUrl` from config — `https://api.superhero.com` on mainnet — and multiplexes four channels:
+
+| Channel | Emitted when |
+| --- | --- |
+| `token-created` | A new community token is deployed |
+| `token-updated` | A token's aggregate state changes; the payload carries `sale_address` |
+| `token-transaction` | A buy or sell is indexed; fans out to a global and a per-`sale_address` subscription |
+| `token-history` | A new chart point exists for a `sale_address` |
+
+Subscriptions made before the socket connects are queued and replayed on `connect`, and the client
+reconnects after 1000 ms. Notifications ride a separate socket.io namespace
+(`src/features/notifications/notification-feed-client.ts`). Chat is neither: it is a Nostr
+connection to `wss://relay.superhero.chat`, whose origin must also appear in the server's CSP
+`connect-src` allowlist or every socket dies at connect time. See [WebSocket](/api/websocket).
+
+## What is open source, and where
+
+| Component | Repository | Notes |
+| --- | --- | --- |
+| Web app | [superhero-com/superhero](https://github.com/superhero-com/superhero) | Linked from the app footer as "contribute on GitHub"; issues are the bug tracker |
+| Agent skill | [superhero-com/superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) | `SKILL.md`, guides, scripts and contract ACIs |
+| æternity node, middleware, SDK | [github.com/aeternity](https://github.com/aeternity/aepp-sdk-js) | The chain layer, not maintained by Superhero |
+
+The app's terms are explicit that the interface is open source and that "deployments may be operated
+independently by community members" — a community-run instance talks to the same contracts but is
+not the same service.
+
+## Configuration you can rely on
+
+Everything network-dependent is in one file, `src/config.ts`, branched at build time on
+`VITE_NETWORK`.
+
+| Key | Mainnet | Testnet |
+| --- | --- | --- |
+| `BACKEND_URL` | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
+| `NODE_URL` | `https://mdw.wordcraft.fun` | `https://testnet.aeternity.io` |
+| `MIDDLEWARE_URL` | `https://mdw.wordcraft.fun/mdw` | `https://testnet.aeternity.io/mdw` |
+| `EXPLORER_URL` | `https://aescan.io` | `https://testnet.aescan.io` |
+| `compilerUrl` | `https://v7.compiler.aepps.com` | `https://v7.compiler.aepps.com` |
+| `CONTRACT_V3_ADDRESS` (Tipping) | `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` | `ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW` |
+| `GOVERNANCE_CONTRACT_ADDRESS` | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` |
+
+A deployed container can override most of these at runtime through a `window.__SUPERCONFIG__`
+object injected by the server, so a running instance is not necessarily on the compiled-in defaults.
+The full address list, including the DEX contracts, is in [Deployed Addresses](/contracts/addresses).
+
+## Read more
+
+- [Deployed Addresses](/contracts/addresses) — every contract address for both networks.
+- [Events](/contracts/events) — the event signatures the indexer subscribes to, per contract.
+- [WebSocket](/api/websocket) — the four channels above, with payload shapes.
+- [Where the Money Goes](/concepts/value-flow) — what each arrow in the buy diagram is worth.
+- [Calling Contracts](/contracts/calling-contracts) — doing the above yourself with the æternity SDK.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the "System Architecture" section.
+- [æternity middleware (ae_mdw)](https://github.com/aeternity/ae_mdw) — what `MIDDLEWARE_URL` points at.
+- [aepp-sdk-js](https://github.com/aeternity/aepp-sdk-js) — the SDK both the web app and the agent skill use.
+
+## Open questions
+
+- **Is the indexer open source?** The web app and the agent skill are public, but no repository for
+  the service behind `api.superhero.com` appears in either codebase. Only the endpoint inventory in
+  `superhero/docs/api-superhero-com-endpoints-and-fields.md` is available.
+- **Where is the backend relayer exposed?** The whitepaper describes a relayer for
+  `post_without_tip_sig`, and the contract entrypoint exists, but no client in these repositories
+  calls a relayer endpoint — the web app and the agent skill both post directly and pay their own
+  gas. Settling this needs the backend's API surface.
+- **What hosts `mdw.wordcraft.fun`?** It is the configured mainnet node and middleware origin but is
+  not an `aeternity.io` domain, and the repositories do not say who operates it.

@@ -1,40 +1,158 @@
 ---
 title: "Navigating the App"
-description: "A map of every section of superhero.com and what lives where."
+description: "Every route on superhero.com, what lives there, and which ones need a connected wallet."
 ---
 
 # Navigating the App
 
-> **Page brief** — A route-by-route tour so readers can find any feature. Keep it in step with `src/routes.tsx`.
->
-> `status: outline` · `depth: reference`
+superhero.com is a single-page app with a flat route table. This page is that table, verified
+against `src/routes.tsx`, plus the redirects you will hit from older links and a note on what
+actually requires a wallet.
 
-| Path | What it is |
+## How wallet access works
+
+**No route on superhero.com is gated behind a wallet.** There are no protected routes in the router —
+every page renders, and every page that needs an account shows a Connect control in place of the
+action rather than refusing to load. The token creation page, for example, renders its whole form
+and swaps the submit button for **Connect wallet to create**.
+
+So the "Wallet" column below means *the primary action here needs a connected account*, not *this URL
+is blocked*. Browsing is always open.
+
+## Social
+
+| Path | What it is | Wallet |
+| --- | --- | --- |
+| `/` | The social feed | To post, comment or tip |
+| `/post/:slug` | A single post and its comment thread | To comment or tip |
+| `/users/:address` | A user profile | To edit your own |
+| `/profile/x/callback` | OAuth landing page for the Connect X flow | Part of a signed flow |
+
+`:slug` also accepts a post id; `PostDetail` redirects to the canonical slug.
+
+## Trends and tokens
+
+| Path | What it is | Wallet |
+| --- | --- | --- |
+| `/trends/tokens` | Trending community tokens | No |
+| `/trends/tokens/:tokenName` | A token page: feed and chat, trade card, info, transactions, holders | To trade |
+| `/trends/create` | Create a new community token | **Yes** |
+| `/trends/daos` | All community DAOs | No |
+| `/trends/dao/:saleAddress` | One community's DAO | To propose or vote |
+| `/trends/dao/:saleAddress/vote/:voteId/:voteAddress` | A single DAO vote | To vote |
+| `/trends/accounts` | Trader and creator accounts | No |
+| `/trends/accounts/:address` | One account's tokens, creations and activity | No |
+| `/trends/leaderboard` | Leaderboards | No |
+| `/trends/invite` | Invite links and the affiliate program | **Yes** |
+| `/trends/visx` | The trend cloud visualisation | No |
+| `/trends` | Redirects to `/trends/tokens` | — |
+
+Note the singular/plural split, which is easy to get wrong when writing links: the **list** is
+`/trends/daos`, a **single DAO** is `/trends/dao/:saleAddress`. The parameter is a **sale address**,
+not the AEX-9 token address.
+
+## Chat
+
+| Path | What it is | Wallet |
+| --- | --- | --- |
+| `/chat` | Chat inbox — all, communities and DMs | **Yes** |
+| `/chat/:saleAddress` | A token-gated community room | **Yes** |
+| `/chat/:saleAddress/info` | Room info and members | **Yes** |
+| `/chat/dm/:address` | A direct-message thread | **Yes** |
+| `/chat/settings/relays` | Relay configuration | **Yes** |
+
+Chat identity is derived from your wallet, so chat needs one throughout. The two-segment literal
+paths (`dm/…`, `settings/relays`) are ordered so they can never collide with the one-segment room
+parameter.
+
+## Governance
+
+| Path | What it is | Wallet |
+| --- | --- | --- |
+| `/voting` | Polls, delegation and your voting activity | To vote or delegate |
+| `/voting/p/:id` | A single poll | To vote |
+| `/voting/account` | Your governance account view | To act |
+| `/voting/create` | Create a poll | **Yes** |
+
+All four render the same Governance view; the path selects the tab.
+
+## DeFi and the DEX
+
+| Path | What it is | Wallet |
+| --- | --- | --- |
+| `/defi/swap` | Token swaps | **Yes** to swap |
+| `/defi/wrap` | Wrap and unwrap AE | **Yes** |
+| `/defi/pool` | Liquidity positions | **Yes** |
+| `/defi/pool/add-tokens` | Scan your account for AEX-9 tokens and check for pools | **Yes** |
+| `/defi/explore/tokens` | Listed tokens | No |
+| `/defi/explore/tokens/:tokenAddress` | One token's DEX detail | No |
+| `/defi/explore/pools` | All pools | No |
+| `/defi/explore/pools/:poolAddress` | One pool's detail | No |
+| `/defi/explore/transactions` | Recent DEX transactions | No |
+| `/defi` | Redirects to `/defi/swap` | — |
+| `/defi/bridge` | **Currently redirects to `/defi/swap`** — the bridge view is disabled in this build | — |
+| `/defi/buy-ae-with-eth` | **Currently redirects to `/defi/swap`** — same | — |
+
+The two bridge routes are not broken links; their view components are commented out in the router,
+so both resolve to the swap page.
+
+## Wallet, utility and reference
+
+| Path | What it is | Wallet |
+| --- | --- | --- |
+| `/wallet` | The Superhero Wallet product page — features, downloads and a wallet FAQ | No |
+| `/tx-queue/:id` | Callback landing page for deep-link signing results | Part of a signing flow |
+| `/get-ae` | Ways to get AE: earn, exchanges and swap providers | No |
+| `/meet/:room?` | Video conference room | No |
+| `/landing` | The marketing landing page | No |
+| `/whitepaper` | The full technical whitepaper | No |
+| `/faq` | Frequently asked questions | No |
+| `/branding` | Brand assets | No |
+| `/terms` · `/privacy` | Legal pages | No |
+
+`/wallet` is a product page about Superhero Wallet, not the built-in wallet's interface. The built-in
+wallet is reached through **Connect** wherever you are.
+
+## Redirects
+
+Old links keep working. Every one of these is a real route that redirects:
+
+| From | To |
 | --- | --- |
-| `/` | The social feed |
-| `/post/:slug` | A single post and its comment thread |
-| `/users/:address` | A user profile |
-| `/trends/tokens` | Trending community tokens |
-| `/trends/tokens/:tokenName` | A token page: chart, trade card, holders, transactions |
-| `/trends/create` | Create a new community token |
-| `/trends/daos` and `/trends/dao/:saleAddress` | Community DAOs and a single DAO |
-| `/trends/accounts` and `/trends/leaderboard` | Trader and creator leaderboards |
-| `/trends/invite` | Invite links and the affiliate program |
-| `/chat` | Chat inbox, DMs and token-gated rooms |
-| `/voting` | Governance polls, delegation and your voting activity |
-| `/defi/swap`, `/defi/pool`, `/defi/explore/*` | The DEX |
-| `/wallet` | The built-in wallet |
-| `/buy-ae` | Buying AE |
-| `/whitepaper`, `/faq`, `/branding`, `/terms`, `/privacy` | Reference pages |
+| `/trending`, `/trending/tokens` | `/trends/tokens` |
+| `/trending/visx`, `/trending/invite`, `/trending/daos`, `/trending/accounts`, `/trending/create`, `/trending/leaderboard` | the matching `/trends/*` path |
+| `/trending/tokens/:tokenName` | `/trends/tokens/:tokenName` |
+| `/trending/dao/:saleAddress` and its vote path | the matching `/trends/dao/*` path |
+| `/trending/accounts/:address` | `/trends/accounts/:address` |
+| `/user/:address` | `/users/:address` |
+| `/post/:slug/comment/:id` | `/post/:id` — a comment is itself a post |
+| `/buy-ae` | `/get-ae` |
+| `/swap` | `/defi/swap` |
 
-Legacy `/trending/*` paths redirect to their `/trends/*` equivalents.
+Legacy DEX paths that still render their own view rather than redirecting: `/pool`, `/explore`,
+`/explore/tokens/:id`, `/explore/pools/:id` and `/pool/add-tokens`.
 
-## What this page still needs
+Anything else renders the not-found page.
 
-- Add screenshots per section.
-- Note which routes require a connected wallet.
-- Document the mobile app's navigation where it diverges from the web app.
+## Development-only routes
 
-## Sources to mine
+`/wallet-lab` exists only in development builds. It clears and rewrites the real on-device vault
+store, so it is guarded by a build-time flag and eliminated entirely from production output. You will
+not find it on superhero.com.
 
-- `superhero/src/routes.tsx` — the authoritative route table
+## Read more
+
+- [Quickstart](/getting-started/quickstart) — the five-minute path through the routes above.
+- [Connecting a Wallet](/wallets/connecting) — what happens when you press Connect on any of the pages marked Yes, and what `/tx-queue/:id` is for.
+- [Your First Trade](/getting-started/first-trade) — the token page's tabs, in detail.
+- [The Token Page](/tokens/token-page) — everything on `/trends/tokens/:tokenName`.
+- [Superhero](https://superhero.com) — the app itself.
+- [Superhero FAQ](https://superhero.com/faq) — the in-app answers, which follow roughly this same map.
+
+## Open questions
+
+- A screenshot per major section would make this page substantially easier to use. None is included
+  here because none exists in the repository; capturing them against the live app is a follow-up.
+- Do the native mobile apps use the same route paths, or a different navigation model? The web routes
+  are authoritative for superhero.com; nothing in this repository describes the native apps'
+  navigation.

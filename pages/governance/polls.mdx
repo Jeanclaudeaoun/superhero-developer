@@ -5,35 +5,263 @@ description: "Reading a poll, its options, and its stake-weighted result."
 
 # Polls
 
-> **Page brief** — Explain the poll data model and — critically — which result figure is authoritative.
->
-> `status: outline` · `depth: deep`
+A poll is a contract. Each one is deployed on its own, registered in the `Registry`, and holds
+its own ballot. What it does **not** hold is the result: the contract records one option per
+address, and the weight behind those addresses is computed off-chain from AE balances and
+delegations at the poll's close height. This page covers the data model, that distinction, and
+how to read a poll properly.
+
+## The one thing to get right
+
+**`stake_weighted_results` is the official outcome. `raw_vote_counts` are address counts
+only.**
+
+The `Poll` contract stores `votes : map(address, int)` — one option per address, with no
+weight attached. Counting those entries tells you how many addresses picked each option, which
+is not the governance result and can point the opposite way. A hundred addresses holding dust
+outvote two whales on raw counts and lose decisively on stake.
+
+The agent skill's tooling says the same thing in its own output, attaching a `result_note` to
+every poll it reads:
+
+```text
+stake_weighted_results matches the official governance backend;
+raw_vote_counts are address counts only.
+```
+
+When `stake_weighted_results` is `null`, the governance backend could not verify or compute
+that poll. That is not permission to fall back on raw counts — it means you do not have a
+result. Say so rather than reporting a number that is not the outcome.
+
+## The data model
+
+### On the poll contract
+
+```text
+Poll.state = { metadata      : Poll.metadata
+             , vote_options  : map(int, string)
+             , close_height  : option(int)
+             , create_height : int
+             , votes         : map(address, int)
+             , author        : address }
+
+Poll.metadata = { title       : string
+                , description : string
+                , link        : string
+                , spec_ref    : option(hash) }
+```
+
+| Field | Notes |
+| --- | --- |
+| `vote_options` | Option index to label. Indices are **0-based** and fixed at deployment. |
+| `close_height` | A key-block height, or `None` for a poll that never closes. |
+| `votes` | One entry per address: the option index they chose. No weight. |
+| `author` | Whoever deployed the poll. Carries no special power over it. |
+| `spec_ref` | An optional hash reference to an off-chain specification. Superhero's own creation paths leave it unset. |
+
+Nothing is editable after deployment. There is no `change_metadata`, no way to add an option,
+and no way to extend or shorten `close_height`. A poll with a typo in it stays that way; the
+only remedy is to create a new poll.
+
+### On the registry
+
+The `Registry` stores a thin summary per poll so that listings do not require calling every
+poll contract:
+
+```text
+Registry.poll_data = { poll         : Poll
+                     , is_listed    : bool
+                     , title        : string
+                     , close_height : option(int) }
+```
+
+`polls()` returns them all keyed by sequential id; `poll(poll_id)` returns one. See
+[The Governance Registry](/governance/registry).
+
+## Listed and unlisted polls
+
+`is_listed` is set when the poll is registered, by the second argument to
+`add_poll(poll, is_listed)`. It is a **listing flag, not a privacy flag**:
+
+- An unlisted poll is hidden from the default listing in the app and in the CLI.
+- It is fully readable on-chain by anyone who knows its address or its registry id.
+- Anyone can vote on it.
+- It still appears in `Registry.polls()`, because that returns everything.
+
+Use it for polls that should not clutter the public list — a test, a narrow question for a
+specific group — not for anything that needs to stay secret. Nothing about an unlisted poll is
+secret.
+
+The CLI defaults to listed-only and takes `--all` to include unlisted polls:
 
 ```bash
-node scripts/superhero-governance.mjs list
+node scripts/superhero-governance.mjs list          # listed only, 20 most recent
+node scripts/superhero-governance.mjs list 50       # listed only, 50 most recent
+node scripts/superhero-governance.mjs list 10 --all # include unlisted
+```
+
+## Reading a poll
+
+```bash
 node scripts/superhero-governance.mjs info <poll_address>
 node scripts/superhero-governance.mjs info-by-id <poll_id>
 ```
 
-**Read `stake_weighted_results` as the official outcome.** `raw_vote_counts` counts addresses
-only and is not the result.
+`info` takes the poll's `ct_` contract address; `info-by-id` takes the registry's sequential
+id and resolves it first. Both print the same record: the metadata, the option labels and
+their indices, the raw counts, the official stake-weighted results when available, whether the
+poll is closed, and your own current vote.
 
-| `Poll` entrypoint | Purpose |
+The shape, abridged:
+
+```json
+{
+  "poll_id": "42",
+  "poll_address": "ct_...",
+  "is_listed": true,
+  "title": "Should we upgrade to protocol v3?",
+  "author": "ak_...",
+  "create_height": "1234567",
+  "close_height": "1500000",
+  "is_closed": false,
+  "vote_options": { "0": "Yes", "1": "No", "2": "Abstain" },
+  "raw_vote_counts": { "0": 42, "1": 15, "2": 3 },
+  "total_raw_votes": 60,
+  "stake_weighted_results": {
+    "total_stake": "123000000000000000000",
+    "percent_of_total_supply": "0.1",
+    "raw_vote_count": 60,
+    "options": [
+      {
+        "option": "0",
+        "option_stake": "100000000000000000000",
+        "percentage_of_total_stake": "81.3",
+        "raw_vote_count": 42,
+        "delegators_count": 7
+      }
+    ]
+  },
+  "my_vote": { "has_voted": true, "option": "0" }
+}
+```
+
+`total_stake` and `option_stake` are in aettos — divide by `10^18` for AE.
+`percent_of_total_supply` is how much of all AE in existence took part, which is the closest
+thing this system has to a turnout figure. There is **no quorum**: a poll with 0.1%
+participation still produces a result, and nothing marks it as unrepresentative except that
+number.
+
+### Poll entrypoints
+
+| Entrypoint | Purpose |
 | --- | --- |
-| `title()`, `metadata()`, `close_height()` | Poll identity and deadline |
-| `votes()` | All cast votes |
-| `vote(option)` / `revoke_vote()` | Cast or retract |
-| `has_voted(voter)`, `voted_option(voter)` | Per-voter state |
-| `is_closed()`, `is_author(author)` | Status checks |
+| `get_state()` | The whole `Poll.state` record |
+| `title()`, `metadata()` | Poll identity |
+| `close_height()` | The closing height, as `option(int)` |
+| `votes()` | Every address and the option it chose |
+| `vote(option)` | Cast or change your vote — stateful |
+| `revoke_vote()` | Retract your vote — stateful |
+| `has_voted(voter)` | Whether that address has a vote standing |
+| `voted_option(voter)` | Which option, as `option(int)` |
+| `is_closed()` | Whether the closing height has passed |
+| `is_author(author)` | Whether that address deployed the poll |
+| `version()` | Contract version |
 
-## What this page still needs
+The contract emits `Vote` — two addresses and the option index — and `RevokeVote` — two
+addresses — so the backend can index activity without re-reading state. Note that the events
+are on each poll, not on the registry, so an indexer subscribes per poll.
 
-- Explain how stake weighting is computed and at what block height it is snapshotted.
-- Document the governance API (`GOVERNANCE_API_URL`) endpoints used to list and enrich polls.
-- Explain listed versus unlisted polls.
+## How stake weighting works
 
-## Sources to mine
+The counting rule, from the governance aepp's own documentation: **a poll is counted with the
+state at its closing height, considering the active delegations and account stakes at that
+height.**
 
-- `superhero-agent-skill/scripts/superhero-governance.mjs`
-- `superhero-agent-skill/contracts/PollACI.json`, `RegistryWithEventsACI.json`
-- `superhero/src/views/Governance.tsx`
+That means:
+
+- Your weight is your **AE balance**, not a token balance and not a staked position.
+- It is measured at the **close height**, not when you voted. Buying AE after voting increases
+  your weight; spending it reduces it. Both take effect automatically.
+- Accounts that have **not** voted on the poll have their AE counted for whoever they
+  delegated to. Voting yourself overrides your delegation for that poll only.
+- Delegation chains resolve transitively — a delegatee who has themselves delegated passes the
+  weight along. See [Delegation](/governance/delegation).
+
+An open-ended poll — one with `close_height` set to `None` — has no such snapshot. It never
+closes, so its result is a running figure computed against the current state rather than a
+final one. Treat those as continuous sentiment, not decisions.
+
+None of this is computed on-chain. The `Poll` contract cannot see AE balances or the
+`Registry`'s delegation map, which is exactly why the official figure comes from the backend.
+
+## The governance API
+
+The stake-weighted result is served by the governance backend, which indexes the contracts and
+does the weighting.
+
+| Network | Base URL |
+| --- | --- |
+| Mainnet | `https://governance-server-mainnet.prd.service.aepps.com/` |
+| Testnet | `https://governance-server-testnet.prd.service.aepps.com/` |
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET pollOverview/:pollAddress` | Poll state, per-account stakes at height, per-option stakes, total stake, vote count |
+| `GET votesState/:address` | The same overview shape — the source of `stake_weighted_results` |
+| `GET pollOrdering?closed=true,false` | The backend's ordering of polls, with per-poll totals and a score |
+| `GET delegatedPower/:address?poll=:pollAddress` | Delegated power for an account, with its delegation tree |
+| `GET accountPollVoterAuthor/:address` | Polls an account voted in, authored, or was voted in by its delegatee |
+| `GET version` | Backend version |
+| `POST contractEvent` | Nudge the backend to re-index after a vote or delegation, with a topic and an optional poll |
+
+The app calls `contractEvent` immediately after every vote, revoke and delegation, so the
+backend re-indexes rather than waiting to notice the transaction. If you write your own client
+and skip it, expect a lag before your vote shows up in the stake-weighted figures.
+
+`pollOverview` carries a `stakesAtHeight` array with one entry per voting account —
+`account`, `option`, `stake`, `balance`, `delegated`, `delegators` and a `delegationTree`.
+That is where to look when a result does not match your expectation: it separates an account's
+own balance from the weight it received by delegation.
+
+The agent skill's CLI defaults to a slightly different mainnet host,
+`https://governance-server-mainnet.prd.aepps.com`, overridable with
+`AE_GOVERNANCE_BACKEND_URL`. Both appear in the repositories; if one does not answer, try the
+other.
+
+### Through the Superhero backend
+
+Superhero's own API indexes governance transactions separately, which is the better source for
+history rather than live results:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/governance/votes` | Paginated polls, with `votes_count`, `votes_revoked_count` and `votes_count_by_option` |
+| `GET /api/governance/votes/:pollAddress` | One poll with all of its votes |
+| `GET /api/governance/delegations` | Paginated delegations; `includeRevoked` to see revoked ones |
+| `GET /api/governance/delegations/:accountAddress` | Delegation and revocation history for one account, in order |
+
+These are indexed transaction records: counts of votes and revocations, not stake weights. Use
+them for provenance and history, and the governance API for results.
+
+## Open questions
+
+- Whether the governance backend requires a poll's deployed bytecode to match a known
+  `Poll_Iris.aes` build before it will compute stake-weighted results is not stated anywhere we
+  could verify — but `stake_weighted_results` is documented as `null` when the backend "could
+  not verify or compute the poll", which implies a verification step. The two poll bytecode
+  artifacts in the repositories differ (the app ships one compiled for version `8.0.0`, the
+  agent skill one built with compiler `7.0.1`), so a poll created by one path may not be
+  treated identically to one created by the other. Settle it by creating a poll each way and
+  checking whether both get a non-null result.
+- The exact tie-breaking and rounding rules the backend uses for `percentageOfTotal` are not
+  documented in either repository.
+
+## Read more
+
+- [Voting on Polls](/governance/voting) — casting a vote once you have read the poll.
+- [Creating a Poll](/governance/create-a-poll) — the field limits and the two-transaction flow.
+- [Delegation](/governance/delegation) — where the delegated half of a stake figure comes from.
+- [The Governance Registry](/governance/registry) — the contract behind `polls()` and `poll(id)`.
+- [Community DAOs](/dao) — the other voting system, where stake is locked and results execute.
+- [Browse polls](https://superhero.com/voting) — the live list.
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference implementation and the source of the close-height counting rule.
