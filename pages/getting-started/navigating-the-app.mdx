@@ -1,0 +1,40 @@
+---
+title: "Navigating the App"
+description: "A map of every section of superhero.com and what lives where."
+---
+
+# Navigating the App
+
+> **Page brief** — A route-by-route tour so readers can find any feature. Keep it in step with `src/routes.tsx`.
+>
+> `status: outline` · `depth: reference`
+
+| Path | What it is |
+| --- | --- |
+| `/` | The social feed |
+| `/post/:slug` | A single post and its comment thread |
+| `/users/:address` | A user profile |
+| `/trends/tokens` | Trending community tokens |
+| `/trends/tokens/:tokenName` | A token page: chart, trade card, holders, transactions |
+| `/trends/create` | Create a new community token |
+| `/trends/daos` and `/trends/dao/:saleAddress` | Community DAOs and a single DAO |
+| `/trends/accounts` and `/trends/leaderboard` | Trader and creator leaderboards |
+| `/trends/invite` | Invite links and the affiliate program |
+| `/chat` | Chat inbox, DMs and token-gated rooms |
+| `/voting` | Governance polls, delegation and your voting activity |
+| `/defi/swap`, `/defi/pool`, `/defi/explore/*` | The DEX |
+| `/wallet` | The built-in wallet |
+| `/buy-ae` | Buying AE |
+| `/whitepaper`, `/faq`, `/branding`, `/terms`, `/privacy` | Reference pages |
+
+Legacy `/trending/*` paths redirect to their `/trends/*` equivalents.
+
+## What this page still needs
+
+- Add screenshots per section.
+- Note which routes require a connected wallet.
+- Document the mobile app's navigation where it diverges from the web app.
+
+## Sources to mine
+
+- `superhero/src/routes.tsx` — the authoritative route table

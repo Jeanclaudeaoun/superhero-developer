@@ -1,0 +1,31 @@
+---
+title: "Reading a Token Page"
+description: "Market cap, charts, holders and transactions — what each panel actually tells you."
+---
+
+# Reading a Token Page
+
+> **Page brief** — Teach a reader to evaluate a token from its page rather than from its price alone.
+>
+> `status: outline` · `depth: standard`
+
+Price and market cap are displayed in AE. Trending defaults to Market Cap so larger
+communities surface first. Token pages include candlestick charts, recent transactions and
+holders.
+
+| Tab | What it shows |
+| --- | --- |
+| Holders | Top addresses and their balances |
+| Transactions | Recent buys and sells with timestamps and transaction hashes |
+
+## What this page still needs
+
+- Define market cap precisely for a bonding-curve token — it is not the same as a redeemable value.
+- Explain the candlestick data source and interval options.
+- Give heuristics for reading the holders tab (concentration) and the transactions tab (organic vs single-whale flow).
+
+## Sources to mine
+
+- `superhero/src/features/trending/views/TokenSaleDetails.tsx`
+- `superhero/server/lib/faq-content.cjs` — `qHoldersVsTx`, `qAnalytics`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.7, §1.9, §1.17

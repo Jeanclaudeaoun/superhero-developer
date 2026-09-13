@@ -1,0 +1,30 @@
+---
+title: "DEX API"
+description: "Token, pair and transaction data for the AMM DEX."
+---
+
+# DEX API
+
+> **Page brief** — Document the DEX endpoints, which are served from both the Superhero API and a separate DEX backend.
+>
+> `status: outline` · `depth: standard`
+
+Superhero API routes: `/api/dex/tokens`, `/api/dex/transactions`, `/api/dex/pairs/*`.
+
+There is also a separate DEX backend:
+
+| Network | URL |
+| --- | --- |
+| Mainnet | `https://dex-backend-mainnet.prd.service.aepps.com` |
+| Testnet | `https://dex-backend-testnet.prd.service.aepps.com` |
+
+## What this page still needs
+
+- Enumerate the DEX routes and their parameters.
+- Explain which data comes from the Superhero API versus the DEX backend, and why.
+- Document the pair record shape.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — `DexService`, `DexPairService`
+- `superhero/src/config.ts` — the DEX backend URLs

@@ -1,0 +1,35 @@
+---
+title: "Moderation"
+description: "How a network with no delete button moderates itself."
+---
+
+# Moderation
+
+> **Page brief** — Explain community-level moderation: moderators appointed by DAO vote, muting, and write thresholds.
+>
+> `status: outline` · `depth: deep`
+
+Content cannot be removed from the chain, so moderation happens at the community application
+layer through token-holder governance rather than at the protocol level.
+
+`CommunityManagement.aes` holds the moderation state for each community:
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `moderator_accounts()` | The current moderator set |
+| `muted_user_ids()` | Muted user identifiers |
+| `minimum_token_threshold()` | Tokens required for write access |
+| `add_moderator(moderator)` / `delete_moderator(moderator)` | Appointed and removed by DAO vote |
+| `mute_user_id(user_id)` / `unmute_user_id(user_id)` | Moderator actions |
+| `change_minimum_token_threshold(n)` | Changed by DAO vote |
+
+## What this page still needs
+
+- Explain what muting actually hides and where — feed, comments, chat room.
+- Document the `is_private` community flag and what it gates.
+- Cover platform-level moderation, if any, distinct from community moderation.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `CommunityManagement` contract block
+- `superhero/src/views/Whitepaper.tsx` — Community Management

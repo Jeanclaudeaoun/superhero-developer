@@ -1,0 +1,39 @@
+---
+title: "AffiliationTreasury"
+description: "Referral accounting, invite codes and reward withdrawal."
+---
+
+# AffiliationTreasury
+
+> **Page brief** — Full reference for AffiliationTreasury.aes.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `register_invitation_code` | `(invitation_addresses: list(address), redemption_fee_cover: int, invitation_amount: int)` | Stateful, payable |
+| `revoke_invitation_code` | `(invitation_address: address)` | Stateful |
+| `redeem_invitation_code` | `(invitee_address: address)` | Stateful |
+| `register_invitation` | `(inviter_address: address)` | Stateful |
+| `record_sale_transaction` | `(buyer: address, transaction_value: int)` | Stateful, payable |
+| `withdraw` | `()` | Stateful. Withdraw accumulated rewards. |
+| `get_accumulated_rewards` | `(account: address) => int` | Reward balance |
+| `get_direct_inviter` | `(account: address) => option(address)` | Level-1 referrer |
+| `get_affiliation_tree` / `affiliation_tree` | — | The referral graph |
+| `get_affiliation_fee_percentage` / `get_affiliation_fee_percentages` / `get_affiliation_fee_precision` | — | The 4-level split |
+| `get_invitation_code` / `invitation_codes` | — | Invite state |
+| `get_unique_invitee` / `unique_invitees` | — | Invitee qualification |
+| `get_payout_period` / `payout_periods` | — | Payout accounting |
+| `get_state` | — | Full state |
+
+## What this page still needs
+
+- Confirm that `get_affiliation_fee_percentages` returns the 0.3 / 0.125 / 0.05 / 0.025 split, and in what precision.
+- Document the payout period mechanism and when `withdraw` succeeds.
+- Document the `unique_invitees_state` record.
+- Explain the burn path for unaffiliated buys at the contract level.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json` — the `AffiliationTreasury` block
+- `superhero/src/views/Whitepaper.tsx` — Affiliation Bonding Curve Token Sale

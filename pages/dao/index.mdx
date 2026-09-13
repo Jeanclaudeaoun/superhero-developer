@@ -1,0 +1,25 @@
+---
+title: "Community DAOs"
+description: "Each token's treasury and the on-chain governance that controls it."
+---
+
+# Community DAOs
+
+> **Page brief** — Document the DAO layer completely — treasury, proposal types, voting rules, execution, and migration.
+>
+> `status: outline` · `depth: overview`
+
+Every community token has a DAO. The `DAO.aes` contract is both the **owner** and the
+**beneficiary** of the token sale: it receives the trading proceeds and holds administrative
+authority over the sale. Token holders decide what happens to that money.
+
+## In this section
+
+- [How DAOs Work](/dao/overview) — The DAO orientation page — the lifecycle from funding to execution.
+- [The Treasury](/dao/treasury) — Document treasury funding, balance visibility, and the `record_sale_transaction` path.
+- [Proposals & Vote Subjects](/dao/proposals) — Enumerate every vote subject with its parameters and its effect. This is a closed set — say so.
+- [Voting](/dao/voting) — Document the voting mechanics including the allowance and locking behaviour, which surprises people.
+- [Quorum & Thresholds](/dao/quorum-and-thresholds) — A short, precise reference page. People will link to it to settle arguments.
+- [Moderators & Write Thresholds](/dao/moderators) — Connect the governance layer to the moderation layer: moderators are appointed by vote, thresholds are changed by vote.
+- [Replaceable DAOs](/dao/replaceable-dao) — Document the upgrade path — this is the protocol's main forward-compatibility story.
+- [ProtocolDAO Token](/dao/protocol-dao) — Explain the ProtocolDAO token honestly — issuance is live, governance is not yet built.

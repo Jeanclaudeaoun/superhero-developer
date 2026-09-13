@@ -1,0 +1,28 @@
+---
+title: "The DAO Treasury"
+description: "Where community money comes from and how it is held."
+---
+
+# The DAO Treasury
+
+> **Page brief** — Document treasury funding, balance visibility, and the `record_sale_transaction` path.
+>
+> `status: outline` · `depth: standard`
+
+The treasury is funded by 0.5% of every buy on the community's bonding curve, plus the 555 AE
+deposit from every vote that is opened.
+
+Proceeds reach the DAO through `record_sale_transaction(buyer, buy_price)` rather than a bare
+`Chain.spend`, which is what makes upgraded DAOs able to add their own logic for splitting or
+using proceeds.
+
+## What this page still needs
+
+- Document how to read the treasury balance on-chain and via the API (`dao_balance` on the token DTO).
+- Explain whether the 555 AE vote deposit is refundable.
+- Cover the DAO list and detail views at `/trends/daos` and `/trends/dao/:saleAddress`.
+
+## Sources to mine
+
+- `superhero/src/features/dao/views/` — `DaoListView`, `TokenDaosListView`, `DaoVoteDetailsView`
+- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote

@@ -1,0 +1,33 @@
+---
+title: "Delegation"
+description: "Delegate your voting stake to someone else, and take it back."
+---
+
+# Delegation
+
+> **Page brief** — Document the delegation model in the Registry contract and what it means for stake weighting.
+>
+> `status: outline` · `depth: standard`
+
+```bash
+node scripts/superhero-governance.mjs delegate <ak_address>
+```
+
+| `Registry` entrypoint | Purpose |
+| --- | --- |
+| `delegate(delegatee)` | Delegate your stake |
+| `revoke_delegation()` | Take it back |
+| `delegatee(account)` | Who an account delegates to |
+| `delegators(account)` | Who delegates to an account |
+| `delegations()` | The full delegation map |
+
+## What this page still needs
+
+- Explain whether delegation is transitive and how cycles are handled.
+- Explain what happens if you vote directly while having delegated.
+- Document the delegation tab in the `/voting` UI.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`
+- `superhero-agent-skill/scripts/superhero-governance.mjs`

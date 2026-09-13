@@ -1,0 +1,26 @@
+---
+title: "Social"
+description: "Posting, commenting, tipping, hashtags and chat on Superhero."
+---
+
+# Social
+
+> **Page brief** — Everything about the social layer — the part of Superhero that is a social network rather than a market.
+>
+> `status: outline` · `depth: overview`
+
+Posts and comments are written to the `Tipping` v3 contract, so they are permanent and
+attributable. Chat is deliberately *not* on-chain: it runs over Nostr relays for realtime
+messaging. Know which is which before you publish anything.
+
+## In this section
+
+- [The Feed](/social/feed) — Explain the popular/latest feeds, what drives ranking, and how the infinite feed pages through the API.
+- [Posting](/social/posting) — The canonical posting reference: the contract call, the cost, the limits, and both the UI and CLI paths.
+- [Delegated & Gasless Posting](/social/delegated-posting) — Document `post_without_tip_sig` precisely enough that someone could implement a relayer against it.
+- [Comments](/social/comments) — Explain the `comment:<post_id>` media-prefix convention that turns a post into a reply.
+- [Tipping](/social/tipping) — Document the tipping flow, where the AE goes, and how tip totals are aggregated and displayed.
+- [Hashtags & Topics](/social/hashtags-and-topics) — The bridge page between the social layer and the token layer. This is the mechanism the whole product rests on.
+- [Chat](/social/chat) — Document the chat system honestly — it is Nostr-based, off-chain, and relay-dependent.
+- [Notifications](/social/notifications) — List every notification type, where it is delivered, and how deep links resolve.
+- [Moderation](/social/moderation) — Explain community-level moderation: moderators appointed by DAO vote, muting, and write thresholds.

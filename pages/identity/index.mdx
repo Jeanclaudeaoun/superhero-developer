@@ -1,0 +1,24 @@
+---
+title: "Identity"
+description: "SuperheroID: decentralized identity linking your wallet, chain names and social accounts."
+---
+
+# Identity
+
+> **Page brief** — Everything about who you are on Superhero — the ProfileRegistry contract, the three name types, X verification, and the W3C DID framing.
+>
+> `status: outline` · `depth: overview`
+
+Your identity on Superhero is your æternity address plus whatever you attach to it. The
+`ProfileRegistry.aes` contract holds profiles and public names on-chain, so there is no
+account system to be locked out of and no operator who can revoke your handle.
+
+## In this section
+
+- [SuperheroID](/identity/superhero-id) — Explain SuperheroID as a product: what it is, what it links, and why it is a DID rather than a profile row in a database.
+- [Profile Registry](/identity/profile-registry) — A contract-level reference for ProfileRegistry.aes: the data model, the entrypoints, and the events.
+- [Names: Custom, Chain and X](/identity/names) — Explain the name hierarchy precisely — this is subtle and currently documented nowhere but the whitepaper.
+- [Chain Names (AENS)](/identity/chain-names) — The full AENS lifecycle as it applies to Superhero users, including the auction rule and the sponsored claim.
+- [Verifying Your X Account](/identity/x-verification) — Document the OAuth + attestation flow end to end, including the on-chain signature verification, because it is a good template for future attestations.
+- [Profiles & Accounts](/identity/profiles) — Document the profile surface: bio, avatar, owned tokens, created tokens, activity, and the leaderboards.
+- [DIDs and the W3C Standard](/identity/did-standard) — For an audience that already knows DIDs: the method, the document shape, resolution, and verification.

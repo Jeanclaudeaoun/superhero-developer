@@ -1,0 +1,33 @@
+---
+title: "Replaceable DAOs"
+description: "Upgrading a community's governance without redeploying its token."
+---
+
+# Replaceable DAOs
+
+> **Page brief** — Document the upgrade path — this is the protocol's main forward-compatibility story.
+>
+> `status: outline` · `depth: standard`
+
+`ReplaceableDAO.aes` defines the interface a community-provided DAO must implement to be used
+with the system and to be swapped in via a `ChangeDAO` vote.
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `is_dao()` | Must return `true`; the safeguard that blocks transfers to non-DAO addresses |
+| `get_community_management()` | The linked community management contract |
+| `record_sale_transaction(address, int)` | Receive sale proceeds with metadata, instead of a bare `Chain.spend` |
+
+`record_sale_transaction` exists so a replacement DAO can add its own logic for how proceeds
+are split or used — an explicit upgrade path.
+
+## What this page still needs
+
+- Write a guide to building and deploying a custom DAO that satisfies the interface.
+- Document the full `ChangeDAO` migration procedure and its risks.
+- Note whether any community has actually migrated, as a worked example.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json` — the `ReplaceableDAO` block
+- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote

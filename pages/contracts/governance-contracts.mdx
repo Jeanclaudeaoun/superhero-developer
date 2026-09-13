@@ -1,0 +1,43 @@
+---
+title: "Registry & Poll"
+description: "The æternity governance poll contracts."
+---
+
+# Registry & Poll
+
+> **Page brief** — Full reference for the two governance contracts.
+>
+> `status: outline` · `depth: reference`
+
+### Registry
+
+| Entrypoint | Signature |
+| --- | --- |
+| `add_poll` | `(poll: Poll, is_listed: bool) => int` (stateful) |
+| `delegate` | `(delegatee: address)` (stateful) |
+| `revoke_delegation` | `()` (stateful) |
+| `polls` / `poll` | `() => polls` / `(poll_id: int) => poll_data` |
+| `delegations` / `delegatee` / `delegators` | Delegation reads |
+| `created_height` / `version` | Metadata |
+
+### Poll
+
+| Entrypoint | Signature |
+| --- | --- |
+| `init` | `(metadata, vote_options, close_height: option(int))` |
+| `vote` | `(option: int)` (stateful) |
+| `revoke_vote` | `()` (stateful) |
+| `title` / `metadata` / `close_height` / `votes` | Reads |
+| `has_voted` / `voted_option` / `is_author` / `is_closed` | Status |
+| `get_state` / `version` | Metadata |
+
+## What this page still needs
+
+- Document the `metadata` and `vote_option` record shapes.
+- Document the events the registry emits (the ACI is named `RegistryWithEvents`).
+- Explain how stake weighting is derived off-chain from delegations and balances.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`
+- `superhero-agent-skill/contracts/PollACI.json`, `PollBytecode.json`

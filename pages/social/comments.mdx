@@ -1,0 +1,35 @@
+---
+title: "Comments"
+description: "Comments are posts too — here is how the threading works."
+---
+
+# Comments
+
+> **Page brief** — Explain the `comment:<post_id>` media-prefix convention that turns a post into a reply.
+>
+> `status: outline` · `depth: deep`
+
+Comments are on-chain posts through the same `Tipping` v3 contract, encoded with
+`comment:<post_id>` as the **first media entry**. Same mechanism as a regular post, but it
+resolves as a reply to the parent.
+
+```bash
+node scripts/superhero-comment.mjs post <post_id> "<content>"
+node scripts/superhero-comment.mjs get <post_id>
+node scripts/superhero-comment.mjs get <post_id> 50 2   # limit, page
+```
+
+Posting a comment returns `comment_post_id`, `parent_post_id` and `tx_hash`, and costs about
+0.00001 AE. Reading comments needs no wallet.
+
+## What this page still needs
+
+- Document how deep nesting works (a comment on a comment) and how the UI renders ancestor chains.
+- Cover the `GET /api/posts/{id}/comments` endpoint shape.
+- Explain the legacy `/post/:slug/comment/:id` redirect behaviour.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/commenting.md`
+- `superhero-agent-skill/scripts/superhero-comment.mjs`
+- `superhero/src/routes.tsx` — `NavigatePostComment`

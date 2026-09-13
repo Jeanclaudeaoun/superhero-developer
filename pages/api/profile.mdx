@@ -1,0 +1,30 @@
+---
+title: "Profile API"
+description: "Read and update profiles, and run the X attestation flow."
+---
+
+# Profile API
+
+> **Page brief** — The only part of the API with write endpoints — document the auth model carefully.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Notes |
+| --- | --- |
+| `GET /api/profile/{address}` | A single profile |
+| `GET /api/profile` | The authenticated profile |
+| `GET /api/profile/feed` | The profile's feed |
+| `PATCH /api/profile/{address}` | Update profile fields |
+| `POST /api/profile/{address}/challenge` | Request a signing challenge |
+| `POST /api/profile/x/attestation` | Obtain a signed X attestation for the contract |
+
+## What this page still needs
+
+- Document the challenge/signature authentication flow end to end.
+- Document the request and response bodies for the two POST endpoints.
+- Document which profile fields are API-only versus mirrored on-chain.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.28–1.33
+- `superhero/src/views/ProfileXCallback.tsx`

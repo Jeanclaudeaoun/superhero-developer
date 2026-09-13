@@ -1,0 +1,29 @@
+---
+title: "Voting on Polls"
+description: "Cast and revoke a vote on an æternity governance poll."
+---
+
+# Voting on Polls
+
+> **Page brief** — Short and procedural. Emphasise reading the poll before voting so option numbers are right.
+>
+> `status: outline` · `depth: standard`
+
+Always read the poll first to confirm the option numbering and that it is still open:
+
+```bash
+node scripts/superhero-governance.mjs info <poll_address>
+node scripts/superhero-governance.mjs vote <poll_address> <option_number>
+node scripts/superhero-governance.mjs revoke <poll_address>
+```
+
+## What this page still needs
+
+- Explain whether voting locks any tokens (unlike DAO votes, it appears not to).
+- Document what happens if you vote twice.
+- Cover voting from the `/voting` UI.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-governance.mjs`
+- `superhero-agent-skill/SKILL.md` — the governance voting workflow

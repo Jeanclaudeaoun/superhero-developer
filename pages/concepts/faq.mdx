@@ -1,0 +1,67 @@
+---
+title: "Frequently Asked Questions"
+description: "The questions real users ask, answered — mirroring the live /faq page on superhero.com."
+---
+
+# Frequently Asked Questions
+
+> **Page brief** — Mirror and expand superhero.com/faq. Keep the answers in step with `server/lib/faq-content.cjs`, which feeds the page's schema.org JSON-LD.
+>
+> `status: outline` · `depth: reference`
+
+The canonical copy for these answers lives in `superhero/server/lib/faq-content.cjs` and the
+`faq` namespace of `src/locales/en.json`. **Keep this page in step with that file** — it is the
+source of the structured data Google reads.
+
+### What is Superhero?
+
+A social + crypto app on the æternity blockchain. Discover content, create posts, tip, trade
+community tokens, and take part in on-chain governance — all in one place.
+
+### What is Trendminer?
+
+Trendminer lets you tokenize trending ideas. Creators launch community tokens on a bonding
+curve; price adjusts with buys and sells, with no order book. A small fee flows into a token
+treasury (DAO) to fund community initiatives.
+
+### How do I buy or sell a token?
+
+On a token page, use the trade card. Choose Buy or Sell, review the live quote, and confirm in
+your wallet. Tokens are minted or burned against AE along the bonding curve.
+
+### Where do fees go?
+
+A portion of each trade funds the token's DAO treasury. Holders propose and vote on how to
+allocate it.
+
+### How does the DAO work?
+
+Every token has a treasury. Anyone can create proposals. Holders vote on-chain. If a proposal
+passes, the treasury can pay contributors or fund new ideas.
+
+### Which wallet do I need?
+
+Superhero Wallet for æternity — browser extension, mobile app, or the web wallet at
+`wallet.superhero.com`. See [Wallets](/wallets).
+
+### What is a sponsored name claim?
+
+Superhero sponsors one free `.chain` name claim per address. The name must be longer than
+12 characters (excluding the `.chain` suffix). Additional names can be claimed directly in
+Superhero Wallet.
+
+### Any risks I should know?
+
+Volatility and smart-contract risk are real. Double-check addresses and amounts before
+signing. Never risk funds you cannot afford to lose.
+
+## What this page still needs
+
+- Port the remaining entries verbatim: chat/Quali, quick start, holders vs transactions, voting section, social feed, accounts pages, rewards program, milestones, claiming, eligibility, invitations, analytics/market cap, help & bug reports, claiming more than one name.
+- Add a developer FAQ section (rate limits, testnet, where to get test AE, contract addresses).
+- Add an agent FAQ section (key handling, scheduling, costs).
+
+## Sources to mine
+
+- `superhero/server/lib/faq-content.cjs` — all 23 canonical entries
+- `superhero/src/views/FAQ.tsx` — `QUESTION_DEFS` ordering

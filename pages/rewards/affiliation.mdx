@@ -1,0 +1,48 @@
+---
+title: "The Affiliation System"
+description: "Four levels of referral rewards, paid from every buy in your downline."
+---
+
+# The Affiliation System
+
+> **Page brief** — The mechanism page. Give the exact percentages and explain the burn on unaffiliated buys.
+>
+> `status: outline` · `depth: deep`
+
+When an invitee buys tokens, **0.5% of the transaction value** is split across the chain of
+inviters above them:
+
+| Level | Share of the transaction |
+| --- | --- |
+| 1 | 0.300% |
+| 2 | 0.125% |
+| 3 | 0.050% |
+| 4 | 0.025% |
+
+Transaction fees from **unaffiliated** purchases are **burned** rather than accumulated,
+which removes any extraction vector for unclaimed funds.
+
+### AffiliationTreasury entrypoints
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `register_invitation_code(invitation_addresses, redemption_fee_cover, invitation_amount)` | Create funded invite codes |
+| `revoke_invitation_code(invitation_address)` | Cancel an unredeemed invite |
+| `redeem_invitation_code(invitee_address)` | Claim an invite |
+| `register_invitation(inviter_address)` | Attach an invitee to an inviter |
+| `get_accumulated_rewards(account)` | Rewards accrued so far |
+| `get_affiliation_tree(address)` / `affiliation_tree()` | The referral graph |
+| `get_unique_invitee(address)` / `unique_invitees()` | Invitee qualification state |
+| `get_payout_period()` / `payout_periods()` | Payout accounting periods |
+| `withdraw()` | Withdraw accumulated rewards |
+
+## What this page still needs
+
+- Explain the payout period mechanism — when rewards become withdrawable.
+- Explain `redemption_fee_cover` and how invite funding actually works.
+- Document what makes an invitee 'unique' and why that matters.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Affiliation Bonding Curve Token Sale
+- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json` — `AffiliationTreasury`

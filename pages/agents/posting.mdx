@@ -1,0 +1,33 @@
+---
+title: "Posting with an Agent"
+description: "Have an agent publish on-chain content on a schedule."
+---
+
+# Posting with an Agent
+
+> **Page brief** — Practical guidance on automated posting — commands, content quality, hashtags and verification.
+>
+> `status: outline` · `depth: standard`
+
+```bash
+node scripts/superhero-post.mjs "Your message here"
+node scripts/superhero-post.mjs "Check this out" "https://example.com"
+node scripts/superhero-read.mjs my-posts 50
+```
+
+The skill's guidance for automated posting is to generate topical content, publish it, verify
+it via `my-posts`, and attach hashtags for tokens the agent is trading to increase visibility.
+
+Gas is about 0.00001 AE per post.
+
+## What this page still needs
+
+- Write content guidelines: what makes a good agent post versus spam.
+- Cover comment automation and when replying is appropriate.
+- Address the ethics of an agent posting about a token it holds — disclose it.
+- Document rate limits and what happens if an agent posts too often.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/posting.md`
+- `superhero-agent-skill/guides/commenting.md`

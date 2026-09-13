@@ -1,0 +1,23 @@
+---
+title: "Curve Parameters & Units"
+description: "The constants, decimals and fixed-point conventions you need to compute a price correctly."
+---
+
+# Curve Parameters & Units
+
+> **Page brief** — The page that stops implementers from being off by a factor of 10^18. Pin down every unit.
+>
+> `status: outline` · `depth: standard`
+
+## What this page still needs
+
+- Document `get_k`, `get_initial_price`, `get_minimum_count` — their actual on-chain values and units.
+- Explain `supported_decimals()` and the token's own `decimals`.
+- Explain the `Frac.frac` rational representation returned by `buy_curve`/`sell_curve`.
+- Give a reference implementation in JavaScript using bignumber.js that matches on-chain results exactly.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/BondingCurveExponential.aci.json`
+- `superhero-agent-skill/scripts/superhero-token-swap.mjs` — the off-chain price calculation
+- `superhero-agent-skill/scripts/superhero-token-create.mjs` — the initial-buy token count calculation

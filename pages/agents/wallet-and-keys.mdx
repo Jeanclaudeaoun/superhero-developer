@@ -1,0 +1,53 @@
+---
+title: "Agent Wallet & Key Management"
+description: "Generate, import and protect the key your agent signs with."
+---
+
+# Agent Wallet & Key Management
+
+> **Page brief** — The most safety-critical page in the section. Be direct about what not to do.
+>
+> `status: outline` · `depth: deep`
+
+### Detect existing setup
+
+```bash
+node scripts/superhero-wallet.mjs exists
+```
+
+Returns `{ "exists": false }` if `AE_PRIVATE_KEY` is not set.
+
+### Generate or import
+
+```bash
+node scripts/superhero-wallet.mjs generate            # new keypair
+node scripts/superhero-wallet.mjs import "<secret>"   # validate an existing key
+export AE_PRIVATE_KEY=<your_secret_key>
+```
+
+```bash
+node scripts/superhero-wallet.mjs address
+node scripts/superhero-wallet.mjs balance
+```
+
+### Rules
+
+| ✅ Do | ❌ Don't |
+| --- | --- |
+| Keep the key in an environment variable | Store it in a plain-text file |
+| Use a dedicated wallet for the agent | Reuse your personal wallet |
+| Fund it with only what you can lose | Hold your main balance there |
+| Back up the mnemonic offline | Commit a wallet file to git |
+| Share invite links directly | Log or print keys or invite links |
+
+## What this page still needs
+
+- Document key rotation: how to move an agent to a new key without losing its identity or chain name.
+- Recommend a concrete funding cap policy and how to enforce it.
+- Cover secret management options beyond a shell profile (OS keychain, secret managers).
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-wallet.mjs`
+- `superhero-agent-skill/SKILL.md` — Security First
+- `superhero-agent-skill/guides/setup.md`

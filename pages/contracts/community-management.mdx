@@ -1,0 +1,30 @@
+---
+title: "CommunityManagement"
+description: "Moderators, write thresholds and community metadata."
+---
+
+# CommunityManagement
+
+> **Page brief** — Full reference for CommunityManagement.aes.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `init` | `(initial_moderator, minimum_token_threshold, is_private, meta_info)` | Stateful |
+| `add_moderator` / `delete_moderator` | `(moderator: address)` | Stateful. DAO-governed. |
+| `mute_user_id` / `unmute_user_id` | `(user_id: string)` | Stateful. Moderator action. |
+| `change_minimum_token_threshold` | `(minimum_token_threshold: int)` | Stateful. DAO-governed. |
+| `change_meta_info` | `(meta_info)` | Stateful |
+| `moderator_accounts` / `muted_user_ids` / `minimum_token_threshold` / `meta_info` | — | Reads |
+| `owner` / `set_owner` / `get_state` / `version` | — | Metadata |
+
+## What this page still needs
+
+- Document the `meta_info` record fields.
+- Document what a `user_id` string is — an address, a profile id, or something else.
+- Explain how `is_private` is enforced at read time.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `CommunityManagement` block

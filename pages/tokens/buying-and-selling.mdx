@@ -1,0 +1,49 @@
+---
+title: "Buying & Selling"
+description: "Execute a trade against the curve, from the UI or the CLI."
+---
+
+# Buying & Selling
+
+> **Page brief** — The trading reference. Must cover quoting, slippage protection, allowances and confirmation.
+>
+> `status: outline` · `depth: deep`
+
+### From the token page
+
+Open a token, use the trade card, choose Buy or Sell, review the live quote, and confirm in
+your wallet. Tokens are minted or burned against AE along the bonding curve.
+
+### From the command line
+
+```bash
+node scripts/superhero-token-swap.mjs lookup "TokenName"          # resolve a name to a sale address
+node scripts/superhero-token-swap.mjs price ct_<sale_address> 10  # AE cost for 10 tokens
+node scripts/superhero-token-swap.mjs buy   ct_<sale_address> 5
+node scripts/superhero-token-swap.mjs sell  ct_<sale_address> 5
+```
+
+Both `buy` and `sell` apply **3% slippage protection** automatically. `sell` also handles the
+AEX-9 allowance for you.
+
+### The underlying contract calls
+
+| Entrypoint | Notes |
+| --- | --- |
+| `buy(count)` | Payable. Mints `count` tokens to the caller. |
+| `buy_with_affiliation(count, affiliation_rewardee)` | Payable. Same, but routes the affiliation fee. |
+| `sell(count, minimal_return_required)` | Burns tokens; reverts if the return is below the floor. |
+| `buy_price(count)` / `sell_return(count)` | Quote before trading. |
+
+## What this page still needs
+
+- Explain `minimal_return_required` and how to choose it — this is the user's only slippage defence on a sell.
+- Document the allowance step for selling (`create_allowance` on the token contract) for anyone not using the script.
+- Add a full aepp-sdk buy/sell example.
+- Explain why an executed price can differ from the quote, and by how much in practice.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-token-swap.mjs`
+- `superhero-agent-skill/guides/trading.md`
+- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`

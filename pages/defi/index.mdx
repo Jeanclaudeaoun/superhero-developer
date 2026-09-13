@@ -1,0 +1,23 @@
+---
+title: "DeFi & DEX"
+description: "Swapping, liquidity pools, wrapped AE and bridging — the AMM side of Superhero."
+---
+
+# DeFi & DEX
+
+> **Page brief** — Document the DEX, and be explicit that it is a different market from the bonding curve. Readers mix them up.
+>
+> `status: outline` · `depth: overview`
+
+Superhero embeds a full AMM DEX at `/defi`. **This is separate from the bonding-curve token
+market.** Bonding-curve community tokens are minted and burned against a curve; DEX tokens
+trade against liquidity pools. Different contracts, different pricing, different risks.
+
+## In this section
+
+- [Swapping](/defi/swap) — Document the swap UI and the router call behind it, including routing and price impact.
+- [Liquidity Pools](/defi/pools) — Cover adding and removing liquidity, LP tokens, fee accrual, and the risks.
+- [Wrapped AE](/defi/wrapped-ae) — Short and mechanical. Explain the WAE contract and the wrap/unwrap flow.
+- [Bridging from Ethereum](/defi/bridge) — Document the ae-eth bridge, the aeETH token, and the risks of bridging.
+- [Exploring the DEX](/defi/explore) — Document the three explore views and the data behind them.
+- [Buying AE](/defi/buy-ae) — Document the in-app purchase flow, its providers, and the alternatives.

@@ -1,0 +1,41 @@
+---
+title: "API Reference"
+description: "The api.superhero.com REST API — posts, tokens, accounts, transactions, analytics and more."
+---
+
+# API Reference
+
+> **Page brief** — A complete REST reference. Today it is an inventory of paths and the fields the app consumes; it must become full request/response documentation.
+>
+> `status: outline` · `depth: overview`
+
+### Base URLs
+
+| Network | Base URL |
+| --- | --- |
+| Mainnet | `https://api.superhero.com` |
+| Testnet | `https://testnet.api.dev.tokensale.org` |
+
+Most endpoints are public and read-only. The current authoritative inventory of paths and the
+exact fields the web app consumes lives in
+`superhero/docs/api-superhero-com-endpoints-and-fields.md`; these pages are being built out
+from it.
+
+> **Not yet verified:** authentication, rate limits, CORS policy and versioning guarantees.
+> Do not assume this API is stable until those are documented here.
+
+## In this section
+
+- [Conventions](/api/conventions) — Pin down the cross-cutting contract once so the endpoint pages do not repeat it.
+- [Posts](/api/posts) — Document every posts endpoint with parameters, response fields and an example.
+- [Tokens](/api/tokens) — The most-used part of the API. Document the full TokenDto, since everything else references it.
+- [Accounts](/api/accounts) — Document the account endpoints including the portfolio history that agents rely on.
+- [Transactions](/api/transactions) — Document the transaction endpoints and the trade record shape.
+- [Trending & Topics](/api/trending) — Document the trending surface, which is the entry point for most agent strategies.
+- [Analytics](/api/analytics) — Document the analytics endpoints — useful for dashboards and for anyone sizing the network.
+- [Profile](/api/profile) — The only part of the API with write endpoints — document the auth model carefully.
+- [Factory & Contracts](/api/factory-and-contracts) — Document the discovery endpoints, so integrators stop hardcoding addresses.
+- [Invitations & Affiliations](/api/invitations-and-affiliations) — Document the affiliate endpoints needed to build a referral dashboard.
+- [DEX](/api/dex) — Document the DEX endpoints, which are served from both the Superhero API and a separate DEX backend.
+- [WebSocket](/api/websocket) — Document the realtime channel used by the trending views.
+- [Node & Middleware](/api/node-and-middleware) — Document the direct chain access path — the node for contract calls, the middleware for indexed history.

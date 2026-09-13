@@ -1,0 +1,67 @@
+---
+title: "Create a Token from the Command Line"
+description: "Launch a token from a terminal or an AI agent, using your own wallet."
+---
+
+# Create a Token from the Command Line
+
+> **Page brief** — The developer/agent path. Must be copy-pasteable and must state the pre-flight checks.
+>
+> `status: outline` · `depth: deep`
+
+### Pre-flight
+
+1. Confirm you have at least 0.01 AE for gas: `node scripts/superhero-wallet.mjs balance`
+2. Pick a name — uppercase A–Z, digits 0–9 and dash, maximum 20 characters.
+3. Check availability — abort if `exists` comes back `true`.
+
+```bash
+node scripts/superhero-token-create.mjs check "MYTOKEN"
+```
+
+Returns `{ exists, allowed_name_length, allowed_chars }`.
+
+### Create
+
+```bash
+node scripts/superhero-token-create.mjs create "MYTOKEN" 0.1
+```
+
+| Parameter | Meaning |
+| --- | --- |
+| Name | Uppercase A–Z, digits, dash. Max 20 characters. Unique within its collection. |
+| `buy_ae` | AE to spend on an initial buy at creation. Default `0`. |
+
+The script sends `buy_ae * 1.05` to cover bonding-curve price drift, and derives the token
+count from the curve automatically. The collection (`WORDS-ak_...`) is fetched from the
+Superhero API, so you do not pass it.
+
+Returns `sale_address`, `dao_address`, `estimated_tokens` and `tx_hash`.
+
+### Inspect afterwards
+
+```bash
+node scripts/superhero-token-create.mjs info ct_<sale_address>
+node scripts/superhero-trending.mjs token-info ct_<sale_address>
+```
+
+### Timing
+
+Creation takes **2–5 minutes** to mine. Run it in the background and wait up to 10 minutes
+before treating it as failed.
+
+### Factory address
+
+Mainnet community factory: `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`
+
+## What this page still needs
+
+- Add a raw aepp-sdk example that calls `create_community` without the skill scripts.
+- Document the 5% buffer behaviour and what happens to the unspent remainder.
+- Document every error the script can return and what each means.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-token-create.mjs`
+- `superhero-agent-skill/guides/token-creation.md`
+- `superhero-agent-skill/SKILL.md` — Token Creation Workflow

@@ -1,0 +1,50 @@
+---
+title: "Risk Strategies"
+description: "Conservative, Moderate and Aggressive — the three built-in templates and their parameters."
+---
+
+# Risk Strategies
+
+> **Page brief** — Lay out all three templates side by side with their exact JSON, so operators can pick or fork one.
+>
+> `status: outline` · `depth: deep`
+
+| Parameter | Conservative | Moderate | Aggressive |
+| --- | --- | --- | --- |
+| Position size (`max_trade_percent_of_balance`) | 5% | 10% | 20% |
+| Minimum trending score | > 100,000 | > 50,000 | > 20,000 |
+| Exit behaviour | Exit fast on any decline | Hold through minor dips | Ride momentum longer |
+
+Conservative, in full:
+
+```json
+{
+  "trading": {
+    "enabled": true,
+    "mode": "auto_trending",
+    "strategy": "conservative",
+    "cron": "0 */6 * * *",
+    "max_trade_percent_of_balance": 0.05,
+    "max_positions": 3,
+    "sell_on_score_drop_percent": 10,
+    "sell_on_price_drop_percent": 5,
+    "max_hold_cycles": 3
+  }
+}
+```
+
+Rules the conservative agent follows: at most 5% of balance per trade, at most 3 open
+positions, sell if price drops more than 5% from entry, and auto-sell after 3 cycles without a
+meaningful gain. Posting: one quality post daily at 09:00, none on trading cycles.
+
+## What this page still needs
+
+- Transcribe the Moderate and Aggressive JSON blocks in full from the skill guide.
+- Document every configuration key and its accepted range.
+- Add guidance on writing a custom strategy and what to change first.
+- Be explicit that none of these are backtested and none are advice.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/autonomous.md` — Strategy Templates
+- `superhero-agent-skill/SKILL.md` — the strategy prompt

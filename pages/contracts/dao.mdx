@@ -1,0 +1,35 @@
+---
+title: "DAO"
+description: "The treasury and governance contract for one community."
+---
+
+# DAO
+
+> **Page brief** — Full reference for DAO.aes, including the vote lifecycle entrypoints.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `init` | `(token_sale: option(TokenSale), factory_address: address)` | Stateful |
+| `add_vote` | `(metadata: DAOVote.metadata) => (int, DAOVote)` | Stateful, payable. Costs 555 AE. |
+| `apply_vote_subject` | `(vote_seq_id: int)` | Stateful. Executes a passed vote. |
+| `record_sale_transaction` | `(buyer: address, buy_price: int)` | Stateful, payable. Receives proceeds. |
+| `votes` | `() => DAO.votes` | All votes |
+| `vote_timeout` | `() => int` | Execution window |
+| `get_token` | `() => FungibleTokenFull` | The community token |
+| `get_token_sale` / `set_token_sale` | — | The sale contract |
+| `get_community_management` | `() => option(CommunityManagement)` | Linked community management |
+| `factory` | `() => Factory` | The deploying factory |
+| `is_dao` | `() => bool` | The `ChangeDAO` safeguard |
+| `get_state` / `version` | — | Metadata |
+
+## What this page still needs
+
+- Document the `DAOVote.metadata` record required by `add_vote`.
+- Document who may call `apply_vote_subject` and what happens after the window closes.
+- Document the events emitted on vote creation and execution.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `DAO` block

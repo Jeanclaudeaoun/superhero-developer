@@ -1,0 +1,35 @@
+---
+title: "The ProtocolDAO Token"
+description: "The platform-wide token minted on every buy, and what it is for."
+---
+
+# The ProtocolDAO Token
+
+> **Page brief** — Explain the ProtocolDAO token honestly — issuance is live, governance is not yet built.
+>
+> `status: outline` · `depth: standard`
+
+The factory mints ProtocolDAO tokens during buy transactions: **1,000 ProtocolDAO tokens per
+AE of buy value**, issued to the buyer's address at the time of purchase.
+
+| Property | Value |
+| --- | --- |
+| Standard | AEX-9 |
+| Issuance | 1,000× the AE value of each community-token buy |
+| Distribution | To the buyer, at purchase time |
+| Utility | Future platform-wide governance, proposal voting, staking (planned) |
+| Current status | Issuance active; governance framework in development |
+
+The relevant factory entrypoints are `protocol_dao_token()` and
+`mint_protocol_dao_token(buy_value, receiver)`.
+
+## What this page still needs
+
+- State the ProtocolDAO token's contract address on mainnet.
+- Explain whether it is transferable or tradable today.
+- Track and document the governance roadmap as it lands.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — ProtocolDAO Token
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json`

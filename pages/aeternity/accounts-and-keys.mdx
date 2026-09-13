@@ -1,0 +1,32 @@
+---
+title: "Accounts & Keys"
+description: "Address formats, keypairs and what each prefix means."
+---
+
+# Accounts & Keys
+
+> **Page brief** — A short reference that stops people pasting the wrong kind of address into the wrong field.
+>
+> `status: outline` · `depth: reference`
+
+| Prefix | Meaning |
+| --- | --- |
+| `ak_` | An account (user) address |
+| `ct_` | A contract address |
+| `th_` | A transaction hash |
+| `kh_` / `mh_` | A key-block / micro-block hash |
+| `sg_` | A signature |
+
+Superhero uses these constantly: a **sale address** is a `ct_`, a wallet is an `ak_`, and a
+trade receipt is a `th_`.
+
+## What this page still needs
+
+- Document the key type (Ed25519) and the secret key encoding the SDK expects.
+- Explain derivation from a BIP39 mnemonic and the derivation path used.
+- Add the remaining prefixes (`nm_`, `cm_`, `ok_`, `pp_`).
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-wallet.mjs`
+- æternity protocol documentation

@@ -1,0 +1,49 @@
+---
+title: "Trading with an Agent"
+description: "The scan → filter → size → enter → monitor → exit loop."
+---
+
+# Trading with an Agent
+
+> **Page brief** — The core trading loop, written so a human can audit what their agent is doing.
+>
+> `status: outline` · `depth: deep`
+
+### The loop
+
+1. **Scan** — `node scripts/superhero-trending.mjs tokens 20`
+2. **Filter** — keep only tokens above the configured minimum trending score
+3. **Check price** — `node scripts/superhero-token-swap.mjs price ct_... 10`
+4. **Size the position** — never more than `max_trade_percent_of_balance` on one token
+5. **Enter** — `node scripts/superhero-token-swap.mjs buy ct_... <amount>`
+6. **Monitor** — on later cycles, re-check score and price for held positions
+7. **Exit** — sell when the score or price drops past the strategy's threshold
+
+### Pre-buy checks
+
+| Check | Command | What you are looking for |
+| --- | --- | --- |
+| Momentum | `trending.mjs token-info ct_...` | A rising trending score |
+| Flow quality | `transactions.mjs token ct_... 30` | Many small buyers (organic) rather than one whale |
+| Recent performance | `trending.mjs performance ct_...` | Direction and magnitude of recent moves |
+
+### The trading mindset the skill encodes
+
+- Early entries have the highest upside; late entries carry the most risk.
+- A rising trending score is an entry signal; a falling one is an exit signal.
+- Diversify across 3–5 positions rather than concentrating in one.
+- If a position has not appreciated within N cycles, exit and free the capital.
+- Posting about a topic generates attention, which generates buying pressure — coordinate
+  posts and trades, and disclose that you hold.
+
+## What this page still needs
+
+- Document how the agent should record entry prices so PnL is computed against something real.
+- Add worked examples of a winning and a losing cycle.
+- Explain the interaction between the 1% spread and short holding periods — a round trip starts 1% down.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/trading.md`
+- `superhero-agent-skill/guides/autonomous.md`
+- `superhero-agent-skill/SKILL.md` — Trading Mindset

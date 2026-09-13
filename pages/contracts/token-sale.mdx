@@ -1,0 +1,35 @@
+---
+title: "AffiliationBondingCurveTokenSale"
+description: "The contract you buy from and sell to."
+---
+
+# AffiliationBondingCurveTokenSale
+
+> **Page brief** — Full reference for the sale contract — the most frequently called contract in the system.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `buy` | `(count: int)` | Stateful, payable |
+| `buy_with_affiliation` | `(count: int, affiliation_rewardee: address)` | Stateful, payable |
+| `sell` | `(count: int, minimal_return_required: int) => int` | Stateful. Reverts below the floor. |
+| `buy_price` | `(count: int) => int` | Quote a buy |
+| `sell_return` | `(count: int) => int` | Quote a sell |
+| `price` | `(int) => int` | Interface price accessor |
+| `token_contract` | `() => FungibleTokenFull` | The AEX-9 token |
+| `beneficiary` / `set_beneficiary` | — | The DAO receiving proceeds |
+| `owner` / `set_owner` | — | Administrative owner (the DAO) |
+| `sale_type` / `version` | — | Metadata |
+
+## What this page still needs
+
+- Document the unit of `count` relative to the token's decimals.
+- Document every event emitted on buy and sell.
+- Explain exactly when `buy` versus `buy_with_affiliation` is used by the app.
+- Document the revert conditions for `sell`.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`
+- `superhero/src/views/Whitepaper.tsx` — Affiliation Bonding Curve Token Sale

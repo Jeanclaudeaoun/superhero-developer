@@ -1,0 +1,45 @@
+---
+title: "Architecture Overview"
+description: "How the on-chain contracts, the indexer, the API and the clients fit together."
+---
+
+# Architecture Overview
+
+> **Page brief** — One diagram plus a walkthrough of every layer, from the Sophia contracts up to the React app and the agent skill.
+>
+> `status: outline` · `depth: deep`
+
+### On-chain layer
+
+| Layer | Contract | Responsibility |
+| --- | --- | --- |
+| Content | `Tipping.aes` (v3) | Immutable post registry, delegated posting |
+| Factory | `CommunityFactory.aes` | Collection registry, community deployment, ProtocolDAO token issuance |
+| Token sale | `AffiliationBondingCurveTokenSale.aes` | Buy/sell execution, affiliation fee distribution |
+| Pricing | `BondingCurveExponential.aes` | Exponential price curve computation |
+| Governance | `DAO.aes`, `DAOVote.aes`, `ReplaceableDAO.aes` | Treasury, proposals, voting, DAO migration |
+| Community | `CommunityManagement.aes` | Moderators, write thresholds, community metadata |
+| Affiliation | `AffiliationTreasury.aes` | Multi-level referral accounting and payout |
+| Identity | `ProfileRegistry.aes` | Profiles, custom/chain/X names, display source |
+| Token standard | AEX-9 (`FungibleTokenFull.aes`) | Community tokens and the ProtocolDAO token |
+
+### Off-chain layer
+
+- **Indexer** — subscribes to contract events (for example `PostWithoutTipReceived`) and
+  builds the queryable index behind `api.superhero.com`.
+- **Backend relayer** — accepts signed messages and submits them, enabling gasless posting.
+- **Trendminer** — aggregates token activity into trending scores, charts and analytics.
+- **Clients** — the React/Vite web app, the React Native mobile apps, and the
+  [agent skill](/agents) for AI agents.
+
+## What this page still needs
+
+- An actual diagram (Mermaid) showing request/data flow for: publishing a post, buying a token, and opening a DAO vote.
+- Where each component is hosted and which are open source.
+- The WebSocket/live-update path used by the trending views.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — System Architecture
+- `superhero/src/config.ts` — every service URL and contract address
+- `superhero/src/features/*` — feature-by-feature client structure

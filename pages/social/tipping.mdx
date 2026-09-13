@@ -1,0 +1,24 @@
+---
+title: "Tipping"
+description: "Send AE directly to a creator against a specific post."
+---
+
+# Tipping
+
+> **Page brief** — Document the tipping flow, where the AE goes, and how tip totals are aggregated and displayed.
+>
+> `status: outline` · `depth: standard`
+
+Tip summaries are served from `GET /api/tips/posts/{postId}/summary`, which returns
+`totalTips`. Per-account summaries come from `GET /api/tips/accounts/{address}/summary`.
+
+## What this page still needs
+
+- Document the on-chain tipping call and whether it is the same contract as posting.
+- Explain the minimum tip, fees, and settlement timing.
+- Cover tipping a user who has not yet claimed their address.
+
+## Sources to mine
+
+- `superhero/src/features/social/` — `PostTipButton.tsx`, `TipModal.tsx`, `usePostTipSummary.ts`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.2

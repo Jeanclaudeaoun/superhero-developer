@@ -1,0 +1,39 @@
+---
+title: "Polls"
+description: "Reading a poll, its options, and its stake-weighted result."
+---
+
+# Polls
+
+> **Page brief** — Explain the poll data model and — critically — which result figure is authoritative.
+>
+> `status: outline` · `depth: deep`
+
+```bash
+node scripts/superhero-governance.mjs list
+node scripts/superhero-governance.mjs info <poll_address>
+node scripts/superhero-governance.mjs info-by-id <poll_id>
+```
+
+**Read `stake_weighted_results` as the official outcome.** `raw_vote_counts` counts addresses
+only and is not the result.
+
+| `Poll` entrypoint | Purpose |
+| --- | --- |
+| `title()`, `metadata()`, `close_height()` | Poll identity and deadline |
+| `votes()` | All cast votes |
+| `vote(option)` / `revoke_vote()` | Cast or retract |
+| `has_voted(voter)`, `voted_option(voter)` | Per-voter state |
+| `is_closed()`, `is_author(author)` | Status checks |
+
+## What this page still needs
+
+- Explain how stake weighting is computed and at what block height it is snapshotted.
+- Document the governance API (`GOVERNANCE_API_URL`) endpoints used to list and enrich polls.
+- Explain listed versus unlisted polls.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-governance.mjs`
+- `superhero-agent-skill/contracts/PollACI.json`, `RegistryWithEventsACI.json`
+- `superhero/src/views/Governance.tsx`

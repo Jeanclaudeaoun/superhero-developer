@@ -1,0 +1,16 @@
+{
+  "index": "Overview",
+  "overview": "Community Tokens",
+  "bonding-curve": "Bonding Curves",
+  "curve-parameters": "Curve Parameters & Units",
+  "create-from-dashboard": "Create a Token (Dashboard)",
+  "create-from-cli": "Create a Token (CLI)",
+  "collections-and-naming": "Collections & Naming Rules",
+  "buying-and-selling": "Buying & Selling",
+  "fees-and-slippage": "Fees & Slippage",
+  "token-page": "Reading a Token Page",
+  "trending-score": "The Trending Score",
+  "portfolio": "Portfolio & PnL",
+  "transactions": "Transaction History",
+  "risks": "Risks"
+}

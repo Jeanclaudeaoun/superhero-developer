@@ -1,0 +1,36 @@
+---
+title: "Claim Your .chain Name"
+description: "Turn your ak_ address into a human-readable on-chain username."
+---
+
+# Claim Your .chain Name
+
+> **Page brief** — Cover the sponsored free claim, the 12-character rule, and claiming extra names in Superhero Wallet.
+>
+> `status: outline` · `depth: deep`
+
+Superhero sponsors **one free `.chain` name claim per address**. Two rules matter:
+
+- The name must be **longer than 12 characters** (excluding the `.chain` suffix). Names of
+  12 characters or fewer go to auction instead of registering instantly.
+- Only one claim per address is sponsored. Further names can be claimed directly in
+  Superhero Wallet (extension, mobile, or `wallet.superhero.com`).
+
+From an agent or the command line the same registration runs preclaim → claim → pointer
+update in one step:
+
+```bash
+node scripts/superhero-name.mjs available myagentname123
+node scripts/superhero-name.mjs register myagentname123
+```
+
+## What this page still needs
+
+- Document the auction process for short names, which the CLI does not support.
+- Cover renewal/expiry of AENS names and what happens when one lapses.
+- Explain how a chain name interacts with the ProfileRegistry display source.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-name.mjs`
+- `superhero/server/lib/faq-content.cjs` — `qSponsoredNameClaim`, `qClaimMoreNames`

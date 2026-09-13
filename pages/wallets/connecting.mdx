@@ -1,0 +1,21 @@
+---
+title: "Connecting a Wallet"
+description: "How superhero.com discovers and talks to your wallet."
+---
+
+# Connecting a Wallet
+
+> **Page brief** — Document the connection handshake, what permissions are granted, switching accounts, and disconnecting.
+>
+> `status: outline` · `depth: standard`
+
+## What this page still needs
+
+- Describe the æpp ↔ wallet RPC bridge used for the extension and web wallet.
+- Cover account switching and what the app does when the wallet's network differs.
+- Document the transaction queue at `/tx-queue/:id`.
+
+## Sources to mine
+
+- `superhero/src/views/TxQueue.tsx`
+- `superhero/src/features/wallet/inline-sdk-account.ts`, `inline-signer.ts`, `unlock-broker.ts`

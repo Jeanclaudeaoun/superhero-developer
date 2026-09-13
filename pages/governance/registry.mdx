@@ -1,0 +1,32 @@
+---
+title: "The Governance Registry"
+description: "The contract that indexes every poll and every delegation."
+---
+
+# The Governance Registry
+
+> **Page brief** — A contract reference for the Registry, including its deployed addresses.
+>
+> `status: outline` · `depth: standard`
+
+| Network | Registry address |
+| --- | --- |
+| Mainnet | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` |
+| Testnet | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` |
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `add_poll(poll, is_listed)` | Register a deployed poll, returns its id |
+| `polls()` / `poll(poll_id)` | Enumerate or fetch poll data |
+| `delegate(delegatee)` / `revoke_delegation()` | Delegation management |
+| `created_height()`, `version()` | Registry metadata |
+
+## What this page still needs
+
+- Document the events the registry emits and how the indexer consumes them.
+- Document the governance API base URLs for both networks.
+
+## Sources to mine
+
+- `superhero/src/config.ts` — `GOVERNANCE_CONTRACT_ADDRESS`, `GOVERNANCE_API_URL`
+- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`

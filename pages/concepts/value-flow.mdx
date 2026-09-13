@@ -1,0 +1,43 @@
+---
+title: "Where the Money Goes"
+description: "The exact split of every AE spent on a community token buy."
+---
+
+# Where the Money Goes
+
+> **Page brief** — Follow one purchase end to end and account for every fraction of it. This is the page people will link to when they ask 'what are the fees'.
+>
+> `status: outline` · `depth: deep`
+
+On every community-token **buy**:
+
+```text
+Buyer pays AE
+  ├── 99.0%  → Bonding curve reserve (redeemable by sellers)
+  ├──  0.5%  → Community DAO treasury (governed by token holders)
+  └──  0.5%  → Affiliation system
+                ├── 0.300% → Level 1 referrer
+                ├── 0.125% → Level 2 referrer
+                ├── 0.050% → Level 3 referrer
+                └── 0.025% → Level 4 referrer
+                (if no referrer: burned)
+
+Buyer also receives:
+  └── ProtocolDAO tokens = 1,000 × AE value of the buy
+```
+
+The 1% total spread is the difference between the buy curve and the sell curve. It is not
+charged as a separate fee — it is built into the two curves. See
+[Bonding Curves](/tokens/bonding-curve) for the math.
+
+## What this page still needs
+
+- The same accounting for a **sell**, which is not documented anywhere yet.
+- Network gas costs as a separate line item, with real observed numbers.
+- What 'burned' means mechanically for unaffiliated buys.
+- Worked example in AE at a realistic trade size.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Value Flow Diagram, Token Economics Summary
+- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`

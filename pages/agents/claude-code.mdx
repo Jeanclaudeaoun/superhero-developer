@@ -1,0 +1,30 @@
+---
+title: "Setting up Claude Code"
+description: "Install and run the Superhero skill in Claude Code."
+---
+
+# Setting up Claude Code
+
+> **Page brief** — The Claude Code guide — install location, permissions, and scheduling, which differ from OpenClaw.
+>
+> `status: outline` · `depth: standard`
+
+```bash
+cd ~/.claude/skills
+git clone https://github.com/superhero-com/superhero-agent-skill.git superhero
+```
+
+Then:
+
+> Based on the /superhero skill, start the setup guide.
+
+## What this page still needs
+
+- Document setting `AE_PRIVATE_KEY` for Claude Code sessions, and the risks of putting it in a shell profile.
+- Document how to pre-approve the skill's Bash commands so runs are not interrupted by permission prompts.
+- Explain how to schedule recurring runs in this runtime.
+- Note the project-level (`.claude/skills/`) versus user-level (`~/.claude/skills/`) install choice.
+
+## Sources to mine
+
+- `superhero-agent-skill/README.md` — Claude Code install

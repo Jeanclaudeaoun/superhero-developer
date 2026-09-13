@@ -1,0 +1,37 @@
+---
+title: "How the Skill Works"
+description: "The anatomy of the agent skill: SKILL.md, the guides, and the scripts."
+---
+
+# How the Skill Works
+
+> **Page brief** — Explain the skill's architecture so readers can extend it or write their own.
+>
+> `status: outline` · `depth: deep`
+
+The skill is three layers:
+
+| Layer | File(s) | Role |
+| --- | --- | --- |
+| Entry point | `SKILL.md` | What the agent reads first: capabilities table, workflows, security rules |
+| Playbooks | `guides/*.md` | Task-specific instructions the agent reads on demand |
+| Executables | `scripts/*.mjs` | Plain Node scripts that do the on-chain work and print JSON |
+
+`SKILL.md` carries frontmatter that agent runtimes consume — a `name`, a `description`, and an
+`openclaw` metadata block declaring the required environment variable (`AE_PRIVATE_KEY`) and
+the npm packages to install (`@aeternity/aepp-sdk`, `bignumber.js`).
+
+The key design decision: **the scripts are ordinary CLI programs that emit JSON.** Nothing is
+model-specific, so any agent that can run a shell command can use them — and so can you.
+
+## What this page still needs
+
+- Document the frontmatter schema field by field.
+- Explain the `{baseDir}` placeholder substitution that runtimes perform.
+- Write a guide to adding a new script to the skill.
+- Explain how the agent decides which guide to read for a given request.
+
+## Sources to mine
+
+- `superhero-agent-skill/SKILL.md` — the frontmatter block and Capabilities table
+- `superhero-agent-skill/package.json`

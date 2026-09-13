@@ -1,0 +1,30 @@
+---
+title: "Sophia & FATE"
+description: "The smart-contract language and the VM that runs it."
+---
+
+# Sophia & FATE
+
+> **Page brief** — Orient a developer coming from Solidity. What is familiar, what is different, what to read next.
+>
+> `status: outline` · `depth: standard`
+
+**Sophia** is a functional, strongly-typed contract language with no mutable global state —
+properties that reduce the surface for reentrancy and state-corruption bugs. **FATE** is the
+virtual machine that executes it, optimised for functional execution.
+
+**ACI** (æternity Contract Interface) is the JSON description of a contract's interface — the
+equivalent of an ABI. The ACI files in `superhero-agent-skill/contracts/` are what clients use
+to call Superhero's contracts.
+
+## What this page still needs
+
+- Add a Solidity-to-Sophia orientation table (types, state, entrypoints, events).
+- Explain stateful versus non-stateful entrypoints and payable entrypoints.
+- Explain how ACI is produced from source and how to regenerate it.
+- Link the compiler (`https://v7.compiler.aepps.com`) and explain its role.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Design Principles, Smart Contract Auditing
+- `superhero/src/config.ts` — `compilerUrl`

@@ -1,0 +1,35 @@
+---
+title: "Verifying Your X Account"
+description: "Link an X handle to your address with a cryptographic attestation."
+---
+
+# Verifying Your X Account
+
+> **Page brief** — Document the OAuth + attestation flow end to end, including the on-chain signature verification, because it is a good template for future attestations.
+>
+> `status: outline` · `depth: deep`
+
+X names are linked through a cryptographic attestation flow rather than a trusted database row:
+
+1. The backend signer (configured at contract deployment) generates an attestation message
+   containing the caller's address, the normalized X username, an expiry timestamp, and a
+   unique nonce.
+2. The message is hashed with Blake2b and prefixed with the æternity signed-message prefix
+   (`"aeternity Signed Message:\n"` with a fixed 28-byte header), producing a 60-byte payload.
+3. The digest is verified against the backend signer's signature using `Crypto.verify_sig`.
+4. Nonces are recorded on-chain (`nonce_used`) so an attestation cannot be replayed.
+
+The client side of this is an X OAuth 2.0 PKCE flow gated on `X_OAUTH_CLIENT_ID`; when that
+value is unset the "Connect X" entry point is hidden entirely.
+
+## What this page still needs
+
+- Document the REST endpoints: `POST /api/profile/x/attestation` and `POST /api/profile/{address}/challenge`.
+- Walk the user-visible flow with screenshots, including the `/profile/x/callback` return leg.
+- State what happens if the attestation expires before it is submitted.
+
+## Sources to mine
+
+- `superhero/src/views/ProfileXCallback.tsx`
+- `superhero/src/config.ts` — `X_OAUTH_CLIENT_ID`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.31, §1.32

@@ -1,0 +1,25 @@
+---
+title: "Trending & Topics API"
+description: "Trending tags, topic feeds and the data behind the trend cloud."
+---
+
+# Trending & Topics API
+
+> **Page brief** — Document the trending surface, which is the entry point for most agent strategies.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Query | Notes |
+| --- | --- | --- |
+| `GET /api/trending-tags` | `order_by`, `order_direction`, `limit`, `page`, `search` | Items carry `tag`/`name`, `score`/`value`, `source`/`platform` |
+| `GET /api/topics/name/{name}` | — | `posts`, `post_count` |
+
+## What this page still needs
+
+- Document the accepted `order_by` values and the score's scale.
+- Explain the `source`/`platform` field and whether off-platform trends are ingested.
+- Document how a trending tag maps to a token, when one exists.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.4, §1.5

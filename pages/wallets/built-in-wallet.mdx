@@ -1,0 +1,23 @@
+---
+title: "The Built-In Wallet"
+description: "How Superhero's own in-app wallet stores and unlocks your key."
+---
+
+# The Built-In Wallet
+
+> **Page brief** — A technical but readable explanation of the in-app vault: derivation, factors (passkey, passphrase), storage, and the unlock broker.
+>
+> `status: outline` · `depth: deep`
+
+## What this page still needs
+
+- Explain the vault model: `vault.ts`, `vault-store.ts`, `vault-record.ts`, `manifest-store.ts`.
+- Document the unlock factors — WebAuthn passkey (`webauthn.ts`, `passkey-seed.ts`) and passphrase (`passphrase.ts`).
+- Explain key derivation (`derivation.ts`) and the Nostr key derived for chat (`nostr-key.ts`).
+- Describe the transaction summary shown before signing (`tx-summary.ts`).
+- State plainly where the key material lives and what clearing site data destroys.
+
+## Sources to mine
+
+- `superhero/src/features/wallet/*.ts` — the whole module
+- `superhero/README.md` — `VITE_WEBAUTHN_RP_ID` and the passkey failure mode

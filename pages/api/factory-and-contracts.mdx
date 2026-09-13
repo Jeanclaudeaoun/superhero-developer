@@ -1,0 +1,30 @@
+---
+title: "Factory & Contracts API"
+description: "Discover the live factory schema, collections and deployed contract addresses."
+---
+
+# Factory & Contracts API
+
+> **Page brief** — Document the discovery endpoints, so integrators stop hardcoding addresses.
+>
+> `status: outline` · `depth: standard`
+
+| Method & path | Notes |
+| --- | --- |
+| `GET /api/factory` | The active community factory schema — address, collections, rules |
+| `GET /api/contracts` | Deployed contract addresses |
+| `GET /api/stats` | Platform stats |
+
+The agent skill uses `GET /api/factory` to discover the current collection (`WORDS-ak_...`)
+rather than hardcoding it — integrators should do the same.
+
+## What this page still needs
+
+- Document the full factory schema response.
+- Document `GET /api/contracts` field by field.
+- Explain how to detect a factory upgrade from these endpoints.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.3, §3
+- `superhero-agent-skill/scripts/superhero-token-create.mjs` — the factory lookup

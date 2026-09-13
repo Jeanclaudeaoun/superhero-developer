@@ -1,0 +1,41 @@
+---
+title: "Tokens API"
+description: "Query community tokens, their prices, holders, history and scores."
+---
+
+# Tokens API
+
+> **Page brief** — The most-used part of the API. Document the full TokenDto, since everything else references it.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Query | Notes |
+| --- | --- | --- |
+| `GET /api/tokens` | `order_by`, `order_direction`, `collection`, `limit`, `page`, `search`, `owner_address`, `creator_address`, `factory_address` | Token list |
+| `GET /api/tokens/{address}` | — | Full `TokenDto` |
+| `GET /api/tokens/{address}/holders` | list params | Holder balances |
+| `GET /api/tokens/{address}/transactions` | list params | Trades on a token |
+| `GET /api/tokens/{address}/history` | — | Price/market history |
+| `GET /api/tokens/{address}/performance` | — | `past_7d.current_change_percent` |
+| `GET /api/tokens/{address}/score` | — | Trending score |
+| `GET /api/tokens/{address}/rankings` | list params | Ranking positions |
+| `GET /api/tokens/preview/{address}` | — | Lightweight preview |
+
+### TokenDto fields
+
+`id`, `network_id`, `factory_address`, `sale_address`, `creator_address`, `owner_address`,
+`beneficiary_address`, `bonding_curve_address`, `collection`, `metaInfo`, `address`, `name`,
+`symbol`, `decimals`, `rank`, `holders_count`, `price`, `price_data`, `sell_price`,
+`sell_price_data`, `market_cap`, `market_cap_data`, `total_supply`, `dao_balance`,
+`created_at`, `tx_type`, `volume`, `amount`, `unit_price`, `create_tx_hash`.
+
+## What this page still needs
+
+- Document the units of `price`, `market_cap` and `total_supply` — aettos or AE, and with how many decimals.
+- Explain the difference between `address` and `sale_address` in this DTO.
+- Document `price_data` / `market_cap_data` sub-objects.
+- Document the accepted `order_by` values.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.6–1.12, §1.17, §3

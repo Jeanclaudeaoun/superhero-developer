@@ -1,0 +1,33 @@
+---
+title: "Voting"
+description: "Cast, revoke and withdraw a vote, and what locking your tokens means."
+---
+
+# Voting
+
+> **Page brief** — Document the voting mechanics including the allowance and locking behaviour, which surprises people.
+>
+> `status: outline` · `depth: deep`
+
+| Action | Entrypoint | Effect |
+| --- | --- | --- |
+| Vote | `vote(option, amount)` | Records for or against. The tokens must be **allowed** for the vote contract and are **locked** by it. |
+| Revoke | `revoke_vote()` | Retract your vote and reclaim your locked stake. |
+| Withdraw | `withdraw()` | After the closing height, reclaim your stake without affecting the outcome. |
+
+Read-only helpers: `current_vote_state()`, `final_vote_state()`, `has_voted(voter)`,
+`voted_option(voter)`, `has_withdrawn(voter)`, `is_closed()`, `close_height()`.
+
+Tokens locked in a vote cannot be transferred or sold until you revoke or withdraw — this is
+what prevents vote manipulation by moving tokens between addresses during an active vote.
+
+## What this page still needs
+
+- Document the AEX-9 `create_allowance` step required before voting, with a code example.
+- Explain what `amount` means — is voting power linear in tokens staked?
+- Clarify the difference between revoking during a vote and withdrawing after it.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `DAOVote` block
+- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote

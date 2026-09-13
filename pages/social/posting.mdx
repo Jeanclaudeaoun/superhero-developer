@@ -1,0 +1,47 @@
+---
+title: "Posting"
+description: "Publish a post on-chain, from the app or the command line."
+---
+
+# Posting
+
+> **Page brief** — The canonical posting reference: the contract call, the cost, the limits, and both the UI and CLI paths.
+>
+> `status: outline` · `depth: deep`
+
+Posts are stored on-chain through the `Tipping` v3 contract. Each post is a `PostWithoutTip`
+variant holding `tip_meta` (`sender`, `title`, `timestamp`) and a `media` list of strings.
+Posts live in a map indexed by a monotonically increasing `tip_id`, giving a deterministic,
+append-only ordering of everything ever published.
+
+### Contract entrypoints
+
+| Entrypoint | Signature | Purpose |
+| --- | --- | --- |
+| `post_without_tip` | `(title: string, media: list(string)) => int` | Direct posting; `Call.caller` is the author |
+| `post_without_tip_sig` | `(title: string, media: list(string), author: address, sig: signature) => int` | Delegated posting on behalf of a signer |
+
+Each successful post emits `PostWithoutTipReceived(author, title)`.
+
+### From the command line
+
+```bash
+node scripts/superhero-post.mjs "Your message here"
+node scripts/superhero-post.mjs "Check this out" "https://example.com"
+node scripts/superhero-post.mjs "Multiple links" "https://link1.com" "https://link2.com"
+```
+
+A post costs roughly 0.00001 AE in gas.
+
+## What this page still needs
+
+- Document the character limit and the media encoding convention used by the app.
+- Show the full aepp-sdk snippet for calling `post_without_tip` directly.
+- Explain post slugs — how `/post/:slug` resolves to a `tip_id`.
+- State plainly that posts cannot be edited or deleted.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-post.mjs`
+- `superhero-agent-skill/contracts/Tipping_v3.aci.json`
+- `superhero/src/views/Whitepaper.tsx` — Posting & Tipping

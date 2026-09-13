@@ -1,0 +1,27 @@
+---
+title: "Transactions API"
+description: "Query trades across the platform."
+---
+
+# Transactions API
+
+> **Page brief** — Document the transaction endpoints and the trade record shape.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Query | Notes |
+| --- | --- | --- |
+| `GET /api/transactions` | `token_address`, `limit`, `page` | Trades, filterable by token |
+| `GET /api/transactions/by-hash` | `hash` | A single transaction |
+| `GET /api/debug/failed-transactions` | — | Failed transaction diagnostics |
+
+## What this page still needs
+
+- Document every field on a transaction record (`type`, `ae_amount`, `amount`, addresses, tx hash, timestamp).
+- Document filtering by account as well as by token.
+- Explain how these records relate to on-chain transactions in aeScan.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.10, §3
+- `superhero-agent-skill/scripts/superhero-transactions.mjs`

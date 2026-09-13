@@ -1,0 +1,31 @@
+---
+title: "Wallet Security"
+description: "Rules that keep your keys yours — for humans and for agents."
+---
+
+# Wallet Security
+
+> **Page brief** — Practical, opinionated security guidance. Reuse the DO/DON'T table from the agent skill and extend it to human users.
+>
+> `status: outline` · `depth: deep`
+
+The agent skill ships this table; it applies just as well to people.
+
+| ✅ Do | ❌ Don't |
+| --- | --- |
+| Keep private keys in environment variables | Store private keys in plain-text files |
+| Use `export AE_PRIVATE_KEY=<key>` in your shell | Commit wallet files to git |
+| Back up mnemonics offline | Log or print a private key |
+| Share invite links directly with the recipient | Log or commit invite links (they contain one-time secrets) |
+| Verify the address and amount before signing | Sign a transaction you do not understand |
+
+## What this page still needs
+
+- Add phishing guidance: the real domains, how to verify you are on superhero.com.
+- Cover approval/allowance hygiene for AEX-9 tokens used in DAO voting.
+- Add a dedicated section on running an agent's key safely (separate hot wallet, funded with a capped amount).
+
+## Sources to mine
+
+- `superhero-agent-skill/SKILL.md` — the Security First table
+- `superhero/server/lib/faq-content.cjs` — `qRisks`

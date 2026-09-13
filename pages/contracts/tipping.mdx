@@ -1,0 +1,30 @@
+---
+title: "Tipping v3"
+description: "The post registry contract."
+---
+
+# Tipping v3
+
+> **Page brief** — Full reference for the content layer contract.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `init` | `() => Tipping.state` | Deployment |
+| `post_without_tip` | `(title: string, media: list(string)) => int` | Stateful. Author is `Call.caller`. Returns the `tip_id`. |
+| `post_without_tip_sig` | `(title: string, media: list(string), author: address, sig: signature) => int` | Stateful. Delegated posting. |
+| `get_state` | `() => Tipping.state` | Full state, including every post |
+
+Emits `PostWithoutTipReceived(author, title)`. Contract version: `"v3"`.
+
+## What this page still needs
+
+- Document the `PostWithoutTip` variant and `tip_meta` record shapes field by field.
+- Document the tipping entrypoints — the contract is named Tipping but only posting is covered by the vendored ACI.
+- Add a worked `post_without_tip` example with a real transaction hash.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/Tipping_v3.aci.json`
+- `superhero/src/views/Whitepaper.tsx` — Posting & Tipping

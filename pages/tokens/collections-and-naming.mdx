@@ -1,0 +1,40 @@
+---
+title: "Collections & Naming Rules"
+description: "Why your token name was rejected, and which collection it belongs to."
+---
+
+# Collections & Naming Rules
+
+> **Page brief** — Demystify collections — a concept that is invisible in the UI until it blocks you.
+>
+> `status: outline` · `depth: deep`
+
+A **collection** is a namespace inside the community factory. Each collection defines:
+
+- `allowed_name_length(collection_name)` — the maximum name length it accepts
+- `allowed_name_chars(collection_name)` — the whitelisted character classes
+
+The factory enforces name uniqueness within a collection and requires the token name to match
+its symbol. Because every collection allows `-`, a name like `A-B` can match several
+collections at once, which is why the app derives the target collection from the typed name
+rather than asking up front.
+
+| Factory entrypoint | Purpose |
+| --- | --- |
+| `create_collection(collection_name, allowed_name_length, allowed_name_chars)` | Create a namespace |
+| `token_sale_registry(collection_name)` | The registry of sales in a collection |
+| `has_community(collection_name, name)` | Availability check |
+| `get_token_sale(collection_name, name)` | Resolve a name to its sale contract |
+| `token_contract(collection_name, name)` | Resolve a name to its AEX-9 contract |
+
+## What this page still needs
+
+- List the collections that actually exist on mainnet today, with their rules.
+- Explain the `WORDS-ak_...` collection naming convention seen in the CLI.
+- Document who can create a collection and what it costs.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json`
+- `superhero/src/utils/collectionNameChars.ts`
+- `GET /api/factory` — the live factory schema

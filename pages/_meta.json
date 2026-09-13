@@ -1,15 +1,51 @@
 {
   "index": "Introduction",
-  "another": "Another Page",
-  "advanced": "Advanced (A Folder)",
-  "about": {
-    "title": "About",
-    "type": "page"
+  "-- start": {
+    "type": "separator",
+    "title": "Start Here"
   },
-  "contact": {
-    "title": "Contact ↗",
+  "concepts": "Core Concepts",
+  "getting-started": "Getting Started",
+  "wallets": "Wallets",
+  "identity": "Identity",
+  "-- platform": {
+    "type": "separator",
+    "title": "Using Superhero"
+  },
+  "social": "Social",
+  "tokens": "Tokens & Bonding Curves",
+  "dao": "Community DAOs",
+  "governance": "Governance & Voting",
+  "rewards": "Rewards & Affiliation",
+  "defi": "DeFi & DEX",
+  "-- build": {
+    "type": "separator",
+    "title": "Build"
+  },
+  "agents": "AI Agents",
+  "api": "API Reference",
+  "contracts": "Smart Contracts",
+  "-- chain": {
+    "type": "separator",
+    "title": "Underlying Chain"
+  },
+  "aeternity": "\u00e6ternity Blockchain",
+  "-- ref": {
+    "type": "separator",
+    "title": "Reference"
+  },
+  "resources": "Resources",
+  "contributing": "Contributing",
+  "superhero": {
+    "title": "superhero.com \u2197",
     "type": "page",
-    "href": "https://twitter.com/shuding_",
+    "href": "https://superhero.com",
+    "newWindow": true
+  },
+  "agentskill": {
+    "title": "Agent Skill \u2197",
+    "type": "page",
+    "href": "https://github.com/superhero-com/superhero-agent-skill",
     "newWindow": true
   }
 }

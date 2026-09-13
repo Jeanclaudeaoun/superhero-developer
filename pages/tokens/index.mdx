@@ -1,0 +1,33 @@
+---
+title: "Tokens & Bonding Curves"
+description: "Community tokens, the exponential bonding curve that prices them, and how to create and trade them."
+---
+
+# Tokens & Bonding Curves
+
+> **Page brief** — The most important section on the site. It must leave a reader able to launch a token, price a trade by hand, and explain the fee split from memory.
+>
+> `status: outline` · `depth: overview`
+
+Every Superhero community token is an AEX-9 token minted and burned against an **exponential
+bonding curve**. There is no order book and no counterparty: you always trade against the
+curve, price is a pure function of supply, and the contract always holds enough reserve to buy
+the entire supply back.
+
+Start with [Bonding Curves](/tokens/bonding-curve) — the rest of this section assumes it.
+
+## In this section
+
+- [Community Tokens](/tokens/overview) — Frame the token before the math: utility, membership, governance rights, and what it is explicitly not.
+- [Bonding Curves](/tokens/bonding-curve) — The flagship explainer. Define what a bonding curve is, give the exact Superhero formulas, and show why the reserve is always solvent.
+- [Curve Parameters & Units](/tokens/curve-parameters) — The page that stops implementers from being off by a factor of 10^18. Pin down every unit.
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — The primary creation guide for non-developers. Every field, every rule, every cost, with screenshots.
+- [Create a Token (CLI)](/tokens/create-from-cli) — The developer/agent path. Must be copy-pasteable and must state the pre-flight checks.
+- [Collections & Naming Rules](/tokens/collections-and-naming) — Demystify collections — a concept that is invisible in the UI until it blocks you.
+- [Buying & Selling](/tokens/buying-and-selling) — The trading reference. Must cover quoting, slippage protection, allowances and confirmation.
+- [Fees & Slippage](/tokens/fees-and-slippage) — Separate the three cost components clearly: the curve spread, network gas, and slippage from your own trade size.
+- [Reading a Token Page](/tokens/token-page) — Teach a reader to evaluate a token from its page rather than from its price alone.
+- [The Trending Score](/tokens/trending-score) — Document the score properly. Agents make buy and sell decisions on it, so its semantics matter.
+- [Portfolio & PnL](/tokens/portfolio) — Document holdings, portfolio snapshots and PnL — including the exact field names, since agents parse them.
+- [Transaction History](/tokens/transactions) — A reference for the transaction views, useful both for research and for agent pre-trade checks.
+- [Risks](/tokens/risks) — An honest risk page. It protects users and it is the page a regulator or a journalist will read first.

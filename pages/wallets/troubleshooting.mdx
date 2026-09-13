@@ -1,0 +1,22 @@
+---
+title: "Wallet Troubleshooting"
+description: "Fixes for the failures people actually hit."
+---
+
+# Wallet Troubleshooting
+
+> **Page brief** — A symptom → cause → fix table covering connection, signing, balance and network problems.
+>
+> `status: outline` · `depth: reference`
+
+## What this page still needs
+
+- Wallet not detected; wrong network; transaction stuck as pending.
+- 'Insufficient balance' when the balance looks sufficient (gas reserve).
+- Passkey registration failing silently — the `VITE_WEBAUTHN_RP_ID` mismatch described in the app README.
+- Where to report a bug and what to include (token name, address, tx hash, what happened).
+
+## Sources to mine
+
+- `superhero/README.md` — the passkey `SecurityError` note
+- `superhero/server/lib/faq-content.cjs` — `qHelp`

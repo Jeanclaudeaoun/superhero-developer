@@ -1,0 +1,32 @@
+---
+title: "Using Testnet"
+description: "Develop and experiment without spending real AE."
+---
+
+# Using Testnet
+
+> **Page brief** — Everything needed to run against `ae_uat`: endpoints, contract addresses, a faucet, and how to point each client at testnet.
+>
+> `status: outline` · `depth: deep`
+
+Superhero builds are network-pinned at build time via `VITE_NETWORK` (`ae_mainnet` or `ae_uat`).
+
+| Setting | Mainnet (`ae_mainnet`) | Testnet (`ae_uat`) |
+| --- | --- | --- |
+| Backend / API | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
+| Node | `https://mdw.wordcraft.fun` | `https://testnet.aeternity.io` |
+| Middleware | `https://mdw.wordcraft.fun/mdw` | `https://testnet.aeternity.io/mdw` |
+| Explorer | `https://aescan.io` | `https://testnet.aescan.io` |
+| Compiler | `https://v7.compiler.aepps.com` | `https://v7.compiler.aepps.com` |
+| Governance API | `https://governance-server-mainnet.prd.service.aepps.com/` | `https://governance-server-testnet.prd.service.aepps.com/` |
+
+## What this page still needs
+
+- Link the æternity testnet faucet and document how to request test AE.
+- List the testnet contract addresses (DEX factory/router/WAE/aeETH, Tipping v3, governance registry) from `src/config.ts`.
+- Explain how to point the agent skill at testnet — the scripts currently hardcode mainnet endpoints.
+
+## Sources to mine
+
+- `superhero/src/config.ts` — the `NETWORKS` table
+- `superhero-agent-skill/scripts/*.mjs` — hardcoded `mainnet.aeternity.io` / `api.superhero.com`

@@ -1,0 +1,32 @@
+---
+title: "DAOVote"
+description: "One proposal, its options, and the stake locked behind them."
+---
+
+# DAOVote
+
+> **Page brief** — Full reference for DAOVote.aes.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `init` | `(metadata, token: FungibleTokenFull, author: address)` | Deployment |
+| `vote` | `(option: vote_option, amount: amount)` | Stateful. Locks the staked tokens. |
+| `revoke_vote` | `()` | Stateful. Retract and reclaim. |
+| `withdraw` | `()` | Stateful. After close, reclaim without affecting the result. |
+| `current_vote_state` / `final_vote_state` | — | Tallies |
+| `has_voted` / `voted_option` / `has_withdrawn` | `(voter: address)` | Per-voter state |
+| `is_closed` / `close_height` | — | Status |
+| `subject` | `() => VoteSubjects.subject` | The proposal type |
+| `token` / `vote_accounts` / `metadata` / `get_state` / `version` | — | Metadata |
+
+## What this page still needs
+
+- Document the `vote_option` and `amount` types.
+- Document the required AEX-9 allowance before calling `vote`.
+- Explain how `final_vote_state` differs from `current_vote_state`.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `DAOVote` block

@@ -1,0 +1,38 @@
+---
+title: "Autonomous Mode"
+description: "Let the agent run the full loop on a schedule, unattended."
+---
+
+# Autonomous Mode
+
+> **Page brief** — Document what autonomous mode actually does each cycle, and what the operator must decide before enabling it.
+>
+> `status: outline` · `depth: deep`
+
+On each cycle the agent:
+
+1. Checks wallet balance
+2. Scans trending tokens
+3. Reviews existing holdings and decides whether to sell any
+4. Buys new high-momentum tokens that meet the strategy's criteria
+5. Optionally posts a market update
+
+Cycle frequency is set by the trading cron. Posting can run on a separate, independent cron.
+
+**The agent must never trade autonomously without a confirmed strategy.** The skill instructs
+it to ask which risk profile you want before it starts, and to keep asking whether you want it
+to post after each trading cycle or only on a fixed schedule.
+
+In **manual mode** the agent still scans trends and reports what it would do, but waits for
+explicit approval before executing any trade.
+
+## What this page still needs
+
+- Document how to stop, pause and audit a running autonomous agent.
+- Document where the agent persists its configuration and position state between runs.
+- Add a recommended review cadence for the human operator.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/autonomous.md`
+- `superhero-agent-skill/SKILL.md` — Autonomous vs Manual Mode

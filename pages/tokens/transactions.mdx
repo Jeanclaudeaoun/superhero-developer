@@ -1,0 +1,38 @@
+---
+title: "Transaction History"
+description: "Query trades — yours, a token's, an account's, or the whole market."
+---
+
+# Transaction History
+
+> **Page brief** — A reference for the transaction views, useful both for research and for agent pre-trade checks.
+>
+> `status: outline` · `depth: standard`
+
+```bash
+node scripts/superhero-transactions.mjs mine [limit]
+node scripts/superhero-transactions.mjs token ct_... [limit] [page]
+node scripts/superhero-transactions.mjs account ak_... [limit]
+node scripts/superhero-transactions.mjs all [limit]
+node scripts/superhero-transactions.mjs activity ct_... ak_... [limit]
+```
+
+| Field | Meaning |
+| --- | --- |
+| `type` | `buy` or `sell` |
+| `ae_amount` | AE paid or received |
+| `amount` | Token quantity |
+
+A useful pre-buy heuristic from the agent guides: many small buyers suggests organic
+momentum; one large buyer suggests a pump with higher exit risk.
+
+## What this page still needs
+
+- Document `GET /api/transactions` and `GET /api/transactions/by-hash` parameters and response shape.
+- Explain how to verify any transaction in aeScan.
+- Cover the `/api/debug/failed-transactions` endpoint for diagnosing a failed trade.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-transactions.mjs`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.10, §3

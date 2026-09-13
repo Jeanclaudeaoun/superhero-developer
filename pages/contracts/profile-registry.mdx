@@ -1,0 +1,32 @@
+---
+title: "ProfileRegistry"
+description: "Identity: profiles, names and display preferences."
+---
+
+# ProfileRegistry
+
+> **Page brief** — Full reference for ProfileRegistry.aes. The ACI is not yet vendored, so this page starts from the whitepaper.
+>
+> `status: outline` · `depth: standard`
+
+Known entrypoints from the whitepaper:
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `set_custom_name` | Claim an unverified custom name |
+| `set_chain_name` | Link an AENS name with its expiration |
+| `set_x_name_with_attestation` | Link an X handle via a signed backend attestation |
+| `set_display_source` | Choose `Custom`, `Chain` or `X` as the rendered identity |
+| `get_state` | Full state: profiles, name maps, used nonces, version (`"v1"`) |
+
+## What this page still needs
+
+- Vendor the ProfileRegistry ACI and generate the full signature table from it.
+- Document the `profile` record and the profile-update entrypoints (fullname, bio, avatar).
+- Document the attestation message format precisely enough to reimplement.
+- Add the deployed addresses.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Superhero Onchain ID
+- The `ProfileRegistry.aes` source in the contracts repository

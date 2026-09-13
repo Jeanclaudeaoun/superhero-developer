@@ -1,0 +1,86 @@
+---
+title: "Bonding Curves"
+description: "The exponential curve that prices every Superhero community token."
+---
+
+# Bonding Curves
+
+> **Page brief** — The flagship explainer. Define what a bonding curve is, give the exact Superhero formulas, and show why the reserve is always solvent.
+>
+> `status: outline` · `depth: deep`
+
+A bonding curve is a function that maps circulating supply to price. Buying mints new tokens
+and moves you up the curve; selling burns tokens and moves you down it. Because price is
+computed from supply, there is always a quote and always liquidity — no order book, no
+matching, no counterparty.
+
+Superhero uses an **exponential** curve, specified in `BondingCurveExponential.aes` and
+implementing the interface in `BondingCurve.aes`.
+
+### The formulas
+
+```text
+buy(x)  = 0.001 · e^(0.00000001 · x) − 0.0009999
+
+sell(x) = buy(x) · 0.995
+```
+
+The price you pay to buy `amount` tokens at a given `supply` is the integral of the buy curve
+over the range you are minting into:
+
+```text
+buy price   = ∫ from supply to (supply + amount) of buy(x) dx
+
+sell return = ∫ from (supply − amount) to supply of sell(x) dx
+```
+
+And the spread — the community DAO's benefit — is the area between the two curves:
+
+```text
+spread = ∫ from 0 to supply of buy(x) dx  −  ∫ from 0 to supply of sell(x) dx
+```
+
+### Why the reserve is always solvent
+
+The sell curve sits strictly below the buy curve at every supply level. That guarantees the
+reserve held in the token sale contract is always sufficient to buy back the **entire**
+circulating supply, so a bank-run scenario is structurally impossible. Selling the whole
+supply back to the curve is always possible.
+
+### The spread
+
+The `sell()` curve returns 99.5% of `buy()`, and the affiliation token sale contract adds a
+further 0.5% affiliation fee — so the **total spread between buy and sell price is 1%**:
+0.5% to the community DAO and 0.5% to the affiliation system.
+
+### Design intent
+
+The curve is tuned on the expectation that only **10–20% of the total supply** will ever be
+reached, which puts a noticeable price increase right at the start of the curve.
+
+### Reading the curve from the contract
+
+| Entrypoint | Returns |
+| --- | --- |
+| `buy_price(total_supply)` | Instantaneous buy price at a supply level |
+| `sell_price(total_supply)` | Instantaneous sell price at a supply level |
+| `calculate_buy_price(total_supply, count)` | Cost to buy `count` tokens from `total_supply` |
+| `calculate_sell_return(total_supply, sell_tokens)` | AE returned for selling `sell_tokens` |
+| `buy_curve(x)` / `sell_curve(x)` | The curve value as a `Frac.frac` |
+| `get_k()`, `get_initial_price()`, `get_minimum_count()` | Curve parameters |
+| `get_sell_return_percentage()`, `get_sell_return_precision()` | The 99.5% sell factor and its precision |
+| `curve_type()`, `supported_decimals()` | Curve identity and decimal handling |
+
+## What this page still needs
+
+- Add a rendered chart of both curves over a realistic supply range.
+- Add a worked numeric example: buy 1,000 tokens at supply 0, then at supply 10,000,000 — show the AE cost of each.
+- Explain the integer/fixed-point representation (`Frac.frac`) and the decimals convention, so an implementer does not get unit errors.
+- Explain slippage on this curve: why a large buy executes at a worse average price than the quoted spot price.
+- Compare with linear and Uniswap-style constant-product curves for readers coming from other ecosystems.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Exponential Bonding Curve, Mathematical Definition
+- `superhero-agent-skill/contracts/BondingCurveExponential.aci.json`
+- `superhero-agent-skill/contracts/BondingCurve.aci.json`

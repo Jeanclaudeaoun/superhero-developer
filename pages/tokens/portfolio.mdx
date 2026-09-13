@@ -1,0 +1,41 @@
+---
+title: "Portfolio & PnL"
+description: "Track what you hold, what it is worth, and what you have made or lost."
+---
+
+# Portfolio & PnL
+
+> **Page brief** — Document holdings, portfolio snapshots and PnL — including the exact field names, since agents parse them.
+>
+> `status: outline` · `depth: deep`
+
+```bash
+node scripts/superhero-portfolio.mjs holdings          # your positions
+node scripts/superhero-portfolio.mjs holdings ak_...   # anyone's positions
+node scripts/superhero-portfolio.mjs summary           # holdings + latest snapshot
+node scripts/superhero-portfolio.mjs history           # value over time
+```
+
+| Field | Meaning |
+| --- | --- |
+| `sale_address` | The bonding-curve contract — the handle for buy/sell |
+| `balance` | Tokens held |
+| `balance_ae_value` | Current AE value of the position |
+| `trending_score` | Momentum signal for that token |
+| `total_value_ae` / `total_value_usd` | Portfolio value at a snapshot |
+| `ae_balance` | Liquid AE |
+| `tokens_value_ae` | Value locked in token positions |
+| `total_pnl` | Profit/loss since first purchase |
+| `tokens_pnl` | Per-token PnL breakdown |
+
+## What this page still needs
+
+- Explain how PnL is computed — cost basis method, and whether fees are included.
+- Document snapshot frequency for `/api/accounts/{address}/portfolio/history`.
+- Explain why a position's AE value can fall purely from other people selling.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/portfolio.md`
+- `superhero-agent-skill/scripts/superhero-portfolio.mjs`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.18

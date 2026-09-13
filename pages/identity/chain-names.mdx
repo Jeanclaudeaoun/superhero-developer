@@ -1,0 +1,41 @@
+---
+title: "Chain Names (AENS)"
+description: "Registering, pointing, extending and losing a .chain name."
+---
+
+# Chain Names (AENS)
+
+> **Page brief** — The full AENS lifecycle as it applies to Superhero users, including the auction rule and the sponsored claim.
+>
+> `status: outline` · `depth: deep`
+
+### Length rule
+
+| Name length (before `.chain`) | Result |
+| --- | --- |
+| 13 characters or more | Instant registration, no auction |
+| 12 characters or fewer | Goes to auction |
+
+Superhero sponsors one free claim per address for names longer than 12 characters.
+
+### CLI lifecycle
+
+```bash
+node scripts/superhero-name.mjs available <name>     # check availability
+node scripts/superhero-name.mjs register <name>      # preclaim -> claim -> point at your address
+node scripts/superhero-name.mjs update <name> [addr] # repoint the name
+node scripts/superhero-name.mjs extend <name>        # renew before expiry
+node scripts/superhero-name.mjs resolve <name>       # name -> address
+node scripts/superhero-name.mjs lookup <address>     # address -> name
+```
+
+## What this page still needs
+
+- Document the auction mechanics for short names (bid, timeout, outbidding).
+- Explain AENS expiry heights and what `extend` actually does.
+- Cover pointing a name at a contract rather than an account.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-name.mjs` — all six commands
+- `superhero-agent-skill/SKILL.md` — Registration .chain Name Flow

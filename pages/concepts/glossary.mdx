@@ -1,0 +1,39 @@
+---
+title: "Glossary"
+description: "Every Superhero and æternity term used in these docs, defined once."
+---
+
+# Glossary
+
+> **Page brief** — The single authoritative definition list. Every other page links here rather than re-defining terms.
+>
+> `status: outline` · `depth: reference`
+
+| Term | Definition |
+| --- | --- |
+| **AE** | The native coin of the æternity blockchain. Used for gas and as the base currency of every bonding curve. |
+| **AEX-9** | The æternity fungible-token standard (analogous to ERC-20). Community tokens and the ProtocolDAO token both conform to it. |
+| **AENS** | The æternity Naming System — human-readable `.chain` names that point at an address. |
+| **Bonding curve** | A function mapping circulating supply to price. Superhero uses an exponential curve. |
+| **Collection** | A namespace inside the community factory with its own name-length and character rules. |
+| **DAO** | The on-chain treasury and governance contract attached to each community token. |
+| **Delegated posting** | Publishing a post signed by the author but submitted (and paid for) by someone else. |
+| **FATE VM** | The virtual machine that executes æternity smart contracts. |
+| **Key-block** | A mined æternity block; used as the time unit for vote deadlines. |
+| **ProtocolDAO token** | A platform-wide AEX-9 token minted on every community-token buy, intended for future protocol governance. |
+| **Sale address** | The `ct_...` address of a token's bonding-curve sale contract. The handle you use to buy and sell. |
+| **Sophia** | æternity's functional smart-contract language. |
+| **Spread** | The gap between the buy and sell curves — the fee that funds the DAO and the affiliation system. |
+| **State channel** | An æternity layer-2 mechanism for off-chain transactions with on-chain settlement. |
+| **Trendminer** | Superhero's analytics engine for trending tokens, charts and live market data. |
+| **tx hash** | A transaction identifier; look it up in an explorer to verify an action. |
+
+## What this page still needs
+
+- Add terms as other pages introduce them: `trending_score`, `collection`, `nonce`, `attestation`, `display source`, `vote subject`, `quorum`, `slippage`, `WAE`.
+- Cross-link each term to the page that explains it in depth.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Glossary
+- `superhero/server/lib/faq-content.cjs` — the glossary FAQ entry

@@ -1,0 +1,34 @@
+---
+title: "Analytics API"
+description: "Platform-wide metrics: volume, market cap, active users and token counts."
+---
+
+# Analytics API
+
+> **Page brief** — Document the analytics endpoints — useful for dashboards and for anyone sizing the network.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Returns |
+| --- | --- |
+| `GET /api/analytics/total-market-cap` | Total market cap across all tokens |
+| `GET /api/analytics/total-created-tokens` | Lifetime token count |
+| `GET /api/analytics/total-unique-users` | Lifetime unique users |
+| `GET /api/analytics/daily-created-tokens-count` | Token creations per day |
+| `GET /api/analytics/daily-trade-volume` | Trade volume per day |
+| `GET /api/analytics/daily-unique-active-users` | DAU series |
+| `GET /api/analytics/daily-market-cap-sum` | Market cap series |
+| `GET /api/analytics/past-24-hours` | Rolling 24-hour summary |
+| `GET /api/analytics/preview` | Summary payload |
+| `GET /api/coins/aeternity/rates` | AE fiat rates |
+| `GET /api/coins/aeternity/market-data` | AE market data |
+
+## What this page still needs
+
+- Document the response shape and units for each series endpoint.
+- Document the date-range parameters, if any.
+- Document the caching/refresh interval.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.14–1.16, §1.22–1.26, §2.1

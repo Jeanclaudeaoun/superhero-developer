@@ -1,0 +1,33 @@
+---
+title: "æternity Node & Middleware"
+description: "Read chain state directly when the Superhero API is not enough."
+---
+
+# æternity Node & Middleware
+
+> **Page brief** — Document the direct chain access path — the node for contract calls, the middleware for indexed history.
+>
+> `status: outline` · `depth: deep`
+
+| Network | Node | Middleware |
+| --- | --- | --- |
+| Mainnet | `https://mdw.wordcraft.fun` | `https://mdw.wordcraft.fun/mdw` |
+| Testnet | `https://testnet.aeternity.io` | `https://testnet.aeternity.io/mdw` |
+
+The agent skill talks to `https://mainnet.aeternity.io` and its middleware at
+`https://mainnet.aeternity.io/mdw/v3` for chain reads.
+
+Use the **node** for contract calls, dry-runs, balances and transaction submission. Use the
+**middleware** (`/mdw/v3`) for indexed history: transactions by account, AEX-9 transfers, name
+resolution and contract event logs.
+
+## What this page still needs
+
+- Document the specific middleware v3 endpoints the skill relies on.
+- Explain when to use the middleware versus the Superhero API.
+- Note that the two mainnet node URLs in the codebase differ and confirm which is canonical.
+
+## Sources to mine
+
+- `superhero/src/config.ts` — `NODE_URL`, `MIDDLEWARE_URL`
+- `superhero-agent-skill/scripts/*.mjs` — the hardcoded node and middleware URLs

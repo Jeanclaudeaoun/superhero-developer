@@ -1,0 +1,30 @@
+---
+title: "AENS — the æternity Naming System"
+description: "How .chain names work at the protocol level."
+---
+
+# AENS — the æternity Naming System
+
+> **Page brief** — The protocol-level companion to the user-facing chain names page.
+>
+> `status: outline` · `depth: standard`
+
+| Rule | Value |
+| --- | --- |
+| Instant registration | 13+ characters before `.chain` |
+| Auction required | 12 characters or fewer |
+
+Registration is a three-step flow — **preclaim**, **claim**, then **pointer update** — which
+the Superhero tooling runs as one command.
+
+## What this page still needs
+
+- Document the commitment/preclaim mechanism and why it exists (front-running protection).
+- Document auction duration, bid increments and settlement.
+- Document name expiry, extension and the grace period.
+- Document pointer types beyond `account_pubkey`.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-name.mjs`
+- æternity AENS documentation

@@ -1,0 +1,36 @@
+---
+title: "Names: Custom, Chain and X"
+description: "The three kinds of public name, their trust levels, and what happens when they collide."
+---
+
+# Names: Custom, Chain and X
+
+> **Page brief** — Explain the name hierarchy precisely — this is subtle and currently documented nowhere but the whitepaper.
+>
+> `status: outline` · `depth: deep`
+
+The registry supports three categories of public name with different trust levels:
+
+| Type | Entrypoint | Trust | Notes |
+| --- | --- | --- | --- |
+| Custom name | `set_custom_name` | Unverified | Anyone can claim an available name. Lowest priority — can be preempted. |
+| Chain name | `set_chain_name` | Verified | Backed by an AENS `.chain` name plus its expiration. |
+| X name | `set_x_name_with_attestation` | Verified | Backed by a signed backend attestation of an X handle. |
+
+**Conflict resolution.** A verified name (Chain or X) can forcibly displace a custom name
+occupying the same normalized key. The displaced custom name is automatically renamed with a
+random suffix and a `CustomNameAutoRenamed` event is emitted. Verified users always get
+priority access to their canonical name; displaced users keep a functional, modified name.
+
+**Display source.** `set_display_source` picks which of `Custom`, `Chain` or `X` frontends
+should render as your primary public identity.
+
+## What this page still needs
+
+- Document name normalization rules (case, unicode, length).
+- Explain what happens when a chain name expires while it is the display source.
+- Add worked examples of each `set_*` call.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Name Types and Registration, Display Source

@@ -1,0 +1,36 @@
+---
+title: "Attention Markets"
+description: "Why pricing attention with a bonding curve produces a usable market signal."
+---
+
+# Attention Markets
+
+> **Page brief** — Explain the core thesis: trends are the asset, and a bonding curve turns conviction into a price without an order book.
+>
+> `status: outline` · `depth: deep`
+
+The claim Superhero makes is that **attention is already a market — it just has no price feed.**
+Hashtags trend, communities form, and value accrues to platforms rather than participants.
+Superhero gives every trend a token whose price is a deterministic function of how many
+people have bought in.
+
+Key consequences to develop on this page:
+
+- **No order book, no counterparty.** You always trade against the curve, so there is
+  always liquidity and always a quotable price.
+- **Price is a momentum signal.** Because supply only moves when someone buys or sells,
+  price and supply encode net conviction.
+- **The social loop.** Posting about a topic drives attention, attention drives buying
+  pressure, buying pressure moves the curve. This loop is the product.
+
+## What this page still needs
+
+- A worked example: a trend appears, a token is created, early buyers enter, price moves — with real numbers off the curve.
+- An explanation of the `trending_score` signal and how it is computed/served.
+- Honest treatment of the failure modes: reflexivity, wash trading, abandoned tokens.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Introduction and Design Principles
+- `superhero-agent-skill/SKILL.md` — the 'Trading Mindset' section
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — `/api/tokens/{address}/score`

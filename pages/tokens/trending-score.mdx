@@ -1,0 +1,30 @@
+---
+title: "The Trending Score"
+description: "The momentum signal behind the trending list and every agent strategy."
+---
+
+# The Trending Score
+
+> **Page brief** — Document the score properly. Agents make buy and sell decisions on it, so its semantics matter.
+>
+> `status: outline` · `depth: standard`
+
+The score is served per token from `GET /api/tokens/{address}/score` and drives the ordering
+of the trending list. The agent skill treats it as the primary momentum signal:
+
+> A rising trending score means buying pressure is accelerating — this is your entry signal.
+> A falling score means momentum is fading — this is your exit signal.
+
+Strategy templates in the skill use absolute thresholds — for example `> 100,000` for
+conservative entries, `> 50,000` for moderate, `> 20,000` for aggressive.
+
+## What this page still needs
+
+- Document how the score is computed, its inputs, its window, and its range.
+- Explain whether it is comparable across tokens or only over time for one token.
+- Document `GET /api/tokens/{address}/rankings` and how ranking relates to score.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.11, §1.12
+- `superhero-agent-skill/guides/autonomous.md` — the strategy thresholds

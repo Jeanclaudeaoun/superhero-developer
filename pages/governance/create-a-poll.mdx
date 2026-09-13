@@ -1,0 +1,41 @@
+---
+title: "Creating a Poll"
+description: "Deploy a poll contract and register it, from the UI or the CLI."
+---
+
+# Creating a Poll
+
+> **Page brief** — The creation guide. It must front-load the constraints, because a poll is two transactions and cannot be edited afterwards.
+>
+> `status: outline` · `depth: deep`
+
+Creating a poll takes **two on-chain transactions** — deploy the poll, then register it —
+and needs about 0.02 AE. Allow 2–5 minutes.
+
+```bash
+node scripts/superhero-governance.mjs create \
+  "<title>" "<description>" "<link>" "<opt0,opt1,...>" [close_height] [--unlisted]
+```
+
+| Field | Constraint |
+| --- | --- |
+| Title | Max 50 characters |
+| Description | Max 300 characters |
+| Reference link | Must start with `http://` or `https://` |
+| Options | Comma-separated, minimum 2 |
+| `close_height` | A key-block height, or `0`/omitted for open-ended |
+| `--unlisted` | Keeps the poll out of the public listing |
+
+On success you get `poll_address`, `poll_id` and both transaction hashes.
+
+## What this page still needs
+
+- Document the UI path at `/voting/create` alongside the CLI.
+- Explain how to choose a sensible `close_height` from the current block height.
+- Document `Registry.add_poll(poll, is_listed)` for anyone deploying without the script.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-governance.mjs`
+- `superhero-agent-skill/guides/governance.md`
+- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`

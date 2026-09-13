@@ -1,0 +1,37 @@
+---
+title: "BondingCurveExponential"
+description: "The pricing contract."
+---
+
+# BondingCurveExponential
+
+> **Page brief** — Full reference for the curve contract. Pair it with the conceptual page at /tokens/bonding-curve.
+>
+> `status: outline` · `depth: reference`
+
+Implements the `BondingCurve.aes` interface.
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `buy_price` | `(total_supply: int) => int` | Instantaneous buy price |
+| `sell_price` | `(total_supply: int) => int` | Instantaneous sell price |
+| `calculate_buy_price` | `(total_supply: int, count: int) => int` | Cost of buying `count` |
+| `calculate_sell_return` | `(total_supply: int, sell_tokens: int) => int` | Return from selling |
+| `buy_curve` | `(x: int) => Frac.frac` | Curve value as a rational |
+| `sell_curve` | `(x: int) => Frac.frac` | Curve value as a rational |
+| `get_k` | `() => int` | Exponent coefficient |
+| `get_initial_price` | `() => int` | Curve constant |
+| `get_minimum_count` | `() => int` | Minimum tradable count |
+| `get_sell_return_percentage` / `get_sell_return_precision` | `() => int` | The 99.5% sell factor |
+| `curve_type` / `supported_decimals` | — | Metadata |
+
+## What this page still needs
+
+- Record the live on-chain values of `get_k`, `get_initial_price` and `get_minimum_count`.
+- Explain the `Frac.frac` representation and how to convert it safely in JavaScript.
+- Show that the ACI values reproduce the whitepaper formula exactly.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/BondingCurveExponential.aci.json`
+- `superhero-agent-skill/contracts/BondingCurve.aci.json`

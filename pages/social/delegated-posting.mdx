@@ -1,0 +1,33 @@
+---
+title: "Delegated & Gasless Posting"
+description: "Let a relayer pay the gas while you keep authorship."
+---
+
+# Delegated & Gasless Posting
+
+> **Page brief** — Document `post_without_tip_sig` precisely enough that someone could implement a relayer against it.
+>
+> `status: outline` · `depth: deep`
+
+`post_without_tip_sig` lets any account submit a post while the on-chain record still
+attributes authorship to the signer. The signature is constructed like this:
+
+1. Concatenate the post title and media into a single string.
+2. Hash it with Blake2b.
+3. Prepend the æternity signed-message prefix (`"aeternity Signed Message:\n"` with a fixed
+   28-byte header), producing a 60-byte payload.
+4. Blake2b-hash that prefixed payload.
+5. Verify the resulting digest against the signature and author address with `Crypto.verify_sig`.
+
+This is what makes gasless posting possible: the user signs off-chain, and the relayer pays.
+
+## What this page still needs
+
+- Provide a working reference implementation of the signing step in JavaScript.
+- Document the production relayer endpoint, if one is publicly callable.
+- Cover replay considerations — there is no nonce in this scheme, so explain what prevents resubmission.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Posting Mechanisms
+- `superhero-agent-skill/contracts/Tipping_v3.aci.json`

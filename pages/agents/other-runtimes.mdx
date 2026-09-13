@@ -1,0 +1,32 @@
+---
+title: "Other Agents & Runtimes"
+description: "Use the skill from any agent that can run a shell command."
+---
+
+# Other Agents & Runtimes
+
+> **Page brief** — The escape hatch page. Nothing in the skill is runtime-specific, so document the generic contract.
+>
+> `status: outline` · `depth: deep`
+
+The skill has no runtime-specific dependencies. Any agent that can (a) read a markdown file,
+(b) set an environment variable and (c) run `node` against a script can use it.
+
+The generic contract is:
+
+1. Clone the repository somewhere the agent can read.
+2. `npm install @aeternity/aepp-sdk bignumber.js`.
+3. Export `AE_PRIVATE_KEY` into the process environment.
+4. Point the agent at `SKILL.md` as its instruction file.
+5. Every script prints JSON to stdout and errors to stderr, so output is parseable.
+
+## What this page still needs
+
+- Add concrete setup notes for other agentic CLIs and IDE agents as they are verified.
+- Document wrapping the scripts as an MCP server for agents that prefer tools over shell access.
+- Document calling the scripts from a plain cron job or CI pipeline with no agent at all.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/*.mjs` — the JSON-on-stdout convention
+- `superhero-agent-skill/SKILL.md`

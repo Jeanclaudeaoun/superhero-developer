@@ -1,0 +1,45 @@
+---
+title: "Governance with an Agent"
+description: "Let an agent read, create and vote on governance polls."
+---
+
+# Governance with an Agent
+
+> **Page brief** — Document the guarded governance workflow, especially the requirement to read a poll before voting.
+>
+> `status: outline` · `depth: deep`
+
+### Creating a poll
+
+Confirm at least 0.02 AE (two transactions), collect title, description, reference link,
+options and optional close height, warn that it takes 2–5 minutes, then:
+
+```bash
+node scripts/superhero-governance.mjs create \
+  "<title>" "<description>" "<link>" "<opt0,opt1,...>" [close_height] [--unlisted]
+```
+
+Report `poll_address`, `poll_id` and both transaction hashes.
+
+### Voting
+
+Always read the poll first to confirm option numbers and that it is open:
+
+```bash
+node scripts/superhero-governance.mjs info <poll_address>
+node scripts/superhero-governance.mjs vote <poll_address> <option_number>
+```
+
+Treat `stake_weighted_results` as official; `raw_vote_counts` are address counts only. Confirm
+by reporting the voted option label and the transaction hash.
+
+## What this page still needs
+
+- Add guidance on whether an agent should vote autonomously at all, and what policy to give it.
+- Document delegation from an agent's wallet.
+- Cover community DAO voting, which the skill does not yet script.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/governance.md`
+- `superhero-agent-skill/SKILL.md` — Governance Poll Workflow

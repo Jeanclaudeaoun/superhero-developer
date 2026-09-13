@@ -1,0 +1,42 @@
+---
+title: "Contract Security Model"
+description: "The threat model the contracts are designed against."
+---
+
+# Contract Security Model
+
+> **Page brief** — Summarise the protocol's security reasoning honestly, including what has and has not been audited.
+>
+> `status: outline` · `depth: deep`
+
+### Cryptographic integrity
+
+Delegated posting relies on Blake2b hashing and Ed25519 signature verification via
+`Crypto.verify_sig`. The æternity signed-message prefix prevents cross-protocol replay. Token
+operations use the AEX-9 allowance mechanism for vote locking, so tokens cannot be
+double-spent across concurrent votes.
+
+### Economic security
+
+- **Bonding curve solvency** — the sell curve is strictly below the buy curve at every supply
+  level, so the reserve can always buy back the entire circulating supply.
+- **Spread allocation** — the 1% spread splits deterministically (0.5% DAO, 0.5% affiliation),
+  and unaffiliated fees are burned rather than accumulated, removing extraction vectors.
+- **Vote cost** — the 555 AE requirement to open a vote prevents spam proposals.
+
+### Governance security
+
+- **Quorum and supermajority** — 10% participation and 55% approval prevent low-turnout capture.
+- **Time-bounded execution** — passed votes expire ~2 days after closing.
+- **DAO migration safeguard** — `ChangeDAO` requires `is_dao() = true` on the target.
+- **Token locking** — staked tokens are locked for the duration of a vote.
+
+## What this page still needs
+
+- State the current audit status: who audited what, when, and where the report is.
+- Document the known limitations and any accepted risks.
+- Add a responsible disclosure policy and a security contact.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Security Considerations

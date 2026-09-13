@@ -1,0 +1,39 @@
+---
+title: "FungibleTokenFull (AEX-9)"
+description: "The fungible token implementation behind every community token."
+---
+
+# FungibleTokenFull (AEX-9)
+
+> **Page brief** — Full reference for the AEX-9 implementation, including the allowance calls needed for voting and selling.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `init` | `(name, decimals, symbol, initial_owner_balance: option(int))` | Deployment |
+| `transfer` | `(to_account: address, value: int)` | Stateful |
+| `transfer_allowance` | `(from_account, to_account, value)` | Stateful |
+| `create_allowance` | `(for_account: address, value: int)` | Stateful. Required before voting or selling. |
+| `change_allowance` | `(for_account: address, value_change: int)` | Stateful |
+| `reset_allowance` | `(for_account: address)` | Stateful |
+| `mint` | `(account: address, value: int)` | Stateful. Called by the sale contract on buy. |
+| `burn` | `(value: int)` | Stateful. Called on sell. |
+| `balance` | `(account: address) => option(int)` | A single balance |
+| `balances` | `() => balances` | All balances |
+| `allowance` / `allowance_for_caller` | — | Allowance reads |
+| `meta_info` | `() => meta_info` | Name, symbol, decimals |
+| `total_supply` / `owner` | — | Supply and owner |
+| `aex9_extensions` | `() => list(string)` | Supported extensions |
+| `swap` / `swapped` / `check_swap` | — | Migration helpers |
+
+## What this page still needs
+
+- Document the AEX-9 events (`Transfer`, `Allowance`, `Mint`, `Burn`).
+- Document the decimals used by Superhero community tokens.
+- Explain the `swap` extension and whether it is used in production.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/FungibleTokenFull.aci.json`
+- The AEX-9 standard specification

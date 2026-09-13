@@ -1,0 +1,31 @@
+---
+title: "Scheduling & Cron"
+description: "Pick a cadence for posting and trading, and express it as a cron expression."
+---
+
+# Scheduling & Cron
+
+> **Page brief** — A short, practical page. Include the exact expressions the skill suggests.
+>
+> `status: outline` · `depth: reference`
+
+| Expression | Meaning |
+| --- | --- |
+| `0 9 * * *` | Daily at 09:00 |
+| `0 */6 * * *` | Every 6 hours |
+| `0 */5 * * *` | Every 5 hours |
+| `0 9 * * 1-5` | Weekdays at 09:00 |
+
+Posting and trading run on **separate** crons. The trading cadence is set by the chosen
+strategy template but can be overridden.
+
+## What this page still needs
+
+- Explain the timezone each runtime evaluates cron in.
+- Give guidance on choosing a cadence: too frequent burns gas and spreads, too rare misses trends.
+- Document overlapping-run behaviour if a cycle takes longer than the interval.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/setup.md` — the cron examples
+- `superhero-agent-skill/guides/autonomous.md` — per-strategy crons

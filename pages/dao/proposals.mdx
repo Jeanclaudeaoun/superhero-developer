@@ -1,0 +1,33 @@
+---
+title: "Proposals & Vote Subjects"
+description: "The six things a community DAO can decide."
+---
+
+# Proposals & Vote Subjects
+
+> **Page brief** — Enumerate every vote subject with its parameters and its effect. This is a closed set — say so.
+>
+> `status: outline` · `depth: deep`
+
+| Subject | Effect |
+| --- | --- |
+| `VotePayout` | Disburse the **entire** DAO balance to a specified account |
+| `VotePayoutAmount` | Disburse a **specified amount** to a specified account |
+| `ChangeDAO` | Transfer complete control — ownership, token-sale beneficiary rights and accumulated funds — to another DAO |
+| `ChangeMinimumTokenThreshold` | Change the minimum token threshold in community management |
+| `AddModerator` | Appoint a moderator |
+| `DeleteModerator` | Remove a moderator |
+
+`ChangeDAO` has a safeguard: the target contract must implement `is_dao() = true`, which
+prevents an accidental or malicious transfer of treasury funds to a non-DAO address.
+
+## What this page still needs
+
+- Document the exact `DAOVote.metadata` shape required by `add_vote`.
+- Explain who is allowed to open each subject type.
+- Show a worked example of creating a `VotePayoutAmount` proposal.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — `VoteSubjects.subject`

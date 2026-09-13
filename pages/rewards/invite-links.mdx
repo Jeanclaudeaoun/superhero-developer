@@ -1,0 +1,34 @@
+---
+title: "Invite Links"
+description: "Create AE-funded invite links and earn from the people who claim them."
+---
+
+# Invite Links
+
+> **Page brief** — The user-facing guide to the affiliate program, with a prominent warning about link secrecy.
+>
+> `status: outline` · `depth: deep`
+
+The Trading Affiliate Program lets you create invite links funded with AE. When someone claims
+a link, they receive the funded reward. Once **4 of your invitees each spend at least 10 AE**
+in token sales, you can withdraw your accumulated referral rewards.
+
+```bash
+node scripts/superhero-invite.mjs generate <amount_ae> [count]
+node scripts/superhero-invite.mjs revoke <invite_address>
+```
+
+> **Invite links contain one-time secrets.** Share them directly with the recipient. Never log
+> them, never paste them into a shared channel, and never commit them to a repository.
+
+## What this page still needs
+
+- Document the UI flow at `/trends/invite`.
+- Explain what happens to the AE in an unclaimed or revoked link.
+- Document `GET /api/invitations` for tracking link status.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-invite.mjs`
+- `superhero/src/views/Trendminer/Invite.tsx`
+- `superhero/server/lib/faq-content.cjs` — `qInvites`

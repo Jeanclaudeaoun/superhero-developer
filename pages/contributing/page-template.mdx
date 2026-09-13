@@ -1,0 +1,58 @@
+---
+title: "Page Template"
+description: "The structure every page in this site follows."
+---
+
+# Page Template
+
+> **Page brief** — Show the canonical template so new pages match the existing ones.
+>
+> `status: outline` · `depth: reference`
+
+Every scaffolded page has this shape:
+
+```mdx
+---
+title: Human Readable Title
+description: One sentence for search results and social cards.
+---
+
+# Human Readable Title
+
+> **Page brief** — What this page must cover.
+>
+> `status: outline` · `depth: deep`
+
+...content...
+
+## What this page still needs
+
+- Specific, actionable gaps
+
+## Sources to mine
+
+- `path/to/file` — what to look for there
+```
+
+### Status values
+
+| Status | Meaning |
+| --- | --- |
+| `outline` | Scaffolded. Brief and sources only, plus whatever could be sourced immediately. |
+| `draft` | Written from the sources, not yet reviewed. |
+| `reviewed` | Checked by a second pass against the sources. |
+| `verified` | Every claim confirmed against a live endpoint, contract or transaction. |
+
+### Depth values
+
+| Depth | Meaning |
+| --- | --- |
+| `overview` | A section landing page. Orientation and links. |
+| `standard` | A normal guide page. |
+| `deep` | A flagship explainer. Should be the best available writing on its topic. |
+| `reference` | Tables and exhaustive enumeration. Completeness beats prose. |
+
+## What this page still needs
+
+- Document the Nextra components available (callouts, tabs, steps) and when to use each.
+- Add conventions for code samples: language tags, whether to show output.

@@ -1,0 +1,43 @@
+---
+title: "The ProfileRegistry Contract"
+description: "The on-chain contract that stores profiles, names and display preferences."
+---
+
+# The ProfileRegistry Contract
+
+> **Page brief** — A contract-level reference for ProfileRegistry.aes: the data model, the entrypoints, and the events.
+>
+> `status: outline` · `depth: deep`
+
+Each profile is a `profile` record combining user-facing metadata with identity sources:
+
+| Field | Meaning |
+| --- | --- |
+| `nostr` | A Nostr public key or identifier, used for chat and messaging |
+| `x_username` | An optional X (Twitter) handle, verified through backend attestation |
+| `chain_name` | An optional æternity (AENS) name, with an expiration timestamp |
+
+Mutations emit typed events so indexers can follow identity changes in real time:
+
+| Event | Emitted when |
+| --- | --- |
+| `ProfileUpdated(address, string)` | Fullname, bio or avatar URL changes |
+| `CustomNameUpdated(address, string)` | A custom name is set or cleared |
+| `ChainNameUpdated(address, string)` | A chain name is set or cleared |
+| `XNameUpdated(address, string)` | An X name is set or cleared |
+| `DisplaySourceUpdated(address, string)` | The display-source preference changes |
+| `CustomNameAutoRenamed(address, string)` | A custom name is forcibly renamed after a verified-name conflict |
+
+`get_state()` returns the full contract state — all profiles, name-ownership maps, used
+nonces, and the contract version (currently `"v1"`).
+
+## What this page still needs
+
+- Add the full entrypoint signature table once the ACI is available (it is not in the agent-skill `contracts/` folder yet).
+- Document the deployed ProfileRegistry address on mainnet and testnet.
+- Add an example of reading a profile from the contract with the æternity SDK.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Superhero Onchain ID
+- The `ProfileRegistry.aes` source in the contracts repository (ACI not yet vendored)

@@ -1,0 +1,29 @@
+---
+title: "How DAOs Work"
+description: "Treasury, proposals, votes and execution in one picture."
+---
+
+# How DAOs Work
+
+> **Page brief** — The DAO orientation page — the lifecycle from funding to execution.
+>
+> `status: outline` · `depth: standard`
+
+1. Trading fees accumulate in the DAO treasury (0.5% of every buy).
+2. Any holder above the community threshold can open a vote, paying **555 AE** to the DAO.
+3. The vote stays open for **two weeks**, measured in key-blocks.
+4. It passes with at least **55% of the vote stake in favour** and at least **10% of total
+   token stake participating**.
+5. A passed vote must be applied within roughly **two days** of closing. Any account — or a
+   script — can trigger execution.
+
+## What this page still needs
+
+- Explain where a community's 'threshold amount' comes from and how to look it up.
+- Walk one real proposal end to end with transaction hashes.
+- Explain what happens to a passed vote that is never executed in time.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `DAO` and `DAOVote` blocks

@@ -1,0 +1,39 @@
+---
+title: "Chat"
+description: "Realtime messaging: DMs, community rooms and token-gated chat."
+---
+
+# Chat
+
+> **Page brief** — Document the chat system honestly — it is Nostr-based, off-chain, and relay-dependent.
+>
+> `status: outline` · `depth: deep`
+
+Chat is **not** on-chain. It runs over Nostr relays, using NIP-29 groups for rooms. Superhero
+operates its own relay at `wss://relay.superhero.chat`, which is the built-in default so chat
+works on every surface; a runtime `NOSTR_RELAY_URLS` value can repoint it.
+
+Publicly, chat is presented as a partnership with **Quali.chat** — "a quality chat app for
+crypto people", giving realtime conversations, moderation tools and crypto-friendly UX. Each
+token has a public room so holders can coordinate.
+
+| Route | Purpose |
+| --- | --- |
+| `/chat` | Inbox — All, Communities, DMs |
+| `/chat/dm/:address` | A direct message thread |
+| `/chat/:saleAddress` | A token's community room |
+| `/chat/:saleAddress/info` | Room info |
+| `/chat/settings/relays` | Relay configuration |
+
+## What this page still needs
+
+- Explain the Nostr identity: the chat key is derived from the wallet (`nostr-key.ts`) and registered in the profile's `nostr` field.
+- Document token gating — what balance is required to write in a room.
+- Explain the relationship between Quali.chat and the Nostr relay concretely.
+- Cover the CSP `connect-src` constraint: a relay the client knows but the header forbids fails silently at connect time.
+
+## Sources to mine
+
+- `superhero/src/features/chat/` — `nostr/`, `identity/`, `views/`
+- `superhero/src/config.ts` — the `NOSTR_RELAY_URLS` comment block
+- `superhero/server/index.cjs` — `CHAT_RELAY_ALLOWLIST`

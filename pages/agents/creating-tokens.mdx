@@ -1,0 +1,39 @@
+---
+title: "Creating Tokens with an Agent"
+description: "The token-creation workflow an agent must follow, including the long confirmation wait."
+---
+
+# Creating Tokens with an Agent
+
+> **Page brief** — Document the guarded workflow. Creation is slow and irreversible, so the checks matter.
+>
+> `status: outline` · `depth: deep`
+
+The skill requires these steps in order:
+
+1. **Check balance** — confirm at least 0.01 AE for gas.
+2. **Ask for the name** — uppercase A–Z, digits, dash; max 20 characters.
+3. **Check availability** — abort if `exists` is `true`.
+4. **Ask about an initial buy** — buying at creation gets the lowest possible curve price;
+   0 AE means no initial position.
+5. **Warn about timing** — creation takes 2–5 minutes to mine; confirmation can take up to 10.
+6. **Run in the background** and wait with a 10-minute timeout.
+7. **Report** — on success share `tx_hash`, `sale_address` and estimated tokens received; on
+   failure share the error and suggest checking the balance or retrying.
+
+```bash
+node scripts/superhero-token-create.mjs check "NAME"
+node scripts/superhero-token-create.mjs create "NAME" <buy_ae>
+node scripts/superhero-token-create.mjs info ct_<sale_address>
+```
+
+## What this page still needs
+
+- Document what an agent should do if the wait times out but the transaction later succeeds.
+- Add guidance on choosing a token name programmatically without colliding with an existing one.
+- Warn about the reputational cost of an agent spamming low-quality tokens.
+
+## Sources to mine
+
+- `superhero-agent-skill/SKILL.md` — Token Creation Workflow
+- `superhero-agent-skill/guides/token-creation.md`

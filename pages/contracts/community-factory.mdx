@@ -1,0 +1,42 @@
+---
+title: "CommunityFactory"
+description: "The contract that deploys every community."
+---
+
+# CommunityFactory
+
+> **Page brief** — Full reference for the factory, including the collection registry and ProtocolDAO minting.
+>
+> `status: outline` · `depth: reference`
+
+| Entrypoint | Signature | Notes |
+| --- | --- | --- |
+| `init` | `(protocol_token_name: string)` | Stateful |
+| `create_collection` | `(collection_name, allowed_name_length, allowed_name_chars) => string` | Stateful, payable |
+| `create_community` | `(collection_name, name, initial_buy_count, is_private, meta_info) => (DAO, TokenSale, CommunityManagement)` | Stateful, payable |
+| `has_community` | `(collection_name, name) => bool` | Availability check |
+| `get_token_sale` | `(collection_name, name) => TokenSale` | Resolve a sale contract |
+| `token_contract` | `(collection_name, name) => FungibleTokenFull` | Resolve the AEX-9 contract |
+| `get_community_management` | `(token_sale) => CommunityManagement` | Resolve community management |
+| `token_sale_registry` | `(collection_name)` | The registry for a collection |
+| `allowed_name_length` | `(collection_name) => int` | Collection naming rule |
+| `allowed_name_chars` | `(collection_name) => list(allowedNameChars)` | Collection naming rule |
+| `bonding_curve` | `() => BondingCurve` | The shared curve contract |
+| `affiliation_treasury` | `() => AffiliationTreasury` | The affiliation treasury |
+| `community_management` | `()` | Default community management settings |
+| `protocol_dao_token` | `() => FungibleTokenFull` | The ProtocolDAO token contract |
+| `mint_protocol_dao_token` | `(buy_value: int, receiver: address)` | Stateful |
+| `fee_percentage` / `fee_precision` | `() => int` | Fee configuration |
+| `factory_type` / `version` / `get_state` | — | Metadata |
+
+## What this page still needs
+
+- Document the `CommunityManagement.meta_info` record required by `create_community`.
+- Document the `allowedNameChars` variant values.
+- Explain what `initial_buy_count` is denominated in and how to compute it from an AE amount.
+- Document the events the factory emits on community creation.
+
+## Sources to mine
+
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json`
+- `superhero/src/views/Whitepaper.tsx` — Community Factory

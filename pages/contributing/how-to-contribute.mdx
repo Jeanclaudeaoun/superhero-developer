@@ -1,0 +1,40 @@
+---
+title: "How to Contribute"
+description: "The workflow for turning a briefed outline into a finished page."
+---
+
+# How to Contribute
+
+> **Page brief** — A concrete, repeatable procedure. Optimise it for an AI agent working one page per session.
+>
+> `status: outline` · `depth: deep`
+
+### The loop
+
+1. **Pick a page** with `status: outline` — prefer `depth: deep` pages in the
+   [Tokens](/tokens), [Agents](/agents) and [Contracts](/contracts) sections first.
+2. **Read the sources** listed at the bottom of the page. Do not write from memory; every
+   factual claim should trace to a file, a contract, or a live endpoint.
+3. **Verify** anything you can actually run — call the endpoint, read the contract, run the
+   CLI command. Mark anything you could not verify explicitly.
+4. **Write the page**, replacing the brief with real content.
+5. **Update the status marker** from `outline` to `draft`, and to `reviewed` once a second
+   pass has checked it.
+6. **Delete** the "What this page still needs" and "Sources to mine" sections once they are
+   exhausted — or leave the residue if items remain.
+
+### Rules
+
+- **Never invent a number.** If you cannot verify a fee, a limit or an address, say so.
+- **Prefer the repository over the marketing site** when the two disagree, and note the
+  disagreement.
+- **Link, do not repeat.** Terms are defined once in the [Glossary](/concepts/glossary).
+- **Keep the agent CLI reference exhaustive** — it is generated from real `case` blocks.
+- **Escape braces and angle brackets** in prose. MDX parses a bare curly brace as an
+  expression and a bare angle bracket as JSX; wrap placeholders in backticks.
+
+## What this page still needs
+
+- Add a PR checklist.
+- Add instructions for running the docs site locally.
+- Define who reviews and merges.

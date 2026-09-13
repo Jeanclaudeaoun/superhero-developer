@@ -1,0 +1,33 @@
+---
+title: "Why æternity"
+description: "The properties of the chain that Superhero depends on."
+---
+
+# Why æternity
+
+> **Page brief** — Explain the technology choice without marketing. Which specific æternity features does Superhero actually use?
+>
+> `status: outline` · `depth: standard`
+
+From the whitepaper: æternity is "purpose-built for scalability through state channels,
+efficient on-chain computation via the FATE virtual machine, and expressive smart contracts
+written in the Sophia language."
+
+What Superhero actually leans on:
+
+- **Cheap on-chain writes** — posting every piece of content on-chain is only viable if a post
+  costs a fraction of a cent.
+- **AENS** — human-readable `.chain` names are a protocol feature, not an application add-on.
+- **Sophia's safety properties** — strong typing and no mutable global state.
+- **Native signature verification** — `Crypto.verify_sig` plus the signed-message prefix makes
+  delegated posting and attestations straightforward.
+
+## What this page still needs
+
+- Quantify the cost claims with real numbers.
+- Note which advertised æternity features Superhero does not use today (for example state channels).
+- Add a fair comparison with other chains for the same use case.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Introduction

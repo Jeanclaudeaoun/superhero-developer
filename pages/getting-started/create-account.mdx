@@ -1,0 +1,21 @@
+---
+title: "Create an Account"
+description: "There is no signup — your account is a keypair. Here is what that means in practice."
+---
+
+# Create an Account
+
+> **Page brief** — Explain self-sovereign accounts: no email, no password reset, the keypair *is* the account. Cover the in-app wallet creation flow and the passkey option.
+>
+> `status: outline` · `depth: standard`
+
+## What this page still needs
+
+- Walk the in-app wallet creation flow screen by screen (seed phrase, passkey, passphrase options).
+- Explain what happens if you clear browser storage.
+- Distinguish 'create in the Superhero app' from 'import an existing æternity account'.
+
+## Sources to mine
+
+- `superhero/src/features/wallet/` — `wallet-lifecycle.ts`, `mnemonic.ts`, `passkey-seed.ts`, `vault.ts`, `recovery.ts`
+- `superhero/README.md` — the `VITE_WEBAUTHN_RP_ID` notes on passkeys

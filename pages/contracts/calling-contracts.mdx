@@ -1,0 +1,34 @@
+---
+title: "Calling Contracts"
+description: "Read and write Superhero contracts with the æternity SDK."
+---
+
+# Calling Contracts
+
+> **Page brief** — The practical integration page: initialise an SDK, attach an ACI, call an entrypoint, handle the result.
+>
+> `status: outline` · `depth: deep`
+
+The agent skill uses `@aeternity/aepp-sdk` together with `bignumber.js`:
+
+```bash
+npm install @aeternity/aepp-sdk bignumber.js
+```
+
+Every script in the skill follows the same shape: build an account from `AE_PRIVATE_KEY`,
+connect to a node, initialise a contract from its vendored ACI plus an address, then call an
+entrypoint. The ACI files in `superhero-agent-skill/contracts/` are the ones to use.
+
+## What this page still needs
+
+- Add a complete, runnable example: SDK init, contract init from ACI, a read call and a payable write call.
+- Document dry-run/static calls for quoting without spending gas.
+- Document gas estimation and how to set an explicit gas limit.
+- Explain how to decode the events a call emits.
+- Cover error handling for reverts and how to read the revert reason.
+
+## Sources to mine
+
+- `superhero-agent-skill/scripts/superhero-token-swap.mjs` — a representative read-then-write flow
+- `superhero-agent-skill/scripts/superhero-token-create.mjs` — a payable factory call
+- æternity `aepp-sdk` documentation

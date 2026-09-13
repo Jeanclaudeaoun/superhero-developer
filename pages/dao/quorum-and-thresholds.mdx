@@ -1,0 +1,30 @@
+---
+title: "Quorum & Thresholds"
+description: "The exact numbers a proposal must hit to pass and to execute."
+---
+
+# Quorum & Thresholds
+
+> **Page brief** — A short, precise reference page. People will link to it to settle arguments.
+>
+> `status: outline` · `depth: reference`
+
+| Rule | Value |
+| --- | --- |
+| Cost to open a vote | 555 AE, paid to the DAO |
+| Voting period | 2 weeks, measured in key-blocks |
+| Approval threshold | At least 55% of the vote stake in favour |
+| Participation (quorum) | At least 10% of total token stake |
+| Execution window | Approximately 2 days after the vote closes |
+| Who can execute | Any account, or a script, via the DAO contract |
+| Who can open a vote | Holders at or above the community threshold amount |
+
+## What this page still needs
+
+- Confirm whether these constants are fixed in the contract or configurable per community.
+- Express the two-week period in key-blocks at the current block time.
+- Explain the rationale for each number (spam resistance, low-turnout capture).
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — DAO and DAO Vote, Governance Security

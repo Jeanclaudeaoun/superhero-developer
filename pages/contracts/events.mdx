@@ -1,0 +1,33 @@
+---
+title: "Contract Events"
+description: "Every event emitted by the Superhero contracts, and what indexes them."
+---
+
+# Contract Events
+
+> **Page brief** — A single cross-contract event catalogue — the thing anyone building an indexer needs first.
+>
+> `status: outline` · `depth: standard`
+
+Known events:
+
+| Contract | Event |
+| --- | --- |
+| Tipping v3 | `PostWithoutTipReceived(author, title)` |
+| ProfileRegistry | `ProfileUpdated(address, string)` |
+| ProfileRegistry | `CustomNameUpdated(address, string)` |
+| ProfileRegistry | `ChainNameUpdated(address, string)` |
+| ProfileRegistry | `XNameUpdated(address, string)` |
+| ProfileRegistry | `DisplaySourceUpdated(address, string)` |
+| ProfileRegistry | `CustomNameAutoRenamed(address, string)` |
+
+## What this page still needs
+
+- Add the events emitted by the factory, sale, DAO, vote, community management, affiliation treasury and AEX-9 contracts.
+- Document how to subscribe to events via the middleware.
+- Add a worked example of decoding an event log.
+
+## Sources to mine
+
+- `superhero/src/views/Whitepaper.tsx` — Events sections
+- The vendored ACI files in `superhero-agent-skill/contracts/`

@@ -1,0 +1,49 @@
+---
+title: "Create a Token from the Dashboard"
+description: "Launch a community token from superhero.com, step by step."
+---
+
+# Create a Token from the Dashboard
+
+> **Page brief** — The primary creation guide for non-developers. Every field, every rule, every cost, with screenshots.
+>
+> `status: outline` · `depth: deep`
+
+Token creation lives at **`/trends/create`**. Behind the form, `CommunityFactory.create_community`
+deploys the whole community in one transaction.
+
+### What gets deployed
+
+The factory runs a deterministic sequence:
+
+1. A new AEX-9 token contract for the community.
+2. A `BondingCurveExponential` contract with the community's pricing parameters.
+3. An `AffiliationBondingCurveTokenSale` contract referencing the token and the curve.
+4. A `DAO` contract, which becomes the owner and beneficiary of the token sale.
+5. A `CommunityManagement` contract with initial moderator and threshold settings.
+6. Registration of the community in the factory's on-chain registry.
+7. An optional initial token purchase, executed as part of the same transaction.
+
+`create_community` returns the tuple `(DAO, TokenSale, CommunityManagement)`.
+
+### Naming rules
+
+The name is normalized to uppercase and spaces become dashes. Each **collection** in the
+factory defines its own `allowed_name_length` and `allowed_name_chars`, and the app derives
+which collection a typed name actually fits — a name no collection accepts would only fail
+on-chain, so the UI gates on detection first. The registry also enforces that a community's
+name is unique within its collection and that the token name matches its symbol.
+
+## What this page still needs
+
+- Annotated screenshots of the create form, including the collection picker and the initial-buy input.
+- Document both input modes — specifying AE to spend versus specifying a token count.
+- State the real cost: gas plus optional initial buy, with observed numbers.
+- Document the confirmation experience — creation takes 2–5 minutes to mine.
+- Cover what to do when creation fails mid-flight.
+
+## Sources to mine
+
+- `superhero/src/features/trending/views/CreateTokenView.tsx`
+- `superhero/src/utils/collection.ts`, `src/utils/collectionNameChars.ts`
+- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — `create_community`

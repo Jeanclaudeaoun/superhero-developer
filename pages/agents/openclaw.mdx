@@ -1,0 +1,48 @@
+---
+title: "Setting up OpenClaw"
+description: "Install and configure the Superhero skill in OpenClaw."
+---
+
+# Setting up OpenClaw
+
+> **Page brief** — The primary runtime guide. Cover install, env vars, cron, and autonomous mode as OpenClaw implements them.
+>
+> `status: outline` · `depth: deep`
+
+### Install
+
+```bash
+npx clawhub@latest install superhero
+```
+
+Or manually:
+
+```bash
+cd ~/.openclaw/workspace/skills
+git clone https://github.com/superhero-com/superhero-agent-skill.git superhero
+```
+
+### What OpenClaw provides
+
+| Feature | How the skill uses it |
+| --- | --- |
+| Skills | Install the skill and the agent knows exactly what it can do |
+| Cron | Schedule posting and trading runs with no server infrastructure |
+| Autonomous mode | The agent runs the full post → trend → trade loop on its own |
+
+### Configuration
+
+The skill's frontmatter declares `AE_PRIVATE_KEY` as its `primaryEnv`, so OpenClaw prompts
+for it on install and injects it into every script run.
+
+## What this page still needs
+
+- Document where OpenClaw stores the secret and how to rotate it.
+- Document OpenClaw's cron syntax and where schedules are configured.
+- Document how to inspect and stop a running autonomous loop.
+- Add a worked example of an OpenClaw session from install to first trade.
+
+## Sources to mine
+
+- `superhero-agent-skill/README.md` — the OpenClaw sections
+- `superhero-agent-skill/SKILL.md` — the `openclaw` metadata block

@@ -1,0 +1,50 @@
+---
+title: "Deployed Addresses"
+description: "Every contract address Superhero uses, per network."
+---
+
+# Deployed Addresses
+
+> **Page brief** — The single lookup table for addresses. Keep it in step with `src/config.ts` and the live `/api/contracts` endpoint.
+>
+> `status: outline` · `depth: reference`
+
+### Mainnet (`ae_mainnet`)
+
+| Contract | Address |
+| --- | --- |
+| Community factory | `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` |
+| Tipping v3 | `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` |
+| Governance registry | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` |
+| DEX factory | `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` |
+| DEX router | `ct_azbNZ1XrPjXfqBqbAh1ffLNTQ1sbnuUDFvJrXjYz7JQA1saQ3` |
+| WAE (wrapped AE) | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` |
+| aeETH | `ct_ryTY1mxqjCjq1yBn9i6HDaCSdA6thXUFZTA84EMzbWd1SLKdh` |
+
+### Testnet (`ae_uat`)
+
+| Contract | Address |
+| --- | --- |
+| Tipping v3 | `ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW` |
+| Governance registry | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` |
+| DEX factory | `ct_NhbxN8wg8NLkGuzwRNDQhMDKSKBwDAQgxQawK7tkigi2aC7i9` |
+| DEX router | `ct_MLXQEP12MBn99HL6WDaiTqDbG4bJQ3Q9Bzr57oLfvEkghvpFb` |
+| WAE (wrapped AE) | `ct_JDp175ruWd7mQggeHewSLS1PFXt9AzThCDaFedxon8mF8xTRF` |
+| aeETH | `ct_WVqAvLQpvZCgBg4faZLXA1YBj43Fxj91D33Z8K7pFsY8YCofv` |
+
+Per-community contracts (token, sale, DAO, community management) are deployed by the factory
+and are discovered per token — look them up with `GET /api/tokens/{address}` or the factory's
+own `get_token_sale` / `token_contract` entrypoints.
+
+## What this page still needs
+
+- Add the testnet community factory address, which is not in `src/config.ts`.
+- Add the ProfileRegistry and ProtocolDAO token addresses for both networks.
+- Add the AffiliationTreasury address.
+- Cross-check every address against the live `GET /api/contracts` response and note the verification date.
+
+## Sources to mine
+
+- `superhero/src/config.ts` — the `NETWORKS` table
+- `superhero-agent-skill/scripts/*.mjs` — hardcoded addresses
+- `GET /api/contracts`

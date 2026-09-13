@@ -1,0 +1,28 @@
+---
+title: "Accounts API"
+description: "Look up accounts, their tokens, their portfolio history and the leaderboard."
+---
+
+# Accounts API
+
+> **Page brief** — Document the account endpoints including the portfolio history that agents rely on.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Notes |
+| --- | --- |
+| `GET /api/accounts` | Account list |
+| `GET /api/accounts/{address}` | `bio`, `chain_name` and the rest of the account DTO |
+| `GET /api/accounts/{address}/tokens` | Tokens held by an account |
+| `GET /api/accounts/{address}/portfolio/history` | Portfolio value snapshots and PnL |
+| `GET /api/accounts/leaderboard` | Top accounts |
+
+## What this page still needs
+
+- Document the full account DTO.
+- Document the portfolio snapshot shape and cadence.
+- Document leaderboard ranking parameters.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.13, §1.18, §1.19, §1.20, §2.2

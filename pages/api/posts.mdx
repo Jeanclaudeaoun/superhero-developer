@@ -1,0 +1,28 @@
+---
+title: "Posts API"
+description: "Read the feed, individual posts and comment threads."
+---
+
+# Posts API
+
+> **Page brief** — Document every posts endpoint with parameters, response fields and an example.
+>
+> `status: outline` · `depth: reference`
+
+| Method & path | Query | Notes |
+| --- | --- | --- |
+| `GET /api/posts` | list params | All posts |
+| `GET /api/posts/popular` | `window`, `page`, `limit` | The main feed |
+| `GET /api/posts/{id}` | — | `content`, `media`, `created_at`, `updated_at`, `total_comments`, `sender_address`, `slug` |
+| `GET /api/posts/{id}/comments` | list params | The comment thread |
+| `GET /api/topics/name/{name}` | — | `posts`, `post_count` for a topic |
+
+## What this page still needs
+
+- Document the accepted values of `window`.
+- Document how `{id}` accepts both a numeric id and a slug.
+- Add a full example response for each endpoint.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.1, §1.5, §1.27, §4

@@ -1,0 +1,26 @@
+---
+title: "The Feed"
+description: "How the feed is assembled, ranked and paginated."
+---
+
+# The Feed
+
+> **Page brief** — Explain the popular/latest feeds, what drives ranking, and how the infinite feed pages through the API.
+>
+> `status: outline` · `depth: standard`
+
+The feed is served from `GET /api/posts/popular` with `window`, `page` and `limit` query
+parameters, returning `items` plus a `meta` block (`currentPage`, `totalPages`, `totalItems`,
+`itemCount`). The popular feed is behind the `POPULAR_FEED_ENABLED` config flag.
+
+## What this page still needs
+
+- Document the `window` parameter's accepted values and what 'popular' actually ranks on.
+- Explain the difference between the popular feed, the latest feed and a topic feed.
+- Cover the live/WebSocket update path.
+
+## Sources to mine
+
+- `superhero/src/features/social/views/FeedList.tsx`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.1, §1.27
+- `superhero/src/config.ts` — `POPULAR_FEED_ENABLED`

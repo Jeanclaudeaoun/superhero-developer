@@ -1,0 +1,32 @@
+---
+title: "Hashtags & Topics"
+description: "How a hashtag becomes a topic, and how a topic becomes a token."
+---
+
+# Hashtags & Topics
+
+> **Page brief** — The bridge page between the social layer and the token layer. This is the mechanism the whole product rests on.
+>
+> `status: outline` · `depth: deep`
+
+The landing page states the equivalence directly: **Trends = Hashtags = Communities = Tokens.**
+
+A hashtag in a post becomes a topic with its own feed (`GET /api/topics/name/{name}` returns
+`posts` and `post_count`). Trending tags are served from `GET /api/trending-tags` with
+`order_by`, `order_direction`, `limit`, `page` and `search` parameters, returning items with a
+`tag`/`name`, a `score`/`value`, and a `source`/`platform`.
+
+When a topic has a token, the hashtag in a post links straight to the token page.
+
+## What this page still needs
+
+- Explain exactly when a hashtag gets a token and who can create it.
+- Document the trending score: what feeds it, over what window, and how to interpret magnitudes.
+- Explain the `source`/`platform` field — are off-platform trends ingested?
+- Document the trend cloud visualisation at `/trends/visx`.
+
+## Sources to mine
+
+- `superhero/src/features/social/components/PostHashtagLink.tsx`
+- `superhero/src/views/Trendminer/TrendCloudVisx.tsx`
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.4, §1.5

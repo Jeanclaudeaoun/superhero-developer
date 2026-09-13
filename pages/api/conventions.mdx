@@ -1,0 +1,35 @@
+---
+title: "API Conventions"
+description: "Pagination, ordering, errors and the shapes every endpoint shares."
+---
+
+# API Conventions
+
+> **Page brief** — Pin down the cross-cutting contract once so the endpoint pages do not repeat it.
+>
+> `status: outline` · `depth: deep`
+
+### Pagination
+
+List endpoints return `items` plus a `meta` block:
+
+| Field | Meaning |
+| --- | --- |
+| `currentPage` | The page just returned |
+| `totalPages` | Total pages available |
+| `totalItems` | Total matching records |
+| `itemCount` | Records in this response |
+
+Common query parameters: `page`, `limit`, `order_by`, `order_direction`, `search`.
+
+## What this page still needs
+
+- Document the error response shape and the status codes used.
+- Document rate limits and any required headers.
+- Document authentication for the write endpoints (`POST /api/profile/...`).
+- State the maximum `limit` accepted by list endpoints.
+
+## Sources to mine
+
+- `superhero/docs/api-superhero-com-endpoints-and-fields.md`
+- `superhero/src/api/backend.ts` and the generated OpenAPI client

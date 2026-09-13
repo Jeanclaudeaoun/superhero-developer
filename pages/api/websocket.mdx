@@ -1,0 +1,21 @@
+---
+title: "WebSocket API"
+description: "Live updates for trending, prices and new posts."
+---
+
+# WebSocket API
+
+> **Page brief** — Document the realtime channel used by the trending views.
+>
+> `status: outline` · `depth: standard`
+
+## What this page still needs
+
+- Document the WebSocket URL for each network and the handshake.
+- Enumerate channels/events and their payloads.
+- Document reconnection and backpressure behaviour.
+
+## Sources to mine
+
+- `superhero/src/config.ts` — `websocketUrl`
+- `superhero/src/features/trending/` — the live update hooks

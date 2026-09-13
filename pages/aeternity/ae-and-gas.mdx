@@ -1,0 +1,31 @@
+---
+title: "AE & Gas"
+description: "The native coin, its denominations, and what transactions cost."
+---
+
+# AE & Gas
+
+> **Page brief** — Pin down units and real costs. Unit confusion (AE vs aettos) is the single most common integration bug.
+>
+> `status: outline` · `depth: standard`
+
+AE is the native coin: it pays for gas and is the base currency of every bonding curve.
+
+Observed costs from the agent skill's guides:
+
+| Action | Approximate cost |
+| --- | --- |
+| Publish a post | ~0.00001 AE |
+| Create a token | ~0.001 AE gas, plus any initial buy |
+| Create a governance poll | ~0.02 AE (two transactions) |
+
+## What this page still needs
+
+- Document the aettos denomination (1 AE = 10^18 aettos) and confirm the exponent.
+- Explain how gas price and gas limit are set, and what happens when a call runs out of gas.
+- Add measured costs for a buy and a sell.
+
+## Sources to mine
+
+- `superhero-agent-skill/guides/*.md` — the cost notes
+- æternity protocol documentation
