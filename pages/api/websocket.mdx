@@ -1,21 +1,251 @@
 ---
 title: "WebSocket API"
-description: "Live updates for trending, prices and new posts."
+description: "The Socket.IO channels that push token updates, trades and price history in real time."
 ---
 
 # WebSocket API
 
-> **Page brief** — Document the realtime channel used by the trending views.
->
-> `status: outline` · `depth: standard`
+Superhero pushes live token data over **Socket.IO**, not a raw WebSocket. Four channels carry new
+token sales, token updates, trades and price-history ticks. The web app uses them to keep the
+trending table, the token page and the candlestick chart current without polling.
 
-## What this page still needs
+This page documents the client in `src/libs/WebSocketClient.ts` and the three hooks that consume
+it. It is a small, well-defined surface — and it has one important quirk, described under
+[There is no server-side subscription](#there-is-no-server-side-subscription).
 
-- Document the WebSocket URL for each network and the handshake.
-- Enumerate channels/events and their payloads.
-- Document reconnection and backpressure behaviour.
+## Connecting
 
-## Sources to mine
+| Network | URL |
+| --- | --- |
+| Mainnet | `https://api.superhero.com` |
+| Testnet | `https://testnet.api.dev.tokensale.org` |
 
-- `superhero/src/config.ts` — `websocketUrl`
-- `superhero/src/features/trending/` — the live update hooks
+Same origin as the REST API. The web app connects to `activeNetwork.websocketUrl`, falling back
+to `BACKEND_URL`, right after the æternity SDK finishes initialising.
+
+```js
+import { io } from 'socket.io-client';
+
+const socket = io('https://api.superhero.com', { autoConnect: false });
+socket.connect();
+```
+
+`{ autoConnect: false }` is the only option the app passes, so everything else — the default
+`/socket.io/` path, the polling-then-upgrade transport sequence, and Socket.IO's own reconnection
+behaviour — is library default. The server's CSP allowlist includes `wss://api.superhero.com`,
+confirming the upgrade to a real WebSocket once polling has established the session.
+
+No authentication and no handshake beyond Socket.IO's own. There is no auth payload, no token and
+no `connect_error` handling in the client.
+
+## Channels
+
+Four event names, defined in `src/utils/constants.ts`:
+
+| Event | Fires when | Fan-out |
+| --- | --- | --- |
+| `token-created` | A new token sale is created | Global only |
+| `token-updated` | A token's state changes — price, market cap, supply | Per `sale_address` only |
+| `token-transaction` | A trade is recorded | Global **and** per `sale_address` |
+| `token-history` | A price-history tick | Global **and** per `sale_address` |
+
+Listen with `socket.on('token-updated', handler)` and so on. The web app then re-dispatches each
+message internally under a key of either the bare channel name or `channel::sale_address`, which
+is how a component can ask for "trades on this one token" versus "all trades".
+
+Note that `token-updated` is dispatched **only** to per-token subscribers — there is no global
+token-updated stream in the client. If you want every token update, subscribe to the raw Socket.IO
+event rather than copying the app's routing.
+
+## Payloads
+
+Every message is an envelope with the token's `sale_address` at the top level and the interesting
+part under `data`:
+
+```json
+{
+  "sale_address": "ct_...",
+  "token": {},
+  "data": {}
+}
+```
+
+### `token-updated`
+
+`data` is a **partial `TokenDto`**. The app merges it over the token it already holds rather than
+replacing it:
+
+```js
+const newTokenData = { ...currentTokenData, ...message.data };
+```
+
+So treat missing fields as unchanged, not as null. Ranking and holder counts are **not** in the
+push payload — the app refetches `/api/tokens/{address}/rankings` and the holders endpoint
+separately, throttled to at most once every 15 seconds per `sale_address`, so that a burst of
+trades collapses into a single refetch.
+
+### `token-transaction`
+
+`data` carries the trade fields and `token` carries the token. The app spreads them into one
+object and runs its usual transaction normalisation — see the field-alias note on
+[Transactions](/api/transactions) — then prepends the row to its cached
+`GET /api/transactions` page and bumps `meta.totalItems`.
+
+### `token-history`
+
+`data` carries the fields a chart needs:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `buy_price` | `PriceDto` | Price at the tick, keyed by currency |
+| `volume` | string | Trade volume, parsed with `parseInt` and added to the current candle |
+| `market_cap` | `PriceDto` | Market cap at the tick, keyed by currency |
+
+The candlestick chart reads `data.buy_price[convertTo]` and `data.market_cap[convertTo]`, using
+the same nine currency codes as the REST API. It updates the current candle when the tick is
+inside the active interval and opens a new one otherwise.
+
+### `token-created`
+
+Fires with the same envelope when a new token sale appears. The app subscribes to it globally for
+its "new tokens" surface.
+
+## There is no server-side subscription
+
+This is the quirk. The client holds a `subscribersQueue` and, on connect, emits each queued
+message as `socket.emit('message', { payload: channel, target: saleAddress })` — but **nothing in
+the current code ever pushes to that queue.** `subscribeForChannel()` only registers a local
+callback.
+
+The practical consequence: the app never tells the server what it wants. The server pushes every
+event on all four channels to every connected client, and filtering by `sale_address` happens
+entirely in the browser.
+
+Two things follow if you are building a client:
+
+- **You do not need to subscribe.** Connect and listen; events arrive.
+- **You will receive everything.** On a busy market that is a lot of traffic for one token's
+  worth of interest. Filter on `sale_address` yourself.
+
+Whether the server honours a `message` emit of `{ payload, target }` is untested — the code path
+exists but is dead. See [Open questions](#open-questions).
+
+## Reconnection and lifecycle
+
+Socket.IO handles reconnection itself; the client adds almost nothing on top:
+
+- `connect` marks the client connected and replays the (always empty) subscription queue. If that
+  replay throws, it retries after **1000 ms** — that is the only use of the reconnect timeout
+  constant.
+- `disconnect` marks it disconnected. **Local subscriber callbacks are not cleared**, so they are
+  still registered when the socket comes back.
+- `connect()` on an already-connected client disconnects the old socket first, so the instance is
+  a singleton by construction.
+- `disconnect()` tears down the socket and removes the listeners.
+
+There is no backpressure handling, no message buffering across a disconnect and no sequence
+number. **Events that occur while you are disconnected are lost.** After a reconnect, re-read the
+REST endpoint to resynchronise rather than assuming the stream is continuous — which is exactly
+what the app's throttled refetch does.
+
+## A minimal live-trades client
+
+```js
+import { io } from 'socket.io-client';
+
+const SALE_ADDRESS = 'ct_YOUR_SALE_ADDRESS';
+const socket = io('https://api.superhero.com', { autoConnect: false });
+
+socket.on('connect', () => console.log('connected'));
+socket.on('disconnect', () => console.log('disconnected — refetch on reconnect'));
+
+socket.on('token-transaction', (message) => {
+  if (message.sale_address !== SALE_ADDRESS) return;
+  console.log('trade', message.data);
+});
+
+socket.on('token-updated', (message) => {
+  if (message.sale_address !== SALE_ADDRESS) return;
+  console.log('price now', message.data.price_data?.ae, 'AE');
+});
+
+socket.connect();
+```
+
+Seed from REST first, then let the socket keep it current:
+
+```bash
+curl -s "https://api.superhero.com/api/transactions?token_address=ct_YOUR_SALE_ADDRESS&includes=token&limit=50"
+```
+
+## A second socket: the notification feed
+
+Notifications run on the **same origin but a different Socket.IO namespace**, with a different
+connection model. It is worth knowing about because almost nothing it does matches the token
+socket above.
+
+```text
+namespace:  https://api.superhero.com/notifications
+auth:       { token }   — a bearer session token, not anonymous
+transports: ['polling'] with upgrade: false
+```
+
+| Difference | Token socket | Notification socket |
+| --- | --- | --- |
+| Namespace | Default (`/`) | `/notifications` |
+| Authentication | None | Socket.IO `auth.token`, from the feed session flow |
+| Transport | Polling, upgrading to WebSocket | **Polling only**, upgrade explicitly disabled |
+| Reconnection | Library default | `reconnectionAttempts: 5`, plus the app's own recovery ladder |
+| Events | `token-created`, `token-updated`, `token-transaction`, `token-history` | `notification`, `unread-count` |
+
+The upgrade is disabled deliberately. The source records the diagnosis: the browser's WebSocket
+to the backend opens at the engine level but never delivers the Socket.IO namespace CONNECT,
+while plain HTTP to the same origin works everywhere — so the whole protocol is routed over XHR
+polling instead. `forceNew: true` is set alongside it, because transport and upgrade are
+manager-level options that Socket.IO would otherwise ignore when reusing a manager for the origin.
+
+The token comes from the feed session flow described in
+[Conventions](/api/conventions#authentication): challenge, wallet signature, then a bearer token
+cached in `localStorage`. The REST side of the same subsystem:
+
+```text
+POST /api/notifications/{address}/feed/challenge
+POST /api/notifications/{address}/feed/session
+GET  /api/notifications/{address}/feed?limit=50
+GET  /api/notifications/{address}/feed/unread-count
+POST /api/notifications/{address}/feed/read
+POST /api/notifications/{address}/web-push/subscription
+GET  /api/notifications/web-push/vapid-public-key
+```
+
+The feed page returns `{ items, nextCursor }`; the unread count returns `{ count }`; marking read
+takes an optional array of ids (omit it to mark everything) and returns the new `count`.
+
+## What is not on the WebSocket
+
+New posts, comments and tips do not appear on any of the token channels — the feed is polled over
+REST. Chat is a separate system entirely, running on Nostr relays (`wss://relay.superhero.chat`
+by default), not on this socket. Chain events are also absent; for those, watch the middleware.
+
+## Read more
+
+- [Transactions API](/api/transactions) — the REST form of the `token-transaction` payload, and the field aliases to normalise
+- [Tokens API](/api/tokens) — the full `TokenDto` that `token-updated` sends partial updates for
+- [API Conventions](/api/conventions) — base URLs, the `PriceDto` currency keys and the units rule
+- [Node & Middleware](/api/node-and-middleware) — for chain-level events rather than Superhero events
+- [Socket.IO client documentation](https://socket.io/) — the protocol this endpoint speaks
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live table these channels drive
+
+## Open questions
+
+- **Does the server accept a `message` emit of `{ payload, target }` to scope a subscription?**
+  The client has the code and never uses it. If the server does support it, a per-token
+  subscription would cut a lot of traffic. Emit one and see whether the global stream stops.
+- **What is the complete field list of each `data` payload?** Every consumer in the app reads a
+  handful of fields off an `any`. `token-updated` is a partial `TokenDto`, but which subset the
+  server actually sends is unverified.
+- **Is there a `wss://` endpoint that bypasses the Socket.IO polling handshake?** The CSP
+  allowlist implies the upgrade happens, but no source states whether a plain WebSocket client
+  can connect without Socket.IO's protocol framing. It almost certainly cannot.
+- **Are messages delivered at-least-once or at-most-once?** No sequence number, no acknowledgement
+  and no replay-on-reconnect exists in the client, so assume at-most-once and reconcile over REST.

@@ -1,33 +1,91 @@
 ---
 title: "Why æternity"
-description: "The properties of the chain that Superhero depends on."
+description: "The properties of the chain that Superhero depends on — and the ones it does not use."
 ---
 
 # Why æternity
 
-> **Page brief** — Explain the technology choice without marketing. Which specific æternity features does Superhero actually use?
->
-> `status: outline` · `depth: standard`
+Superhero is an on-chain social network: posts, comments, tips, token trades and votes are all
+transactions. That only works if the chain underneath makes writing cheap, keeps identity native
+to the protocol, and lets contracts verify user signatures. This page names the specific
+æternity properties Superhero leans on, and is equally explicit about the ones it does not.
 
-From the whitepaper: æternity is "purpose-built for scalability through state channels,
-efficient on-chain computation via the FATE virtual machine, and expressive smart contracts
-written in the Sophia language."
+## The claim, from the whitepaper
 
-What Superhero actually leans on:
+> Superhero addresses these challenges by building on the æternity blockchain — a platform
+> purpose-built for scalability through state channels, efficient on-chain computation via the
+> FATE virtual machine, and expressive smart contracts written in the Sophia language.
 
-- **Cheap on-chain writes** — posting every piece of content on-chain is only viable if a post
-  costs a fraction of a cent.
-- **AENS** — human-readable `.chain` names are a protocol feature, not an application add-on.
-- **Sophia's safety properties** — strong typing and no mutable global state.
-- **Native signature verification** — `Crypto.verify_sig` plus the signed-message prefix makes
-  delegated posting and attestations straightforward.
+That is the design intent as written in `src/views/Whitepaper.tsx`. What follows is what the
+codebase actually exercises.
 
-## What this page still needs
+## What Superhero actually uses
 
-- Quantify the cost claims with real numbers.
-- Note which advertised æternity features Superhero does not use today (for example state channels).
-- Add a fair comparison with other chains for the same use case.
+### Cheap on-chain writes
 
-## Sources to mine
+Publishing every post on-chain is only viable if a post costs a fraction of a cent. The
+observed costs recorded in the agent skill's guides:
 
-- `superhero/src/views/Whitepaper.tsx` — Introduction
+| Action | Approximate cost | Source |
+| --- | --- | --- |
+| Publish a post | ~0.00001 AE | `guides/posting.md` |
+| Publish a comment | ~0.00001 AE | `guides/commenting.md` |
+| Cast a governance vote | ~0.0001 AE | `guides/governance.md` |
+| Create a governance poll | ~0.01–0.02 AE, two transactions | `guides/governance.md` |
+| Create a token | ~0.001 AE gas, plus any initial buy | `guides/token-creation.md` |
+
+These are figures the skill authors measured, not protocol constants. See
+[AE & Gas](/aeternity/ae-and-gas) for how a fee is actually computed.
+
+### AENS as a protocol feature
+
+`.chain` names are part of the protocol, not an application-level registry contract. A name
+resolves the same way for every wallet and explorer on the network, so a Superhero display name
+is portable rather than Superhero-specific. See [AENS](/aeternity/aens) and
+[Chain names](/identity/chain-names).
+
+### Native signature verification in contracts
+
+Sophia exposes `Crypto.verify_sig`, and æternity defines a signed-message prefix
+(`"aeternity Signed Message:\n"` with a fixed 28-byte header) that a contract can reconstruct.
+Superhero uses exactly this: the whitepaper's Tipping and ProfileRegistry sections describe
+hashing a message with Blake2b, prepending the prefix to produce a 60-byte payload, and
+verifying it with `Crypto.verify_sig`. That is what makes
+[delegated posting](/social/delegated-posting) possible — a user signs off-chain, a relayer
+pays the gas, and the contract still attributes authorship to the signer.
+
+### Sophia's safety properties
+
+Sophia is strongly statically typed with no mutable global state, which the whitepaper's
+"Smart Contract Auditing" section cites as reducing the surface area for reentrancy and
+state-corruption vulnerabilities.
+See [Sophia & FATE](/aeternity/sophia-and-fate) and [Contract security](/contracts/security).
+
+### AEX-9 as the token standard
+
+Every community token and the ProtocolDAO token is an AEX-9 fungible token, so third-party
+wallets and explorers can read Superhero balances without integrating with Superhero. See
+[AEX Standards](/aeternity/aex-standards).
+
+## What Superhero does not use
+
+Being honest about this matters more than the marketing does:
+
+| æternity feature | Used by Superhero today? |
+| --- | --- |
+| State channels | No. Nothing in the app or the agent skill opens a channel. See [State Channels](/aeternity/state-channels). |
+| Oracles | No. The only `ok_` handling in the app is address validation and explorer link building in `src/utils/address.ts`; no oracle is registered or queried. The inline wallet's `signDelegation` — the method AENS and oracle delegation would need — is a deliberate thrower in `src/features/wallet/inline-sdk-account.ts`. |
+| Generalised accounts | Not observed anywhere in the repositories. |
+
+The video call feature at `/meet/:room` runs on Jitsi (`JITSI_DOMAIN: 'meet.jit.si'` in
+`src/config.ts`), not on any æternity layer-2 mechanism. Chat runs on Nostr relays, not on
+chain.
+
+## Read more
+
+- [Sophia & FATE](/aeternity/sophia-and-fate) — the language and VM properties this page asserts.
+- [AE & Gas](/aeternity/ae-and-gas) — what the cost numbers above are made of.
+- [State Channels](/aeternity/state-channels) — the headline feature Superhero does not use.
+- [Architecture Overview](/concepts/architecture) — where the chain sits relative to the app and the backend.
+- [What is æternity?](https://docs.aeternity.com/getting-started/what-is-aeternity) — the chain's own overview.
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the source of the design-intent quote above.

@@ -5,45 +5,96 @@ description: "Every Sophia contract behind Superhero, its entrypoints, and how t
 
 # Smart Contracts
 
-> **Page brief** — The contract-level reference. Entrypoint tables here are transcribed from the vendored ACI files and should stay machine-checkable against them.
->
-> `status: outline` · `depth: overview`
+Every on-chain rule in Superhero lives in a Sophia contract running on the FATE virtual
+machine. This section is the contract-level reference: what each contract does, the exact
+signature of every entrypoint, the record and variant types you need to build arguments, the
+events each one emits, and how to call all of it from JavaScript.
 
-All Superhero contracts are written in **Sophia** and run on the **FATE** virtual machine. The
-ACI (contract interface) JSON files used to generate these tables are vendored in the agent
-skill repository under `contracts/`.
+The signature tables are transcribed from the ACI (contract interface) JSON files vendored in
+the agent skill under `superhero-agent-skill/contracts/`. Those files are authoritative for
+entrypoint names, argument names, argument types, return types, and the `stateful` / `payable`
+flags — they are the same files the SDK loads at runtime.
 
-| Contract | Role |
-| --- | --- |
-| `Tipping.aes` (v3) | Post registry and delegated posting |
-| `CommunityFactory.aes` | Collections, community deployment, ProtocolDAO minting |
-| `AffiliationBondingCurveTokenSale.aes` | Buy/sell against the curve, affiliation fees |
-| `BondingCurveExponential.aes` | Price computation |
-| `DAO.aes` / `DAOVote.aes` / `ReplaceableDAO.aes` | Treasury and governance |
-| `CommunityManagement.aes` | Moderators, thresholds, metadata |
-| `AffiliationTreasury.aes` | Referral accounting and payouts |
-| `FungibleTokenFull.aes` | The AEX-9 token implementation |
-| `ProfileRegistry.aes` | Identity, profiles and names |
-| `Registry.aes` / `Poll.aes` | æternity governance polls |
+## The contract suite
 
-Sophia is a functional language with strong typing and no mutable global state, which
-narrows the surface for reentrancy and state-corruption bugs. The suite is designed for
-independent audit and formal verification.
+| Contract | Role | ACI vendored |
+| --- | --- | --- |
+| `Tipping.aes` (v3) | Post registry and delegated posting | `Tipping_v3.aci.json` |
+| `CommunityFactory.aes` | Collections, community deployment, ProtocolDAO minting | `CommunityFactory.aci.json` |
+| `AffiliationBondingCurveTokenSale.aes` | Buy/sell against the curve, affiliation fees | `AffiliationBondingCurveTokenSale.aci.json` |
+| `BondingCurveExponential.aes` | Price computation | `BondingCurveExponential.aci.json` |
+| `BondingCurve.aes` | The curve interface the sale calls through | `BondingCurve.aci.json` |
+| `DAO.aes` | One community treasury, vote creation and execution | inside `CommunityFactory.aci.json` |
+| `DAOVote.aes` | One proposal and its locked stake | inside `CommunityFactory.aci.json` |
+| `ReplaceableDAO.aes` | The interface a replacement DAO must implement | inside `CommunityFactory.aci.json` |
+| `CommunityManagement.aes` | Moderators, write thresholds, community metadata | inside `CommunityFactory.aci.json` |
+| `AffiliationTreasury.aes` | Referral accounting, invite codes, payouts | inside `CommunityFactory.aci.json` |
+| `FungibleTokenFull.aes` | The AEX-9 token implementation | `FungibleTokenFull.aci.json` |
+| `Registry.aes` / `Poll.aes` | æternity governance polls | `RegistryWithEventsACI.json`, `PollACI.json` |
+| `ProfileRegistry.aes` | Identity, profiles and names | **not vendored** |
+
+Several contracts have no ACI file of their own because the compiler inlines every contract
+the factory references into `CommunityFactory.aci.json`. That single file therefore carries
+`DAO`, `DAOVote`, `CommunityManagement`, `AffiliationTreasury`, `VoteSubjects`, `Set`, `Frac`
+and `FungibleTokenFull` alongside `CommunityFactory` itself. When you need the DAO interface,
+load the factory ACI.
+
+## How the pieces fit together
+
+```text
+CommunityFactory                      one per network, deployed once
+  ├── create_collection(...)          registers a naming namespace (555 AE, burned)
+  └── create_community(...)           deploys four contracts in one transaction:
+        ├── FungibleTokenFull         the community's AEX-9 token (18 decimals)
+        ├── BondingCurveExponential   shared, not redeployed per community
+        ├── AffiliationBondingCurveTokenSale
+        │     ├── buy / buy_with_affiliation → mints tokens, splits the 1% spread
+        │     └── sell                       → burns tokens, pays out AE
+        ├── DAO                       owner + beneficiary of the sale
+        │     └── add_vote(...)       deploys a DAOVote (555 AE)
+        └── CommunityManagement       moderators, mute list, write threshold
+```
+
+Two contracts sit outside that tree and are shared by every community: the
+`AffiliationTreasury`, which accounts for referral rewards across all sales, and the
+ProtocolDAO AEX-9 token, which the factory mints into every buyer's account.
+
+## Why Sophia
+
+Sophia is a strongly typed functional language in the ML family. It has no arbitrary mutable
+global state — each contract has exactly one `state` value, replaced rather than mutated —
+which removes whole classes of reentrancy and state-corruption bugs by construction. Every
+FATE instruction is typed, and a type mismatch aborts the call and reverts all changes.
+
+That is a real reduction in attack surface, but it is not a substitute for review. See
+[Security Model](/contracts/security) for what has and has not been audited — the short
+answer is that the public Sophia sources carry an explicit "not security audited" header.
 
 ## In this section
 
-- [Deployed Addresses](/contracts/addresses) — The single lookup table for addresses. Keep it in step with `src/config.ts` and the live `/api/contracts` endpoint.
-- [Calling Contracts](/contracts/calling-contracts) — The practical integration page: initialise an SDK, attach an ACI, call an entrypoint, handle the result.
-- [Tipping (v3)](/contracts/tipping) — Full reference for the content layer contract.
-- [CommunityFactory](/contracts/community-factory) — Full reference for the factory, including the collection registry and ProtocolDAO minting.
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — Full reference for the sale contract — the most frequently called contract in the system.
-- [BondingCurveExponential](/contracts/bonding-curve) — Full reference for the curve contract. Pair it with the conceptual page at /tokens/bonding-curve.
-- [DAO](/contracts/dao) — Full reference for DAO.aes, including the vote lifecycle entrypoints.
-- [DAOVote](/contracts/dao-vote) — Full reference for DAOVote.aes.
-- [CommunityManagement](/contracts/community-management) — Full reference for CommunityManagement.aes.
-- [AffiliationTreasury](/contracts/affiliation-treasury) — Full reference for AffiliationTreasury.aes.
-- [FungibleTokenFull (AEX-9)](/contracts/aex9) — Full reference for the AEX-9 implementation, including the allowance calls needed for voting and selling.
-- [ProfileRegistry](/contracts/profile-registry) — Full reference for ProfileRegistry.aes. The ACI is not yet vendored, so this page starts from the whitepaper.
-- [Registry & Poll](/contracts/governance-contracts) — Full reference for the two governance contracts.
-- [Events](/contracts/events) — A single cross-contract event catalogue — the thing anyone building an indexer needs first.
-- [Security Model](/contracts/security) — Summarise the protocol's security reasoning honestly, including what has and has not been audited.
+| Page | What it gives you |
+| --- | --- |
+| [Deployed Addresses](/contracts/addresses) | Every address, per network, with how it was verified |
+| [Calling Contracts](/contracts/calling-contracts) | A complete runnable SDK example, dry runs, gas, events, reverts |
+| [Tipping (v3)](/contracts/tipping) | The content layer: posting and delegated posting |
+| [CommunityFactory](/contracts/community-factory) | Collections, community deployment, ProtocolDAO minting |
+| [AffiliationBondingCurveTokenSale](/contracts/token-sale) | The most frequently called contract in the system |
+| [BondingCurveExponential](/contracts/bonding-curve) | Pricing, the `Frac.frac` type, live curve constants |
+| [DAO](/contracts/dao) | Treasury, vote creation, vote execution |
+| [DAOVote](/contracts/dao-vote) | One proposal, its options, and the locked stake |
+| [CommunityManagement](/contracts/community-management) | Moderators, mute list, write threshold |
+| [AffiliationTreasury](/contracts/affiliation-treasury) | Referral tree, invite codes, reward withdrawal |
+| [FungibleTokenFull (AEX-9)](/contracts/aex9) | The token standard and the allowance calls you need |
+| [ProfileRegistry](/contracts/profile-registry) | Identity — documented from the whitepaper, ACI not vendored |
+| [Registry & Poll](/contracts/governance-contracts) | The two æternity governance contracts |
+| [Events](/contracts/events) | One cross-contract event catalogue, with topic hashes |
+| [Security Model](/contracts/security) | The threat model, and the honest audit status |
+
+## Read more
+
+- [Calling Contracts](/contracts/calling-contracts) — start here if you want working code rather than a reference table
+- [Deployed Addresses](/contracts/addresses) — the addresses every example on these pages needs
+- [Sophia and FATE](/aeternity/sophia-and-fate) — the language and VM these contracts run on
+- [Bonding curve](/tokens/bonding-curve) — the conceptual explanation behind `BondingCurveExponential`
+- [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) — the public Sophia sources for the factory, sale, DAO, community management and treasury
+- [æternity Sophia language documentation](https://docs.aeternity.com/aesophia/v7.0.1/sophia_features/) — the language reference

@@ -1,41 +1,339 @@
 ---
 title: "API Reference"
-description: "The api.superhero.com REST API — posts, tokens, accounts, transactions, analytics and more."
+description: "The api.superhero.com REST API — base URLs, the full endpoint index, and where each resource is documented."
 ---
 
 # API Reference
 
-> **Page brief** — A complete REST reference. Today it is an inventory of paths and the fields the app consumes; it must become full request/response documentation.
->
-> `status: outline` · `depth: overview`
+`api.superhero.com` is the read API behind everything on Superhero: tokens and their prices,
+posts and topics, accounts and portfolios, the DEX, trending and analytics. Reads need no
+credential — a bare `curl` gets the same bytes the web app gets. Writes are authorised by wallet
+signature, not by an API key.
 
-### Base URLs
+```bash
+curl -s "https://api.superhero.com/api/tokens?order_by=trending_score&order_direction=DESC&limit=5"
+```
 
-| Network | Base URL |
-| --- | --- |
-| Mainnet | `https://api.superhero.com` |
-| Testnet | `https://testnet.api.dev.tokensale.org` |
+Start with [Conventions](/api/conventions) — pagination, units, errors and the write flow are
+shared by everything below and are not repeated per endpoint.
 
-Most endpoints are public and read-only. The current authoritative inventory of paths and the
-exact fields the web app consumes lives in
-`superhero/docs/api-superhero-com-endpoints-and-fields.md`; these pages are being built out
-from it.
+## Base URLs
 
-> **Not yet verified:** authentication, rate limits, CORS policy and versioning guarantees.
-> Do not assume this API is stable until those are documented here.
+| Network | Base URL | Chain id |
+| --- | --- | --- |
+| Mainnet | `https://api.superhero.com` | `ae_mainnet` |
+| Testnet | `https://testnet.api.dev.tokensale.org` | `ae_uat` |
+
+Both hosts serve identical paths. Every path in this reference begins with `/api/`.
+
+## The three things to know before you start
+
+1. **`limit` is capped at 100** on list endpoints. Page rather than asking for more.
+2. **Units are mixed within the same object.** `price` is in AE; `market_cap`, `dao_balance` and
+   `total_supply` are in base units and need dividing by 1e18. [Conventions](/api/conventions)
+   has the full table and the evidence.
+3. **Date parameters are spelled three different ways** depending on the endpoint —
+   `start_date`, `startDate` and `from_date`. Getting it wrong returns unfiltered data rather
+   than an error.
 
 ## In this section
 
-- [Conventions](/api/conventions) — Pin down the cross-cutting contract once so the endpoint pages do not repeat it.
-- [Posts](/api/posts) — Document every posts endpoint with parameters, response fields and an example.
-- [Tokens](/api/tokens) — The most-used part of the API. Document the full TokenDto, since everything else references it.
-- [Accounts](/api/accounts) — Document the account endpoints including the portfolio history that agents rely on.
-- [Transactions](/api/transactions) — Document the transaction endpoints and the trade record shape.
-- [Trending & Topics](/api/trending) — Document the trending surface, which is the entry point for most agent strategies.
-- [Analytics](/api/analytics) — Document the analytics endpoints — useful for dashboards and for anyone sizing the network.
-- [Profile](/api/profile) — The only part of the API with write endpoints — document the auth model carefully.
-- [Factory & Contracts](/api/factory-and-contracts) — Document the discovery endpoints, so integrators stop hardcoding addresses.
-- [Invitations & Affiliations](/api/invitations-and-affiliations) — Document the affiliate endpoints needed to build a referral dashboard.
-- [DEX](/api/dex) — Document the DEX endpoints, which are served from both the Superhero API and a separate DEX backend.
-- [WebSocket](/api/websocket) — Document the realtime channel used by the trending views.
-- [Node & Middleware](/api/node-and-middleware) — Document the direct chain access path — the node for contract calls, the middleware for indexed history.
+| Page | What it covers |
+| --- | --- |
+| [Conventions](/api/conventions) | Pagination, shared query parameters, units, errors, status codes, authentication |
+| [Posts](/api/posts) | The feed, single posts, comments, topics, tips and the combined activity feed |
+| [Tokens](/api/tokens) | The full `TokenDto`, holders, history, performance and rankings |
+| [Accounts](/api/accounts) | Account records, holdings, portfolio value, PnL and the leaderboard |
+| [Transactions](/api/transactions) | Buys and sells, by token, by account or by hash |
+| [Trending & Topics](/api/trending) | Scored tags, topics, trending score and unified search |
+| [Analytics](/api/analytics) | Platform aggregates and AE fiat rates |
+| [Profile](/api/profile) | Profile reads and every write endpoint in the API |
+| [Factory & Contracts](/api/factory-and-contracts) | Discovering the live factory, its collections and their naming rules |
+| [Invitations & Affiliations](/api/invitations-and-affiliations) | Invite claim status and referral analytics |
+| [DEX](/api/dex) | AMM tokens, pairs, routes and swap transactions |
+| [WebSocket](/api/websocket) | The four Socket.IO channels that push live token data |
+| [Node & Middleware](/api/node-and-middleware) | Direct chain access when the REST API is not enough |
+
+## Full endpoint index
+
+Every path in the OpenAPI-generated client, grouped by resource. Paths marked **unused** are
+defined in the client but have no caller in the web app or the agent skill — they exist, but their
+response shapes are unexercised by any code in these repositories.
+
+### Tokens
+
+```text
+GET  /api/tokens
+GET  /api/tokens/{address}
+GET  /api/tokens/{address}/holders
+GET  /api/tokens/{address}/rankings
+GET  /api/tokens/{address}/history
+GET  /api/tokens/{address}/transactions
+GET  /api/tokens/{address}/performance
+GET  /api/tokens/{address}/performance-raw
+GET  /api/tokens/{address}/score                      (unused)
+GET  /api/tokens/{address}/trending-eligibility       (unused)
+GET  /api/tokens/preview/{address}
+GET  /api/tokens/preview/{address}/sparkline.svg
+```
+
+### Accounts
+
+```text
+GET  /api/accounts
+GET  /api/accounts/{address}
+GET  /api/accounts/search
+GET  /api/accounts/chain-names
+GET  /api/accounts/by-nostr
+GET  /api/accounts/{address}/tokens
+GET  /api/accounts/{address}/portfolio/history
+GET  /api/accounts/{address}/portfolio/tokens/history
+GET  /api/accounts/{address}/portfolio/value
+GET  /api/accounts/{address}/portfolio/stats
+GET  /api/accounts/{address}/portfolio/pnl-chart.svg
+GET  /api/accounts/{address}/pnl
+GET  /api/accounts/leaderboard
+```
+
+### Transactions
+
+```text
+GET  /api/transactions
+GET  /api/transactions/by-hash
+GET  /api/debug/failed-transactions                   (unused)
+```
+
+### Posts, topics and tips
+
+```text
+GET  /api/posts
+GET  /api/posts/popular
+GET  /api/posts/{id}
+GET  /api/posts/{id}/comments
+GET  /api/feed                                        (unused)
+GET  /api/topics                                      (unused)
+GET  /api/topics/{id}                                 (unused)
+GET  /api/topics/name/{name}
+GET  /api/topics/popular/trending                     (unused)
+GET  /api/tips
+GET  /api/tips/posts/{postId}/summary
+GET  /api/tips/accounts/{address}/summary             (unused)
+GET  /api/search
+GET  /api/giphy/search
+GET  /api/announcements                               (unused)
+```
+
+### Trending tags
+
+```text
+GET  /api/trending-tags
+GET  /api/trending-tags/{tag}                         (unused)
+POST /api/trending-tags                               (unused)
+```
+
+### Analytics
+
+```text
+GET  /api/analytics/past-24-hours
+GET  /api/analytics                                   (unused)
+GET  /api/analytics/summary                           (unused)
+GET  /api/analytics/preview                           (unused)
+GET  /api/analytics/daily-trade-volume
+GET  /api/analytics/daily-unique-active-users         (unused)
+GET  /api/analytics/daily-created-tokens-count        (unused)
+GET  /api/analytics/daily-market-cap-sum              (unused)
+GET  /api/analytics/total-market-cap                  (unused)
+GET  /api/analytics/total-created-tokens              (unused)
+GET  /api/analytics/total-unique-users                (unused)
+GET  /api/analytics/challenge                         (unused)
+GET  /api/analytics/challenge/preview                 (unused)
+GET  /api/posts/analytics                             (unused)
+GET  /api/posts/analytics/past-24-hours               (unused)
+GET  /api/posts/analytics/top-posters                 (unused)
+GET  /api/posts/analytics/top-topics                  (unused)
+GET  /api/posts/analytics/preview                     (unused)
+GET  /api/coins/aeternity/rates
+GET  /api/coins/aeternity/history                     (unused)
+GET  /api/coins/aeternity/market-data                 (unused)
+```
+
+### Profile, identity and rewards
+
+```text
+GET   /api/profile/{address}
+GET   /api/profile                                    (unused, batch)
+POST  /api/address-links/x/claim
+POST  /api/address-links/x/submit
+POST  /api/address-links/x/unclaim
+POST  /api/address-links/x/unclaim/submit
+POST  /api/address-links/bio/claim
+POST  /api/address-links/bio/submit
+POST  /api/address-links/bio/unclaim
+POST  /api/address-links/bio/unclaim/submit
+POST  /api/address-links/site/claim
+POST  /api/address-links/site/submit
+POST  /api/address-links/site/unclaim
+POST  /api/address-links/site/unclaim/submit
+POST  /api/address-links/prefered-aens-name/claim
+POST  /api/address-links/prefered-aens-name/submit
+POST  /api/address-links/prefered-aens-name/unclaim
+POST  /api/address-links/prefered-aens-name/unclaim/submit
+POST  /api/address-links/nostr/claim
+POST  /api/address-links/nostr/submit
+POST  /api/address-links/nostr/unclaim
+POST  /api/address-links/nostr/unclaim/submit
+GET   /api/profile/chain-name/sponsorship/{name}
+POST  /api/profile/chain-name/challenge
+POST  /api/profile/chain-name/claim
+GET   /api/profile/{address}/chain-name-claim
+GET   /api/profile/{address}/x-posting-reward
+POST  /api/profile/x-posting-reward/recheck-challenge
+POST  /api/profile/{address}/x-posting-reward/recheck
+POST  /api/profile/{address}/x-reward/referral-link
+POST  /api/profile/{address}/challenge                (deprecated)
+PATCH /api/profile/{address}                          (deprecated)
+```
+
+### Factory, invitations and affiliations
+
+```text
+GET  /api/factory
+GET  /api/contracts                                   (deprecated)
+GET  /api/stats                                       (unused)
+GET  /api/invitations
+GET  /api/affiliations/invites/{code}                 (unused)
+POST /api/affiliations                                (unused)
+POST /api/affiliations/invites/{code}/{provider}/{access_code}   (unused)
+GET  /api/affiliations/preview                        (unused)
+GET  /api/bcl-affiliation/analytics                   (unused)
+GET  /api/bcl-affiliation/analytics/top-inviters      (unused)
+GET  /api/bcl-affiliation/analytics/x-verification    (unused)
+GET  /api/bcl-affiliation/analytics/x-invite          (unused)
+GET  /api/bcl-affiliation/tree                        (unused)
+```
+
+### DEX
+
+```text
+GET   /api/dex/tokens
+GET   /api/dex/tokens/{address}
+GET   /api/dex/tokens/{address}/price
+GET   /api/dex/tokens/{address}/price/analysis
+GET   /api/dex/tokens/{address}/summary
+GET   /api/dex/tokens/{address}/history
+PATCH /api/dex/tokens/{address}/listed                (API key required)
+GET   /api/dex/pairs
+GET   /api/dex/pairs/{address}
+GET   /api/dex/pairs/{address}/history
+GET   /api/dex/pairs/{address}/summary
+GET   /api/dex/pairs/{address}/preview
+GET   /api/dex/pairs/from/{from_token}/to/{to_token}
+GET   /api/dex/pairs/from/{from_token}/to/{to_token}/providers
+GET   /api/dex/transactions
+GET   /api/dex/transactions/{txHash}
+GET   /api/dex/transactions/pair/{pairAddress}
+GET   /api/dex/swap-routes/{from_token}/{to_token}
+```
+
+### Governance, chat rooms and notifications
+
+```text
+GET    /api/governance/votes                          (unused)
+GET    /api/governance/votes/{pollAddress}            (unused)
+GET    /api/governance/delegations                    (unused)
+GET    /api/governance/delegations/{accountAddress}   (unused)
+GET    /api/rooms
+GET    /api/rooms/config
+GET    /api/rooms/{saleAddress}/members
+GET    /api/rooms/{saleAddress}/mute
+POST   /api/rooms/{saleAddress}/mute
+POST   /api/rooms/{saleAddress}/mute/challenge
+POST   /api/rooms/{saleAddress}/recheck
+GET    /api/tgr/metrics                               (unused)
+POST   /api/notifications/devices/challenge
+POST   /api/notifications/devices
+DELETE /api/notifications/devices
+POST   /api/notifications/preferences/challenge
+GET    /api/notifications/{address}/preferences
+POST   /api/notifications/{address}/preferences
+```
+
+The notification **feed** routes are not in the generated client but are called by the web app,
+and are the only bearer-authenticated part of the API:
+
+```text
+POST /api/notifications/{address}/feed/challenge
+POST /api/notifications/{address}/feed/session
+GET  /api/notifications/{address}/feed
+GET  /api/notifications/{address}/feed/unread-count
+POST /api/notifications/{address}/feed/read
+POST /api/notifications/{address}/web-push/subscription
+GET  /api/notifications/web-push/vapid-public-key
+```
+
+The web app's source points at `superhero-api/docs/notifications-web-feed.md` for the full feed
+protocol — a document in the backend repository, which is not part of this documentation set.
+
+The governance endpoints listed above are unused because the web app talks to a **separate
+governance server** (`GOVERNANCE_API_URL`) instead. Governance is documented under
+[Governance](/governance), chat rooms under [Chat](/social/chat) and notifications under
+[Notifications](/social/notifications).
+
+### Middleware mirror
+
+```text
+GET /api/mdw/health
+GET /api/v2/mdw/txs
+GET /api/v2/mdw/txs/{hash}
+GET /api/v2/mdw/key-blocks
+GET /api/v2/mdw/key-blocks/{hash}
+GET /api/v2/mdw/micro-blocks
+GET /api/v2/mdw/micro-blocks/{hash}
+GET /api/v2/mdw/sync-state
+GET /api/v2/mdw/plugin-sync-state
+```
+
+### Operator only
+
+```text
+GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD  /api/bull-board
+GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD  /api/bull-board/{path}
+```
+
+The job-queue dashboard. Not part of the public surface.
+
+## Where this comes from
+
+Everything in this section is transcribed from the Superhero web app rather than from a published
+specification:
+
+| Source | What it gives |
+| --- | --- |
+| `src/api/generated/` | The OpenAPI-generated client — services for paths and parameters, models for response DTOs. The most precise description of request and response shapes that exists |
+| `src/api/backend.ts` | The hand-written client — request bodies for the write endpoints, and the error-handling behaviour |
+| `src/config.ts` | Base URLs, WebSocket URLs and contract addresses for both networks |
+| `docs/api-superhero-com-endpoints-and-fields.md` | An inventory of which fields the app actually consumes |
+| `superhero-agent-skill/scripts/*.mjs` | Real query construction and response parsing from outside the browser |
+
+Where a DTO exists, it is quoted. Where a response is typed `any` with no caller, that is said
+plainly and the question is listed under `Open questions` on the page. There is no published
+OpenAPI document or Swagger UI for `api.superhero.com` that either repository points to.
+
+## Read more
+
+- [Conventions](/api/conventions) — read this before any endpoint page
+- [Tokens](/api/tokens) — the most-used part of the API
+- [Node & Middleware](/api/node-and-middleware) — what to do when this API does not have the data
+- [Agent quickstart](/agents/quickstart) — the fastest path from these endpoints to a working agent
+- [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
+- [superhero-agent-skill on GitHub](https://github.com/superhero-com/superhero-agent-skill) — scripts that call these endpoints for real
+- [æternity node API documentation](https://api-docs.aeternity.io/) — for the chain-level API underneath
+
+## Open questions
+
+- **Is there a published OpenAPI document?** The client in the web app is generated by
+  `openapi-typescript-codegen`, so a spec exists somewhere in the backend's build, but neither
+  repository records its URL. A live `/api/docs` or `/api-json` route is worth trying.
+- **Are the endpoints marked unused stable?** They are defined and typed, but nothing in these
+  repositories exercises them, so neither their response shapes nor their continued existence can
+  be confirmed from source.

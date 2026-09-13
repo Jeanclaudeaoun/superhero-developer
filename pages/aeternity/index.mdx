@@ -5,29 +5,43 @@ description: "The chain Superhero runs on — just enough to use and build on Su
 
 # The æternity Blockchain
 
-> **Page brief** — The supporting section. Explain æternity only insofar as it affects Superhero, and link out for the rest. This is context, not the main story.
->
-> `status: outline` · `depth: overview`
-
 Superhero runs on **æternity**, a public blockchain with a functional smart-contract language
 (Sophia), a purpose-built VM (FATE), a native naming system (AENS), and state channels for
 layer-2 scaling.
 
-You do not need to understand æternity deeply to use Superhero. This section covers the parts
-that surface in the product — addresses, AE, gas, names, tokens and explorers — and points
-elsewhere for everything else.
+You do not need to understand æternity deeply to use Superhero. This section covers only the
+parts that surface in the product — addresses, AE, gas, names, tokens, endpoints and explorers
+— and points at the official æternity documentation for everything else. It is supporting
+context, not a protocol manual.
 
-> For the full protocol documentation, see the official æternity documentation. These pages
-> deliberately stay scoped to what a Superhero user or integrator actually needs.
+## What surfaces in Superhero
+
+| æternity feature | Where you meet it in Superhero |
+| --- | --- |
+| Accounts (`ak_`) and Ed25519 keys | Every wallet, every author byline, every trade |
+| AE and aettos | Balances, bonding-curve prices, gas, tips |
+| AENS `.chain` names | [Chain names](/identity/chain-names) and profile display names |
+| Sophia contracts on FATE | [Tipping](/contracts/tipping), the [token sale](/contracts/token-sale), [DAOs](/contracts/dao), [governance](/contracts/governance-contracts) |
+| AEX-9 fungible tokens | Every community token, and [token balances](/wallets/aex9-tokens) in the wallet |
+| Node and middleware HTTP APIs | [Node & middleware](/api/node-and-middleware) reads, transaction status polling |
+| State channels | Not used by Superhero today — see [State Channels](/aeternity/state-channels) |
 
 ## In this section
 
-- [Why æternity](/aeternity/why-aeternity) — Explain the technology choice without marketing. Which specific æternity features does Superhero actually use?
-- [Accounts & Keys](/aeternity/accounts-and-keys) — A short reference that stops people pasting the wrong kind of address into the wrong field.
-- [AE & Gas](/aeternity/ae-and-gas) — Pin down units and real costs. Unit confusion (AE vs aettos) is the single most common integration bug.
-- [AENS](/aeternity/aens) — The protocol-level companion to the user-facing chain names page.
-- [Sophia & FATE](/aeternity/sophia-and-fate) — Orient a developer coming from Solidity. What is familiar, what is different, what to read next.
-- [AEX Standards](/aeternity/aex-standards) — Cover AEX-9 in depth and mention the others briefly.
-- [Networks & Endpoints](/aeternity/networks) — A pure reference table. Keep it in step with `src/config.ts`.
-- [Explorers](/aeternity/explorers) — Teach readers to verify claims themselves rather than trusting the app.
-- [State Channels](/aeternity/state-channels) — Short and honest. State channels are an æternity headline feature; say clearly whether Superhero uses them today.
+- [Why æternity](/aeternity/why-aeternity) — the specific chain properties Superhero depends on, and the ones it does not use.
+- [Accounts & Keys](/aeternity/accounts-and-keys) — every address prefix, the key type, and the secret-key encoding the SDK expects.
+- [AE & Gas](/aeternity/ae-and-gas) — aettos, the 10^18 conversion, and what transactions actually cost.
+- [AENS](/aeternity/aens) — preclaim/claim, pointers, expiry, and the short-name auction.
+- [Sophia & FATE](/aeternity/sophia-and-fate) — a Solidity-to-Sophia orientation, plus what ACI is.
+- [AEX Standards](/aeternity/aex-standards) — AEX-9 in detail, the rest in one line each.
+- [Networks & Endpoints](/aeternity/networks) — mainnet and testnet endpoints in one table.
+- [Explorers](/aeternity/explorers) — how to verify a claim yourself instead of trusting the UI.
+- [State Channels](/aeternity/state-channels) — what they are, and an honest answer about Superhero's use of them.
+
+## Read more
+
+- [Architecture Overview](/concepts/architecture) — how the app, the backend and the chain fit together.
+- [Smart Contracts](/contracts) — the Superhero contracts that run on this chain.
+- [Glossary](/concepts/glossary) — every term used across these docs, defined once.
+- [æternity Documentation Hub](https://docs.aeternity.com/) — the canonical protocol, node and tooling documentation.
+- [What is æternity?](https://docs.aeternity.com/getting-started/what-is-aeternity) — the official overview, if you want the chain's own framing.

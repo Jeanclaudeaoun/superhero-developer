@@ -1,35 +1,206 @@
 ---
 title: "AffiliationBondingCurveTokenSale"
-description: "The contract you buy from and sell to."
+description: "The contract you buy from and sell to: pricing, fee split, events and reverts."
 ---
 
 # AffiliationBondingCurveTokenSale
 
-> **Page brief** — Full reference for the sale contract — the most frequently called contract in the system.
->
-> `status: outline` · `depth: reference`
+`AffiliationBondingCurveTokenSale.aes` is the most frequently called contract in Superhero.
+One instance exists per community, deployed by the factory. It holds the AE reserve, mints
+tokens on buy, burns them on sell, splits the 1% spread between the community DAO and the
+affiliation treasury, and triggers the ProtocolDAO token mint.
 
-| Entrypoint | Signature | Notes |
+There is no fixed address — resolve it per token with
+`factory.get_token_sale(collection_name, name)`, or from `GET /api/tokens/<name>`.
+
+The ACI is `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `buy` | `(count: int)` | Stateful, payable |
-| `buy_with_affiliation` | `(count: int, affiliation_rewardee: address)` | Stateful, payable |
-| `sell` | `(count: int, minimal_return_required: int) => int` | Stateful. Reverts below the floor. |
-| `buy_price` | `(count: int) => int` | Quote a buy |
-| `sell_return` | `(count: int) => int` | Quote a sell |
-| `price` | `(int) => int` | Interface price accessor |
-| `token_contract` | `() => FungibleTokenFull` | The AEX-9 token |
-| `beneficiary` / `set_beneficiary` | — | The DAO receiving proceeds |
-| `owner` / `set_owner` | — | Administrative owner (the DAO) |
-| `sale_type` / `version` | — | Metadata |
+| `init` | `(beneficiary: address, name: string, decimals: int, symbol: string, bonding_curve: BondingCurve, overwrite_owner: option(address), affiliation_treasury: AffiliationTreasury) => state` | stateful |
+| `buy` | `(count: int) => unit` | stateful, payable |
+| `buy_with_affiliation` | `(count: int, affiliation_rewardee: address) => unit` | stateful, payable |
+| `sell` | `(count: int, minimal_return_required: int) => int` | stateful |
+| `price` | `(count: int) => int` | — |
+| `sell_return` | `(count: int) => int` | — |
+| `token_contract` | `() => FungibleTokenFull` | — |
+| `bonding_curve` | `() => BondingCurve` | — |
+| `beneficiary` | `() => address` | — |
+| `set_beneficiary` | `(beneficiary: address) => unit` | stateful |
+| `owner` | `() => address` | — |
+| `set_owner` | `(owner: address) => unit` | stateful |
+| `sale_type` | `() => string` | — |
+| `version` | `() => int` | — |
+| `get_state` | `() => state` | — |
 
-## What this page still needs
+The quote entrypoints are `price` and `sell_return`. There is **no** `buy_price` entrypoint on
+the sale contract — `buy_price` exists on the bonding curve, and takes a supply rather than a
+count. Getting these two confused is the most common integration mistake.
 
-- Document the unit of `count` relative to the token's decimals.
-- Document every event emitted on buy and sell.
-- Explain exactly when `buy` versus `buy_with_affiliation` is used by the app.
-- Document the revert conditions for `sell`.
+## Types
 
-## Sources to mine
+```sophia
+record state =
+  { token_contract       : FungibleTokenFull
+  , bonding_curve        : BondingCurve
+  , affiliation_treasury : AffiliationTreasury
+  , owner                : address
+  , factory              : ICommunityFactory
+  , beneficiary          : address
+  , dao_contract         : ReplaceableDAO }
+```
 
-- `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`
-- `superhero/src/views/Whitepaper.tsx` — Affiliation Bonding Curve Token Sale
+`get_state()` is the only way to get the DAO address from the sale — the factory has no getter
+for it.
+
+## Events
+
+```sophia
+datatype event =
+    Buy(int, int, int)          // total_price, affiliation_amount, total_supply
+  | Sell(int, int)              // return, total_supply
+  | PriceChange(int, int)       // previous_price, next_price
+```
+
+The argument names above are the comments in the public Sophia source. Note what is *not*
+there: the token count. The source says explicitly that `count` is readable from the call
+arguments, so an indexer that wants the traded amount must decode the transaction's arguments
+or read the accompanying `Mint` / `Burn` event from the token contract.
+
+A single `buy` therefore emits four events across three contracts:
+
+| Event | Emitted by | Carries |
+| --- | --- | --- |
+| `Buy` | the sale | total price paid, affiliation amount, new total supply |
+| `Mint` | the community AEX-9 token | buyer, tokens minted |
+| `Mint` | the ProtocolDAO AEX-9 token | buyer, ProtocolDAO tokens minted |
+| `PriceChange` | the sale | previous price, next price |
+
+Distinguish the two `Mint` events by the emitting contract address, not by order.
+
+## Units: what `count` means
+
+`count` is always in the token's **smallest unit**. Community tokens are created with 18
+decimals, so one whole token is `10 ** 18`.
+
+```javascript
+const meta = await token.meta_info().then((r) => r.decodedResult);   // { name, symbol, decimals }
+const count = new BigNumber(5).shiftedBy(Number(meta.decimals)).toFixed(0);  // 5 whole tokens
+```
+
+The bonding curve also enforces a `minimum_count` of `10 ** 12` base units — one
+one-millionth of a token. Quotes and trades below that are not meaningful.
+
+Prices and returns are in **aettos**: 1 AE = `10 ** 18` aettos.
+
+## Buying
+
+`buy` is payable. The token count goes in the argument, the AE goes in the call's `amount`
+option:
+
+```javascript
+const priceAettos = await sale.price(count).then((r) => r.decodedResult);
+
+const amount = new BigNumber(priceAettos.toString())
+  .times(1.03)                                   // 3% slippage buffer
+  .toFixed(0, BigNumber.ROUND_CEIL);
+
+const result = await sale.buy(count, { amount, omitUnknown: true });
+```
+
+The contract requires `Call.value >= total_price` and aborts with
+`AE_AMOUNT_NOT_SUFFICIENT` otherwise. Overpayment is refunded — the source computes an
+`overpaid_refund` and mints ProtocolDAO tokens on `Call.value - overpaid_refund`, so the
+slippage buffer costs you nothing beyond gas if the price did not move.
+
+Sending the exact quoted price with no buffer is how buys fail: another buy landing in the
+same micro block raises the supply, raises the price, and your call reverts.
+
+## `buy` versus `buy_with_affiliation`
+
+The two entrypoints differ only in where the 0.5% affiliation half of the spread goes.
+
+| | `buy(count)` | `buy_with_affiliation(count, affiliation_rewardee)` |
+| --- | --- | --- |
+| Affiliation fee | still 0.5% of the transaction | still 0.5% of the transaction |
+| Recipient | no referral chain is credited; the fee is burned | the referral chain above `affiliation_rewardee` is credited, up to four levels |
+
+The choice is made by the caller, not the contract. The Superhero app calls the plain `buy`
+path for an ordinary purchase and supplies an affiliation rewardee when the buyer arrived
+through an invite whose inviter is recorded in the affiliation tree. Unreferred fees are
+burned rather than accumulated, which is deliberate: it removes any pot of unclaimed AE that
+someone could later argue over.
+
+The four-level split is `[300, 125, 50, 25]` against a precision of `10 ** 5`, giving 0.3%,
+0.125%, 0.05% and 0.025%. See [AffiliationTreasury](/contracts/affiliation-treasury).
+
+## Selling
+
+`sell` is **not** payable. It moves tokens from you with `transfer_allowance`, so you must
+grant an allowance on the token contract first, to the sale contract's address rewritten from
+`ct_` to `ak_`:
+
+```javascript
+const forAccount = saleAddress.replaceAll('ct_', 'ak_');
+await token.create_allowance(forAccount, count);   // or change_allowance if one exists
+
+const sellReturn = await sale.sell_return(count).then((r) => r.decodedResult);
+const minReturn = new BigNumber(sellReturn.toString())
+  .times(0.97)                                     // 3% slippage tolerance
+  .toFixed(0);
+
+const result = await sale.sell(count, minReturn, { omitUnknown: true });
+console.log('AE received:', result.decodedResult.toString());
+```
+
+`sell` returns the AE actually paid out, in aettos.
+
+### Revert conditions for `sell`
+
+| Condition | Result |
+| --- | --- |
+| Computed return is below `minimal_return_required` | aborts with `MINIMAL_RETURN_NOT_MEET` |
+| No allowance, or an allowance smaller than `count` | the inner `transfer_allowance` aborts |
+| Balance smaller than `count` | the inner transfer aborts |
+
+The check is the first thing the entrypoint does after computing the return:
+
+```text
+let return = state.bonding_curve.calculate_sell_return(total_supply, count)
+require(return >= minimal_return_required, "MINIMAL_RETURN_NOT_MEET")
+state.token_contract.transfer_allowance(Call.caller, Contract.address, count)
+```
+
+Passing `0` as `minimal_return_required` disables slippage protection entirely. Do not do
+that on a live trade; quote first and set a floor.
+
+There is no revert for "the reserve is empty". The sell curve sits strictly below the buy
+curve at every supply level, so the reserve always covers a full buy-back of the circulating
+supply. That is the solvency property the curve is designed around.
+
+## Ownership and beneficiary
+
+`owner` and `beneficiary` are both the community's DAO after deployment. `set_owner` and
+`set_beneficiary` exist so that a `ChangeDAO` vote can hand control to a replacement DAO —
+they are not user-callable in normal operation.
+
+## Open questions
+
+- **The live value of `sale_type()` and `version()`.** Present in the ACI, values not read
+  from a deployed contract.
+- **Whether `buy_with_affiliation` validates `affiliation_rewardee`.** The treasury's
+  `record_sale_transaction` walks the affiliation tree from the buyer; what happens when the
+  supplied rewardee is not in that tree was not verified from source.
+- **The exact overpayment refund path.** The source computes `overpaid_refund`, but the
+  condition under which AE is returned to the caller versus retained was not read in full.
+
+## Read more
+
+- [BondingCurveExponential](/contracts/bonding-curve) — where `price` and `sell_return` actually come from
+- [AffiliationTreasury](/contracts/affiliation-treasury) — where the 0.5% affiliation half goes
+- [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance model selling depends on
+- [Buying and selling](/tokens/buying-and-selling) — the same flow from the app's point of view
+- [Fees and slippage](/tokens/fees-and-slippage) — how to choose a slippage tolerance
+- [Trade on superhero.com](https://superhero.com/trends/tokens) — the live token list

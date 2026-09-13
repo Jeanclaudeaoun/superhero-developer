@@ -1,20 +1,102 @@
 ---
 title: "State Channels"
-description: "æternity's layer-2 mechanism, and where Superhero does or does not use it."
+description: "æternity's layer-2 mechanism, and why Superhero does not use it today."
 ---
 
 # State Channels
 
-> **Page brief** — Short and honest. State channels are an æternity headline feature; say clearly whether Superhero uses them today.
->
-> `status: outline` · `depth: standard`
+State channels are æternity's headline scaling feature and one of the reasons the Superhero
+whitepaper gives for choosing the chain. **Superhero does not use them.** Nothing in the web
+app, the backend or the agent skill opens, updates or settles a channel. The rest of this page
+explains what they are, so you can judge for yourself whether that gap matters for what you are
+building.
 
-## What this page still needs
+## What a state channel is
 
-- Explain state channels in two paragraphs.
-- State plainly whether any Superhero feature uses them today.
-- Note any roadmap intent (for example the conferencing or chat features).
+A state channel is a private, two-party ledger that settles on chain only at its endpoints.
 
-## Sources to mine
+**Opening** is an on-chain transaction: both participants lock funds into the channel and agree
+on an initial state, each authenticating it with a signature. From that point the participants
+exchange updates directly with each other. An update is a new channel state — a transfer, a
+contract call, any agreed change — co-signed by both parties and given a round number. None of
+it touches the chain, so none of it costs a fee or waits for a block.
 
-- `superhero/src/views/Whitepaper.tsx` — Glossary, Introduction
+**Closing** is on chain again. In the happy path the participants co-sign a final state and
+settle mutually. The interesting part is the unhappy path: a participant can close unilaterally
+with `channel_solo_close_tx`, publishing the state they claim is current. If they publish an
+*old* state — one that was favourable to them before later updates — the counterparty answers
+with `channel_slash_tx`, supplying a co-authenticated state with a higher round number.
+`channel_settle` then pays out. The security property is that the honest party always holds a
+newer co-signed state than the cheater can produce, so cheating is not merely detected, it is
+unprofitable.
+
+The economics are simple: two on-chain transactions, amortised over as many off-chain updates as
+the participants care to make. A channel used for two updates is worse than doing it on chain. A
+channel used for ten thousand is dramatically better.
+
+## What Superhero uses them for: nothing
+
+This is a claim it is fair to ask someone to demonstrate, so here is the evidence:
+
+| Check | Result |
+| --- | --- |
+| `Channel` imported from `@aeternity/aepp-sdk` anywhere | No. The SDK imports across both repositories are `AeSdk`, `AeSdkAepp`, `Node`, `MemoryAccount`, `Contract`, `Name`, `CompilerHttp`, `AccountMnemonicFactory`, `Tag`, `Encoding` and related helpers — no channel class |
+| Any channel transaction type constructed | None |
+| Any `ch_` channel identifier handled | None. `src/utils/address.ts` validates exactly five prefixes, and `ch_` is not one |
+| "state channel" in the app source | Two hits, both in `src/views/Whitepaper.tsx` — the Introduction and the Glossary |
+| "state channels" in the agent skill | One hit, in `guides/governance.md`, as example text in a sample poll: `"Multisig wallets,State channels,NFT standard"` |
+
+The whitepaper's Glossary defines the term:
+
+> **State Channel** — An æternity Layer 2 scaling mechanism enabling off-chain transactions with
+> on-chain settlement guarantees.
+
+and the Introduction cites state channels as part of why æternity was chosen. Both are
+statements about the platform, not about a shipped feature.
+
+## What Superhero does instead
+
+The features where you might expect a channel all take a different route:
+
+| Feature | What it actually uses |
+| --- | --- |
+| Posts, comments, tips | On-chain contract calls, made viable by low fees rather than by batching — see [Posting](/social/posting) |
+| Token trades | On-chain bonding-curve contract calls — see [Buying and selling](/tokens/buying-and-selling) |
+| Chat | Nostr relays over WebSocket (`wss://relay.superhero.chat`), off-chain and non-custodial but not a state channel — see [Chat](/social/chat) |
+| Video calls | Jitsi (`JITSI_DOMAIN: 'meet.jit.si'` in `src/config.ts`), plain WebRTC — see the `/meet/:room` route |
+| Delegated posting | An off-chain signature submitted on-chain by a relayer, which is a gas-payer pattern, not a layer 2 — see [Delegated posting](/social/delegated-posting) |
+
+Delegated posting is the closest thing in the product to "do it off chain": the user signs a
+message, someone else pays for the transaction. But every post still lands on chain
+individually. Nothing is netted.
+
+## Would they help?
+
+Honestly assessed rather than sold:
+
+- **Two-party, high-frequency interaction** is the shape channels fit, and it is not the shape
+  of a public social feed. A post has to be visible to everyone, so it has to be on chain (or in
+  an off-chain system with its own availability guarantees, which is what chat uses Nostr for).
+- **Trading against a bonding curve** is inherently many-party — the curve's state is shared —
+  so a two-party channel does not apply without a substantially different design.
+- A per-user payment channel for **tips or micro-rewards** is conceivable, but nothing in either
+  repository suggests it has been designed, let alone built.
+
+If you need state channels on æternity, they are fully supported at the protocol and SDK level.
+You would be building on the chain, not on Superhero.
+
+## Read more
+
+- [Why æternity](/aeternity/why-aeternity) — the chain features Superhero does use, with the same honesty.
+- [Chat](/social/chat) — the off-chain system Superhero actually shipped.
+- [Delegated posting](/social/delegated-posting) — off-chain signatures with on-chain settlement, the nearest analogue here.
+- [Explorers](/aeternity/explorers) — æScan lists active channels network-wide, if you want to check this page's claim yourself.
+- [State channel transactions](https://docs.aeternity.com/aeternity-core-concepts/protocol/transactions/state-channel-transactions) — the on-chain transaction types described above.
+- [Channels API usage](https://docs.aeternity.com/protocol/node/api/channels_api_usage/) — the node's WebSocket API for driving a channel.
+- [Channels in the protocol spec](https://github.com/aeternity/protocol/tree/master/channels) — the normative on-chain and off-chain specifications.
+
+## Open questions
+
+- Whether state channels appear anywhere on Superhero's roadmap is not recorded in the
+  repositories. The whitepaper mentions them only as a property of the chain, and there is no
+  roadmap document in either repository to check.

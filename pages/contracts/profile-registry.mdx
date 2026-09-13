@@ -1,32 +1,182 @@
 ---
 title: "ProfileRegistry"
-description: "Identity: profiles, names and display preferences."
+description: "Identity: profiles, names and display preferences — documented from the whitepaper, ACI not vendored."
 ---
 
 # ProfileRegistry
 
-> **Page brief** — Full reference for ProfileRegistry.aes. The ACI is not yet vendored, so this page starts from the whitepaper.
->
-> `status: outline` · `depth: standard`
+`ProfileRegistry.aes` is described in the Superhero whitepaper as the platform's decentralized
+identity layer: an on-chain registry of user profiles and public names, written in Sophia
+(compiler version 6 or later).
 
-Known entrypoints from the whitepaper:
+**Read this first.** Every other page in this section is generated from a vendored ACI file
+and is machine-checkable against it. This one is not. The ProfileRegistry ACI is not in
+`superhero-agent-skill/contracts/`, the contract has no address in `superhero/src/config.ts`,
+and the `ProfileRegistry.aes` source is not in any public `superhero-com` GitHub repository
+that code search can reach. Everything below comes from the whitepaper prose in
+`superhero/src/views/Whitepaper.tsx` and is **unverified against the contract**.
+
+There is also a strong signal that this contract is no longer the live identity path — see
+[Current status](#current-status).
+
+## Current status
+
+The Superhero backend used to run a ProfileRegistry indexer. It does not any more. Two source
+comments in `superhero-com/superhero-api` say so directly:
+
+> `profile_cache` used to be populated by the ProfileRegistry indexer (ProfileIndexerService /
+> ProfileLiveSyncService). Those services were removed when profile linkage moved to the
+> AddressLink contract.
+
+and
+
+> the old ProfileRegistry indexer that used to write this table was removed with the
+> AddressLink migration.
+
+So profile linkage — AENS names, X handles — now flows through a separate `AddressLink`
+contract whose address is supplied at deploy time through the environment variable
+`ADDRESS_LINK_CONTRACT_ADDRESS` and is not committed to any repository. Whether
+`ProfileRegistry.aes` is still deployed and holding state, or has been retired entirely, was
+not determined.
+
+Treat the rest of this page as a description of a design, not as an integration guide.
+
+## Data model (from the whitepaper, unverified)
+
+Each profile is a `profile` record combining user-facing metadata with several identity
+sources:
+
+| Field | Whitepaper description |
+| --- | --- |
+| `nostr` | A nostr public key or identifier used for chat and messaging |
+| `x_username` | An optional X handle, verified through backend attestation |
+| `chain_name` | An optional AENS name, with an associated expiration timestamp |
+
+The whitepaper also refers to fullname, bio and avatar URL as things a `ProfileUpdated` event
+fires for, which implies those fields exist on the record too. The exact field names and types
+are not documented.
+
+## Name types (from the whitepaper, unverified)
+
+Three categories of public name, with different trust levels and registration paths:
+
+| Type | Entrypoint | Trust | Conflict behaviour |
+| --- | --- | --- | --- |
+| Custom | `set_custom_name` | Self-declared, lowest | Can be displaced by a verified name |
+| Chain (AENS) | `set_chain_name` | Verified on chain | Displaces a conflicting custom name |
+| X | `set_x_name_with_attestation` | Verified by backend attestation | Displaces a conflicting custom name |
+
+Each type has a matching clear entrypoint — `clear_custom_name`, `clear_chain_name`,
+`clear_x_name` — which releases the name for someone else to register.
+
+`resolve_public_name` resolves a name string to an address, with a fixed precedence: **chain
+names beat X names beat custom names**. The ordering mirrors the trust level of each source.
+
+### Conflict resolution
+
+When a verified name is registered whose normalized key collides with an existing custom name
+owned by someone else, the contract renames the custom name rather than rejecting the
+registration:
+
+- the displaced user's custom name gets a random four-digit suffix — `alice` becomes
+  `alice_4827`;
+- a `CustomNameAutoRenamed` event fires carrying both the old and the new name, so frontends
+  can tell the affected user;
+- if the generated suffix also collides, the contract retries with different entropy until a
+  candidate is unique.
+
+### The X attestation flow
+
+`set_x_name_with_attestation` verifies a signature from a backend signer configured at
+deployment:
+
+```text
+1. The backend signer builds an attestation message containing the caller's address,
+   the normalized X username, an expiry timestamp, and a unique nonce.
+2. The message is hashed with Blake2b.
+3. The hash is prepended with the aeternity signed-message prefix -
+   "aeternity Signed Message:\n" with a fixed 28-byte header - producing a
+   60-byte payload.
+4. The digest is verified against the backend signer's signature with Crypto.verify_sig.
+5. Nonces are recorded on chain (`nonce_used`) so an attestation cannot be replayed.
+```
+
+This is the same prefix-and-verify construction that `Tipping.aes` uses for delegated posting,
+with a nonce and an expiry added — which is exactly what delegated posting lacks.
+
+The design implication is worth stating plainly: X verification is **not trustless**. The
+contract verifies a signature from a single configured backend signer. If that key is
+compromised, arbitrary X handles can be attested to arbitrary addresses. Chain names, verified
+against AENS, do not have that dependency.
+
+## Display source
+
+`set_display_source` stores a per-user preference of `Custom`, `Chain` or `X`, signalling to
+frontends and indexers which name to render as the primary public identity. It does not change
+resolution precedence — only presentation.
+
+## Entrypoints named in the whitepaper
 
 | Entrypoint | Purpose |
 | --- | --- |
-| `set_custom_name` | Claim an unverified custom name |
+| `set_custom_name` | Claim an available unverified name |
+| `clear_custom_name` | Release it |
 | `set_chain_name` | Link an AENS name with its expiration |
+| `clear_chain_name` | Release it |
 | `set_x_name_with_attestation` | Link an X handle via a signed backend attestation |
-| `set_display_source` | Choose `Custom`, `Chain` or `X` as the rendered identity |
+| `clear_x_name` | Release it |
+| `set_display_source` | Choose `Custom`, `Chain` or `X` |
+| `resolve_public_name` | Resolve a name string to an address |
 | `get_state` | Full state: profiles, name maps, used nonces, version (`"v1"`) |
 
-## What this page still needs
+Argument names, argument types and return types are **not** documented anywhere available.
+Nor are the profile-update entrypoints for fullname, bio and avatar, even though
+`ProfileUpdated` implies they exist.
 
-- Vendor the ProfileRegistry ACI and generate the full signature table from it.
-- Document the `profile` record and the profile-update entrypoints (fullname, bio, avatar).
-- Document the attestation message format precisely enough to reimplement.
-- Add the deployed addresses.
+## Events (from the whitepaper)
 
-## Sources to mine
+| Event | Fires when |
+| --- | --- |
+| `ProfileUpdated(address, string)` | fullname, bio or avatar URL changes |
+| `CustomNameUpdated(address, string)` | a custom name is set or cleared |
+| `ChainNameUpdated(address, string)` | a chain name is set or cleared |
+| `XNameUpdated(address, string)` | an X name is set or cleared |
+| `DisplaySourceUpdated(address, string)` | the display preference changes |
+| `CustomNameAutoRenamed(address, string)` | a custom name is force-renamed by a verified name |
 
-- `superhero/src/views/Whitepaper.tsx` — Superhero Onchain ID
-- The `ProfileRegistry.aes` source in the contracts repository
+These six are the only Superhero events in this documentation whose signatures come from prose
+rather than from a `datatype event` declaration. Their middleware topic hashes are still
+computable from the names — see [Events](/contracts/events) — but the argument types are
+unconfirmed.
+
+## Open questions
+
+- **Where is the `ProfileRegistry.aes` source?** Not in `superhero-com/bcl-contracts`, not in
+  `superhero-com/superhero`, not in `superhero-com/superhero-api`, and a GitHub code search
+  for `set_x_name_with_attestation` and `CustomNameAutoRenamed` across all public repositories
+  returns exactly one hit each — the whitepaper string in
+  `superhero-com/superhero/src/views/Whitepaper.tsx`. Either the repository is private or the
+  contract was never published. Ask the Superhero contract team, or disassemble the deployed
+  bytecode once the address is known.
+- **What is the deployed address, on either network?** No `ProfileRegistry` address appears in
+  `superhero/src/config.ts`, anywhere else in the web app, or in the agent skill.
+- **Is the contract still in use?** The Superhero backend's ProfileRegistry indexer was
+  removed in favour of an `AddressLink` contract. Whether ProfileRegistry is still written to
+  by any client is unknown.
+- **What is the `AddressLink` contract, and where is it deployed?** Its ACI is committed in
+  `superhero-com/superhero-api` at `src/plugins/address-links/aci/AddressLink.aci.json`, but
+  the address comes from `ADDRESS_LINK_CONTRACT_ADDRESS` at deploy time. Its provider ids are
+  constrained to at most ten lowercase `a-z` characters — `prefaens` is the AENS one.
+- **What is the exact 28-byte signed-message prefix header?** Needed to reimplement the
+  attestation flow; stated as a length, never as bytes.
+- **What are the profile-update entrypoints?** `ProfileUpdated` fires for fullname, bio and
+  avatar, but no entrypoint that writes them is named anywhere.
+
+## Read more
+
+- [Superhero ID](/identity/superhero-id) — the identity system from a user's point of view
+- [Chain names](/identity/chain-names) — AENS names, which are verifiable without this contract
+- [X verification](/identity/x-verification) — the attestation flow in the app
+- [Profile registry](/identity/profile-registry) — the identity-section view of the same contract
+- [Events](/contracts/events) — where these event names sit in the cross-contract catalogue
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the source for everything on this page

@@ -1,30 +1,172 @@
 ---
 title: "Sophia & FATE"
-description: "The smart-contract language and the VM that runs it."
+description: "The smart-contract language and the VM that runs it, oriented for developers arriving from Solidity."
 ---
 
 # Sophia & FATE
 
-> **Page brief** — Orient a developer coming from Solidity. What is familiar, what is different, what to read next.
->
-> `status: outline` · `depth: standard`
+**Sophia** is æternity's smart-contract language: functional, strongly and statically typed,
+with no mutable global state. **FATE** — the Fast æternity Transaction Engine — is the virtual
+machine that executes it. If you are arriving from Ethereum, most of your instincts transfer;
+this page is about the ones that do not.
 
-**Sophia** is a functional, strongly-typed contract language with no mutable global state —
-properties that reduce the surface for reentrancy and state-corruption bugs. **FATE** is the
-virtual machine that executes it, optimised for functional execution.
+Every Superhero contract is written in Sophia and runs on FATE.
 
-**ACI** (æternity Contract Interface) is the JSON description of a contract's interface — the
-equivalent of an ABI. The ACI files in `superhero-agent-skill/contracts/` are what clients use
-to call Superhero's contracts.
+## Coming from Solidity
 
-## What this page still needs
+| Solidity | Sophia | Note |
+| --- | --- | --- |
+| `contract C` with a body in braces | `contract C =` with an indented body | Layout is significant, like Python or Haskell |
+| `public` / `external` function | `entrypoint` | Only entrypoints are callable from outside |
+| `internal` / `private` function | `function` | A local function, invisible off-chain |
+| `view` / `pure` | a plain `entrypoint` | Non-stateful is the default |
+| state-mutating function | `stateful entrypoint` | You must opt in — see below |
+| `payable` | `payable entrypoint` | Contracts are non-payable by default |
+| `msg.sender` | `Call.caller` | The calling entity, possibly another contract |
+| `msg.value` | `Call.value` | Coins transferred in this call |
+| `block.number` | `Chain.block_height` | Height of the block including this call |
+| `block.timestamp` | `Chain.timestamp` | Unix time in **milliseconds**, not seconds |
+| `emit Transfer(...)` | `Chain.event(Transfer(...))` | Events are a datatype, declared once as `event` |
+| `mapping` | `map(k, v)` | A first-class value in Sophia, not a storage-only construct |
+| `struct` | `record` | |
+| `enum` | `datatype` | Sophia datatypes carry payloads, so they cover tagged unions too |
+| `uint256` | `int` | Arbitrary precision on FATE, and signed |
+| `address` | `address` | Same idea, `ak_`/`ct_` encoded off-chain |
+| scattered storage variables | one `state` record, updated with `put` | There is no ambient mutable storage |
+| `require(cond, "msg")` | `require(cond, "msg")` | Also `abort("msg")` |
+| ABI | **ACI** | See below |
 
-- Add a Solidity-to-Sophia orientation table (types, state, entrypoints, events).
-- Explain stateful versus non-stateful entrypoints and payable entrypoints.
-- Explain how ACI is produced from source and how to regenerate it.
-- Link the compiler (`https://v7.compiler.aepps.com`) and explain its role.
+Three differences do real work:
 
-## Sources to mine
+**No mutable global state.** A Sophia contract has exactly one `state` value. A stateful
+function reads it and calls `put` with a new one; there is no assignment to a storage slot
+anywhere. This is the property the Superhero whitepaper cites when it says the contract suite
+has a reduced surface area for reentrancy and state-corruption vulnerabilities.
 
-- `superhero/src/views/Whitepaper.tsx` — Design Principles, Smart Contract Auditing
-- `superhero/src/config.ts` — `compilerUrl`
+**No floating point.** Sophia deliberately omits it. Every price, fee and curve value in
+Superhero is an integer in aettos or token-decimals — see [AE & Gas](/aeternity/ae-and-gas).
+
+**Types are checked, then checked again.** The compiler is strict, and FATE re-checks at
+runtime: each FATE operation is typed, and a type mismatch raises an exception that reverts the
+call. A malformed call does not corrupt state; it fails.
+
+## Entrypoint annotations
+
+Three orthogonal properties, all opt-in, all visible in the ACI:
+
+| Annotation | Meaning | Omit it and… |
+| --- | --- | --- |
+| (none) | Read-only. Can be dry-run without a transaction. | This is the default |
+| `stateful` | May modify contract state, emit events, or call another contract with a non-zero value | The compiler rejects any `put`, any `Chain.event`, any value-carrying call |
+| `payable` | May receive coins in the call | Spending to the contract fails outright |
+
+`payable` also applies to the contract itself: a contract is non-payable unless declared
+otherwise, so a plain AE transfer to a `ct_` address fails by default.
+
+These map straight onto how you call a contract. A non-stateful entrypoint can be answered by a
+dry-run — no transaction, no gas, no wallet prompt, which is how Superhero prices a trade before
+you confirm it. A `stateful` entrypoint needs a signed contract-call transaction. A `payable`
+one additionally needs an `amount` option:
+
+```js
+// Calling a payable, stateful entrypoint — superhero-token-create.mjs
+await factory.create_community(
+  collectionId,
+  tokenName,
+  BigInt(initialBuyTokenDecimals),
+  false,                              // is_private
+  metaInfoMap,
+  { amount: initialBuyPriceAetto },   // the coins this call carries, in aettos
+);
+```
+
+## ACI — the ABI equivalent
+
+**ACI** (æternity Contract Interface) is the JSON description of a contract's interface: its
+name, its type definitions, its event datatype, and every function with argument names, argument
+types, return type, and the `stateful` and `payable` flags. It is what a client needs to encode
+a call and decode a result — exactly the role Ethereum's ABI plays.
+
+The interesting difference is that the ACI carries **named, typed arguments and the annotations**,
+so a client can tell a read from a write without being told. An excerpt from
+`superhero-agent-skill/contracts/Tipping_v3.aci.json`:
+
+```json
+{
+  "arguments": [
+    { "name": "title",  "type": "string" },
+    { "name": "media",  "type": { "list": ["string"] } },
+    { "name": "author", "type": "address" },
+    { "name": "sig",    "type": "signature" }
+  ],
+  "name": "post_without_tip_sig",
+  "payable": false,
+  "returns": "int",
+  "stateful": true
+}
+```
+
+You can read off that this is a write (`stateful: true`), that it takes no coins
+(`payable: false`), and that `sig` is a first-class `signature` type — which is how delegated
+posting passes an off-chain signature into the contract for `Crypto.verify_sig` to check.
+
+### Where ACI comes from
+
+ACI is generated from Sophia source by the compiler, not written by hand:
+
+```bash
+# aesophia_cli
+aesophia_cli --create_json_aci Tipping.aes -o Tipping.aci.json
+```
+
+The same generation is available over HTTP from a compiler service at its `/aci` endpoint.
+Superhero's web app points at a hosted one — `compilerUrl: 'https://v7.compiler.aepps.com'` for
+both networks in `src/config.ts` — and attaches it to the SDK as
+`onCompiler: new CompilerHttp(CURRENT_NETWORK.compilerUrl)` in `src/context/AeSdkProvider.tsx`.
+The agent skill never touches a compiler: calling an already-deployed contract needs only its
+ACI, so `superhero-agent-skill/contracts/` vendors the JSON files and the scripts read them off
+disk:
+
+```js
+const ACI = JSON.parse(fs.readFileSync('./contracts/FungibleTokenFull.aci.json', 'utf8'));
+await Contract.initialize({ aci: ACI, address: tokenAddress, onAccount: aeSdk, onNode: aeSdk.api });
+```
+
+Keep a vendored ACI in step with the deployed contract. A stale ACI does not fail loudly — it
+encodes arguments against the wrong signature.
+
+## FATE, briefly
+
+FATE runs directly on æternity's state tree rather than on a general byte-code machine bolted
+on top of one. Practical consequences:
+
+- **Typed instructions.** Type errors raise an exception and revert, rather than reinterpreting
+  bytes.
+- **A restricted memory model and high-level instructions.** Contracts are smaller and use less
+  gas than equivalent EVM contracts.
+- **Native access to chain features.** AENS names and oracles are reachable from contract code
+  as protocol primitives, not through a precompile.
+
+Superhero's ProfileRegistry targets Sophia compiler version 6 or later and Tipping version 5 or
+later, per the whitepaper.
+
+## Read more
+
+- [Smart Contracts](/contracts) — the Superhero contracts written in this language.
+- [Calling contracts](/contracts/calling-contracts) — using an ACI to make a real call.
+- [Contract security](/contracts/security) — where Sophia's guarantees stop and yours start.
+- [AEX Standards](/aeternity/aex-standards) — AEX-9 read directly from a Sophia ACI.
+- [Sophia language features](https://docs.aeternity.com/aesophia/v6.1.0/sophia_features/) — the canonical reference for `stateful`, `payable`, state and events.
+- [FATE VM](https://docs.aeternity.com/aeternity-core-concepts/protocol/fast-aeternity-transaction-engine-fate-vm) — the official description of the VM.
+- [ACI encoder documentation](https://github.com/aeternity/aesophia/blob/master/docs/aeso_aci.md) — the JSON contract-interface format.
+- [aesophia_cli](https://github.com/aeternity/aesophia_cli) — generating ACI from source locally.
+
+## Open questions
+
+- The exact Sophia compiler version each deployed Superhero contract was built with is not
+  recorded in either repository beyond the whitepaper's "compiler version ≥ 6" for
+  ProfileRegistry and "≥ 5" for Tipping. Recovering it would mean checking the deployed
+  bytecode's VM and ABI version fields on chain.
+- No Sophia source (`.aes`) is vendored in these repositories — only compiled ACI. Where the
+  canonical sources live, and whether the vendored ACI files are regenerated from them
+  automatically, is not documented.

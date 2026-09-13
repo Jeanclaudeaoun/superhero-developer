@@ -1,37 +1,199 @@
 ---
 title: "BondingCurveExponential"
-description: "The pricing contract."
+description: "The pricing contract: constants, the Frac type, and how the ACI reproduces the whitepaper formula."
 ---
 
 # BondingCurveExponential
 
-> **Page brief** — Full reference for the curve contract. Pair it with the conceptual page at /tokens/bonding-curve.
->
-> `status: outline` · `depth: reference`
+`BondingCurveExponential.aes` computes every price in the token system. It holds no funds and
+no per-community state — one instance is shared by every community, and the token sale calls
+into it through the `BondingCurve.aes` interface.
 
-Implements the `BondingCurve.aes` interface.
+Resolve its address with `factory.bonding_curve()`. The ACIs are
+`BondingCurveExponential.aci.json` (the implementation) and `BondingCurve.aci.json` (the
+interface the sale actually holds).
 
-| Entrypoint | Signature | Notes |
+## Entrypoints
+
+Everything here is non-stateful and free to call.
+
+| Entrypoint | Signature | What it gives you |
 | --- | --- | --- |
-| `buy_price` | `(total_supply: int) => int` | Instantaneous buy price |
-| `sell_price` | `(total_supply: int) => int` | Instantaneous sell price |
-| `calculate_buy_price` | `(total_supply: int, count: int) => int` | Cost of buying `count` |
-| `calculate_sell_return` | `(total_supply: int, sell_tokens: int) => int` | Return from selling |
-| `buy_curve` | `(x: int) => Frac.frac` | Curve value as a rational |
-| `sell_curve` | `(x: int) => Frac.frac` | Curve value as a rational |
+| `calculate_buy_price` | `(total_supply: int, count: int) => int` | Cost in aettos of buying `count` more tokens at a given supply |
+| `calculate_sell_return` | `(total_supply: int, sell_tokens: int) => int` | AE returned for selling `sell_tokens` at a given supply |
+| `buy_price` | `(total_supply: int) => int` | The instantaneous buy price at that supply |
+| `sell_price` | `(total_supply: int) => int` | The instantaneous sell price at that supply |
+| `buy_curve` | `(x: int) => Frac.frac` | The raw buy curve value as an exact rational |
+| `sell_curve` | `(x: int) => Frac.frac` | The raw sell curve value as an exact rational |
 | `get_k` | `() => int` | Exponent coefficient |
-| `get_initial_price` | `() => int` | Curve constant |
-| `get_minimum_count` | `() => int` | Minimum tradable count |
-| `get_sell_return_percentage` / `get_sell_return_precision` | `() => int` | The 99.5% sell factor |
-| `curve_type` / `supported_decimals` | — | Metadata |
+| `get_initial_price` | `() => int` | Curve offset constant |
+| `get_minimum_count` | `() => int` | Smallest tradable count |
+| `get_sell_return_percentage` | `() => int` | The sell factor numerator |
+| `get_sell_return_precision` | `() => int` | The sell factor denominator |
+| `curve_type` | `() => string` | Curve identifier |
+| `supported_decimals` | `() => int` | Token decimals the curve is calibrated for |
 
-## What this page still needs
+The `BondingCurve` interface declares the same eight computational entrypoints with unnamed
+arguments (`_1`, `_2`), which is why the sale contract's ACI shows them that way. Use the
+implementation ACI when you call the curve directly.
 
-- Record the live on-chain values of `get_k`, `get_initial_price` and `get_minimum_count`.
-- Explain the `Frac.frac` representation and how to convert it safely in JavaScript.
-- Show that the ACI values reproduce the whitepaper formula exactly.
+`calculate_buy_price` and `buy_price` take a **supply**, not a count. The token sale's
+`price(count)` takes a count and reads the current supply for you. Mixing them up produces
+prices that are wrong by many orders of magnitude.
 
-## Sources to mine
+## Curve constants
 
-- `superhero-agent-skill/contracts/BondingCurveExponential.aci.json`
-- `superhero-agent-skill/contracts/BondingCurve.aci.json`
+These are the literal constants in the public Sophia source
+(`superhero-com/bcl-contracts`, `contracts/BondingCurveExponential.aes`):
+
+| Constant | Value in source | As a number |
+| --- | --- | --- |
+| `a` | `1 * 10 ^ 15` | 1,000,000,000,000,000 |
+| `k` | `1 * 10 ^ 10` | 10,000,000,000 |
+| `initial_price` | `1 * 10 ^ 11` | 100,000,000,000 |
+| `decimals` | `1 * 10 ^ 18` | 10^18 |
+| `minimum_count` | `1 * 10 ^ 12` | 10^12 |
+| `sell_return_percentage` | `9950` | 99.50% |
+| `curve_type()` | `"TAYLOR_EXPONENTIAL_V1"` | — |
+
+The source carries the human-readable formula directly above them:
+
+```text
+f(x) = (0.001 * e^(0.00000001 * x)) - 0.0009999
+```
+
+## How the constants reproduce the whitepaper formula
+
+The whitepaper states:
+
+```text
+buy(x)  = 0.001 * e^(0.00000001 * x) - 0.0009999
+sell(x) = buy(x) * 0.995
+```
+
+The contract works in fixed point against `decimals = 10^18`, so each decimal constant is
+that fraction scaled by 10^18:
+
+```text
+a             = 10^15  →  10^15 / 10^18 = 0.001
+k             = 10^10  →  10^10 / 10^18 = 0.00000001
+initial_price = 10^11  →  10^11 / 10^18 = 0.0000001
+```
+
+`a` and `k` line up exactly with the whitepaper's `0.001` and `0.00000001`. The whitepaper's
+`0.0009999` offset does not appear as a single constant — it is `a - initial_price`
+(`0.001 - 0.0000001` is `0.0009999`), which is how a curve pinned to `f(0) = initial_price`
+is written. So `f(0)` is `0.0000001` AE per token, not zero: the very first token has a
+non-zero price, which is what keeps a brand-new community from being mintable for free.
+
+The 0.995 sell factor is `sell_return_percentage / 10000 = 9950 / 10000`. That 0.5% is the
+DAO's half of the spread. The affiliation contract adds the other 0.5% on top at the sale
+layer, which is how the whitepaper gets to a 1% total spread while the curve itself only
+knows about 0.5%.
+
+`curve_type()` returning `TAYLOR_EXPONENTIAL_V1` is the other half of the story: the contract
+does not evaluate `e^x` directly — FATE has no floating point — but approximates it with a
+Taylor series over exact integer rationals. That is why `buy_curve` returns a `Frac.frac`
+rather than an integer.
+
+## The `Frac.frac` type
+
+```sophia
+datatype frac = Pos(int, int) | Zero | Neg(int, int)
+              //  numerator, denominator
+```
+
+`Frac` is the æternity standard library's exact rational type. A value is either `Zero` or a
+signed numerator/denominator pair. Decoded in JavaScript it is a one-key object:
+
+```javascript
+const value = await curve.buy_curve(supply).then((r) => r.decodedResult);
+// { Pos: [ 123456789n, 1000000000000n ] }   or   { Zero: [] }   or   { Neg: [ n, d ] }
+```
+
+Converting it safely means keeping it as a ratio of BigInts until the last possible moment.
+Never build a JavaScript `Number` out of either half — both can exceed 2^53:
+
+```javascript
+import BigNumber from 'bignumber.js';
+
+function fracToBigNumber(frac) {
+  if ('Zero' in frac) return new BigNumber(0);
+  const [num, den] = 'Pos' in frac ? frac.Pos : frac.Neg;
+  const value = new BigNumber(num.toString()).dividedBy(den.toString());
+  return 'Neg' in frac ? value.negated() : value;
+}
+```
+
+For anything that touches money, do not convert at all. Call `calculate_buy_price` or
+`calculate_sell_return`, which return integer aettos computed on chain, and use those. The
+`buy_curve` and `sell_curve` entrypoints are for charting and analysis, where a rounding
+error of one part in 10^18 does not matter.
+
+## Reading the live constants
+
+```javascript
+const curveAddress = await factory.bonding_curve().then((r) => r.decodedResult);
+
+const curve = await Contract.initialize({
+  aci: JSON.parse(fs.readFileSync('./contracts/BondingCurveExponential.aci.json', 'utf8')),
+  address: curveAddress,
+  onNode: aeSdk.api,
+});
+
+console.log({
+  k: (await curve.get_k().then((r) => r.decodedResult)).toString(),
+  initialPrice: (await curve.get_initial_price().then((r) => r.decodedResult)).toString(),
+  minimumCount: (await curve.get_minimum_count().then((r) => r.decodedResult)).toString(),
+  sellPct: (await curve.get_sell_return_percentage().then((r) => r.decodedResult)).toString(),
+  sellPrecision: (await curve.get_sell_return_precision().then((r) => r.decodedResult)).toString(),
+  curveType: await curve.curve_type().then((r) => r.decodedResult),
+  decimals: (await curve.supported_decimals().then((r) => r.decodedResult)).toString(),
+});
+```
+
+### A caution about `get_sell_return_precision`
+
+In the public Sophia source both accessors are bound to the same variable:
+
+```text
+entrypoint get_sell_return_percentage() = sell_return_percentage
+entrypoint get_sell_return_precision()  = sell_return_percentage
+```
+
+If the deployed bytecode matches that source, `get_sell_return_percentage()` and
+`get_sell_return_precision()` both return `9950`, and dividing one by the other yields `1`
+rather than `0.995`. **Do not compute the sell factor as `percentage / precision`.** Use
+`9950 / 10000`, or better, call `calculate_sell_return` and let the chain do the arithmetic.
+Confirm the behaviour against the deployed contract before relying on either accessor.
+
+## Practical notes
+
+- **Only 10-20% of supply is expected to be reached.** The whitepaper says so explicitly. The
+  exponential is calibrated so that the price rises noticeably from the very first buys rather
+  than staying flat across a long tail.
+- **Price is a pure function of supply.** There is no time component, no oracle and no
+  liquidity provider. Two buys of the same size at the same supply cost the same.
+- **`minimum_count` is 10^12 base units.** With 18-decimal tokens that is 0.000001 of a token.
+  Quotes below it are not meaningful.
+
+## Open questions
+
+- **The live on-chain values of `get_k`, `get_initial_price` and `get_minimum_count`.** The
+  values in the table above come from the public Sophia source, not from a call to the
+  deployed contract — no node was reachable while this page was written. Run the snippet above
+  against mainnet to confirm the deployed instance matches.
+- **The exact Taylor series truncation.** `curve_type()` identifies the method but the number
+  of terms, and therefore the worst-case approximation error against the ideal exponential,
+  was not read from source.
+- **Whether `get_sell_return_precision` is fixed in the deployed bytecode.** The public source
+  shows both accessors bound to the same variable; whether mainnet carries that same build was
+  not verified.
+
+## Read more
+
+- [Bonding curve](/tokens/bonding-curve) — the conceptual explanation, with worked examples
+- [Curve parameters](/tokens/curve-parameters) — the same constants from a trader's point of view
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the contract that calls this one
+- [Calling Contracts](/contracts/calling-contracts) — how to run the snippets above
+- [Sophia standard library](https://docs.aeternity.com/aesophia/v7.0.1/sophia_features/) — where `Frac` is defined

@@ -1,27 +1,165 @@
 ---
 title: "Transactions API"
-description: "Query trades across the platform."
+description: "Query buys and sells across the platform, by token, by account, or by transaction hash."
 ---
 
 # Transactions API
 
-> **Page brief** — Document the transaction endpoints and the trade record shape.
->
-> `status: outline` · `depth: reference`
+Every buy and sell against a token sale contract is indexed here. Filter by token to watch a
+market, by account to watch a trader, or by both to answer "is this whale accumulating this
+token?". This is the endpoint most trading agents poll.
 
-| Method & path | Query | Notes |
+All paths are relative to `https://api.superhero.com`. Reads need no authentication.
+
+## Endpoints
+
+| Method & path | Query | Returns |
 | --- | --- | --- |
-| `GET /api/transactions` | `token_address`, `limit`, `page` | Trades, filterable by token |
-| `GET /api/transactions/by-hash` | `hash` | A single transaction |
-| `GET /api/debug/failed-transactions` | — | Failed transaction diagnostics |
+| `GET /api/transactions` | `token_address`, `account_address`, `includes`, `limit`, `page` | Paginated `TransactionDto` |
+| `GET /api/transactions/by-hash` | `tx_hash` | One `TransactionDto` |
+| `GET /api/tokens/{address}/transactions` | `interval`, `start_date`, `end_date`, `convertTo`, `mode` | Aggregated series for one token |
+| `GET /api/debug/failed-transactions` | — | Diagnostics for transactions that failed to index |
 
-## What this page still needs
+These are **Superhero trade records**, not raw chain transactions. For arbitrary chain history —
+transfers, contract calls, name transactions — go to the middleware instead; see
+[Node & Middleware](/api/node-and-middleware).
 
-- Document every field on a transaction record (`type`, `ae_amount`, `amount`, addresses, tx hash, timestamp).
-- Document filtering by account as well as by token.
-- Explain how these records relate to on-chain transactions in aeScan.
+## `GET /api/transactions`
 
-## Sources to mine
+| Parameter | Notes |
+| --- | --- |
+| `token_address` | A token **sale address** (`ct_...`) |
+| `account_address` | Filter to trades made by this `ak_...` |
+| `includes` | Only `token`. Inlines the full token object on each row |
+| `limit`, `page` | Standard pagination, `limit` capped at 100 |
 
-- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.10, §3
-- `superhero-agent-skill/scripts/superhero-transactions.mjs`
+Both filters compose, which is the useful part:
+
+```bash
+# All recent trades, with the token inlined
+curl -s "https://api.superhero.com/api/transactions?includes=token&limit=20&page=1"
+
+# One account's trades on one token
+curl -s "https://api.superhero.com/api/transactions?token_address=ct_YOUR_SALE_ADDRESS&account_address=ak_YOUR_ADDRESS&includes=token&limit=20"
+```
+
+Response is the standard `items` plus `meta` envelope.
+
+## `TransactionDto`
+
+Transcribed from `src/api/generated/models/TransactionDto.ts`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `id` | number | Internal row id |
+| `account` | string | The trader's `ak_...` |
+| `tx_hash` | string | `th_...` — look this up in an explorer for the on-chain record |
+| `tx_type` | string | Trade direction / kind |
+| `spent_amount` | string | Total AE moved by the trade |
+| `spent_amount_data` | `PriceDto` | The same total in all nine currencies |
+| `volume` | string | Token quantity traded, in token base units |
+| `price` | string | Buy price per token at the trade |
+| `price_data` | `PriceDto` | The same, all nine currencies |
+| `sell_price` | string | Sell price per token at the trade |
+| `sell_price_data` | `PriceDto` | The same, all nine currencies |
+| `created_at` | string | ISO 8601 |
+
+With `includes=token`, a `token` object carrying the full `TokenDto` is added; the agent skill
+also reads `block_height` and `sale_address` off rows, neither of which is on the generated DTO.
+
+### Field aliases — read defensively
+
+The same values have shipped under more than one name, and the web app normalises every row
+before rendering it:
+
+```ts
+// src/utils/transactionNormalization.ts
+address:            transaction.address      ?? transaction.account
+price_data:         transaction.price_data   ?? transaction.unit_price ?? transaction.buy_price
+spent_amount_data:  transaction.spent_amount_data ?? transaction.amount
+```
+
+So `account` may arrive as `address`, the unit price may arrive as `unit_price` or `buy_price`,
+and the trade total may arrive as `amount`. The agent skill's `superhero-transactions.mjs` reads
+the older spellings (`tx.address`, `tx.amount.ae`, `tx.unit_price.ae`, `tx.buy_price.ae`) and the
+generated client declares the newer ones. Apply the same fallback chain and you will be correct
+under either.
+
+### Units
+
+Same split as everywhere else in the API — see [Conventions](/api/conventions):
+
+- `price`, `sell_price` and every `PriceDto` field are in **AE**, already whole units.
+- `volume` is in **token base units** — divide by 10 raised to the token's `decimals`.
+- `spent_amount` is a string AE total; the web app renders it through `spent_amount_data` rather
+  than parsing the string, so prefer the `PriceDto`.
+
+## `GET /api/transactions/by-hash`
+
+Takes the hash as a **query parameter**, not a path segment:
+
+```bash
+curl -s "https://api.superhero.com/api/transactions/by-hash?tx_hash=th_YOUR_TX_HASH"
+```
+
+Returns a single `TransactionDto`, or 404 if that hash is not a Superhero trade. Note the
+asymmetry with the DEX, where the equivalent is a path segment:
+`GET /api/dex/transactions/{txHash}`.
+
+## `GET /api/tokens/{address}/transactions`
+
+Aggregated rather than row-level — this is what charts are built from.
+
+| Parameter | Notes |
+| --- | --- |
+| `interval` | Bucket width **in seconds** |
+| `start_date`, `end_date` | ISO 8601. Note the snake_case here, against camelCase on the account endpoints |
+| `convertTo` | One of the nine currency codes, default `ae` |
+| `mode` | `normal` or `aggregated` |
+
+```bash
+curl -s "https://api.superhero.com/api/tokens/SUPERHERO/transactions?interval=3600&mode=aggregated&convertTo=usd"
+```
+
+For OHLC candles specifically, `GET /api/tokens/{address}/history` is the better endpoint — see
+[Tokens](/api/tokens).
+
+## Live trades
+
+Polling `/api/transactions` is not the only option. The API pushes every trade over Socket.IO on
+the `token-transaction` and `token-history` channels, and the web app seeds its list from this
+endpoint once and then updates from the socket. See [WebSocket](/api/websocket).
+
+## Relating a record to the chain
+
+`tx_hash` is the on-chain transaction hash. Resolve it in an explorer or against the middleware:
+
+| Where | URL |
+| --- | --- |
+| æScan (mainnet) | `https://aescan.io/transactions/{tx_hash}` |
+| æScan (testnet) | `https://testnet.aescan.io/transactions/{tx_hash}` |
+| Middleware | `GET https://mainnet.aeternity.io/mdw/v3/transactions/{tx_hash}` |
+
+The web app polls the middleware form of this while a trade is confirming, treating a `404` as
+"still pending" rather than an error.
+
+## Read more
+
+- [API Conventions](/api/conventions) — the units table and the shared pagination envelope
+- [Tokens API](/api/tokens) — the `TokenDto` that `includes=token` inlines
+- [Accounts API](/api/accounts) — the aggregated PnL these individual trades roll up into
+- [WebSocket API](/api/websocket) — push instead of poll for the same records
+- [Node & Middleware](/api/node-and-middleware) — chain history beyond Superhero trades
+- [æScan](https://aescan.io/) — the block explorer for resolving a `tx_hash`
+
+## Open questions
+
+- **What are the possible `tx_type` values?** Typed as a bare `string` in the generated client and
+  rendered through a display-name map in the web app. `buy` and `sell` are near-certain, and
+  token creation appears in the same stream, but the full enum is not in either repository.
+  Read distinct values off `GET /api/transactions?limit=100` to enumerate them.
+- **Can `/api/transactions` be ordered or date-bounded?** The generated client exposes neither
+  `order_by` nor date parameters here, unlike `/api/dex/transactions` which has both `from_date`
+  and `to_date`. Whether the underlying controller accepts them anyway is untested.
+- **What does `GET /api/debug/failed-transactions` return, and is it public?** No caller, typed
+  `any`, and no credential declared. Do not build against it.

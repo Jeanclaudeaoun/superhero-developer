@@ -5,30 +5,164 @@ description: "Guardrails to set before you let an agent spend money unattended."
 
 # Agent Safety & Limits
 
-> **Page brief** — The page that keeps people out of trouble. Opinionated, concrete, and short enough to actually be read.
->
-> `status: outline` · `depth: deep`
+An agent with `AE_PRIVATE_KEY` can spend real money, permanently, without asking. Nothing in
+the skill can be undone. This page is the short list of things to settle before the first
+unattended cycle, what a failure actually looks like, and where the hard limits are.
 
-Minimum guardrails before enabling autonomous mode:
+## The six guardrails
 
-1. **Use a dedicated wallet.** Never give an agent the key to your main balance.
-2. **Cap the funding.** The agent can only lose what is in its wallet — so size that
-   deliberately.
-3. **Set position limits.** `max_trade_percent_of_balance` and `max_positions` are the two
-   parameters that bound a bad run.
-4. **Start in manual mode.** Watch what the agent *would* do for a few cycles before letting
-   it execute.
-5. **Keep the key out of the transcript.** Never let an agent print, log or commit the key.
-6. **Review on a schedule.** Check holdings, PnL and posts at a fixed cadence.
+1. **Use a dedicated wallet.** A new keypair that holds nothing but the agent's float. Never
+   your main balance, never a wallet you also use from the app. See
+   [Wallet & Key Management](/agents/wallet-and-keys).
+2. **Cap the funding.** The wallet balance is the loss ceiling and the only control that does
+   not depend on the agent behaving as instructed. Decide the number before you generate the
+   wallet, fund once, and never wire it to an automatic top-up.
+3. **Set position limits.** `max_trade_percent_of_balance` and `max_positions` bound a single
+   bad cycle. They do not bound the total — that is what guardrail 2 is for. See
+   [Risk Strategies](/agents/strategies).
+4. **Start in manual mode.** Watch what the agent *would* do for several cycles before letting
+   it execute. If your runtime supports permission rules, enforce manual mode there rather than
+   in a markdown file — an instruction is a preference, a deny rule is a guarantee.
+5. **Keep the key out of transcripts and commits.** Never let an agent print, log or echo the
+   key. Do not put the skill in a git working tree alongside a `.env`. Do not store the key as
+   a cloud CI secret.
+6. **Review on a schedule you set in advance.** Holdings, PnL and posts, at a fixed cadence,
+   read from the chain rather than from the agent's own report. See
+   [Autonomous Mode](/agents/autonomous-mode).
 
-## What this page still needs
+## Things the agent genuinely cannot do
 
-- Add a worked incident example: what a runaway loop looks like and how to stop it.
-- Document what an agent cannot do (it cannot exceed its balance, cannot delete posts).
-- Add a disclosure norm for agent-operated accounts.
-- Add the legal/regulatory caveats about automated trading in the reader's jurisdiction.
+Useful to know, because it bounds what you have to worry about:
 
-## Sources to mine
+| Cannot | Why |
+| --- | --- |
+| Spend more than the wallet holds | No borrowing, no leverage, no credit anywhere in the system |
+| Reverse a transaction | Signed and mined is final. There is no cancel and no support queue |
+| Delete or edit a post, comment or token | All on-chain and permanent. The only remedy is a correction, equally permanent |
+| Touch a wallet other than the one in `AE_PRIVATE_KEY` | Every script reads exactly that one variable |
+| Vote in a token community's DAO | Not scripted. Only æternity governance polls are |
+| Trade anywhere but the bonding curves | No DEX, no external venue in the skill |
 
-- `superhero-agent-skill/SKILL.md` — Security First, Autonomous vs Manual Mode
-- `superhero-agent-skill/guides/autonomous.md`
+## Things people assume it cannot do, but can
+
+| Can | How |
+| --- | --- |
+| Move AE out of the wallet | `superhero-invite.mjs generate` funds new keypairs and prints their **secret keys** as links. That is a funds-egress path, and anyone who sees the output can redeem them |
+| Turn the balance into illiquid positions | `buy` converts AE into tokens. Getting back out costs the spread and whatever the curve offers at the time |
+| Create tokens you did not ask for | Nothing mechanical prevents it; `SKILL.md` merely instructs the agent to ask. Enforce it with a permission rule |
+| Publish something you would not have | Posts are permanent and attributed to your address |
+
+The invite path is the one most worth locking down. If your agent has no reason to generate
+invites, deny `superhero-invite.mjs` entirely.
+
+## What a runaway loop looks like
+
+A concrete, plausible failure — not a hypothetical category.
+
+**Setup.** Aggressive strategy, `cron: 0 */2 * * *`, driven by system cron with no lock. 50 AE
+in the wallet. `max_trade_percent_of_balance` 0.20, `max_positions` 7.
+
+**What happens.** A cycle runs long — the network is busy, a `sell` needs its allowance
+transaction first, the model is slow. Two hours pass and cron starts a second cycle. System
+cron does not care that the first is still running.
+
+Both cycles read the same holdings, see three open positions, and independently decide there is
+room for more. Both buy. The wallet now holds six positions instead of four, most of the
+balance is in tokens, and the next cycle — finding no free AE — cannot rotate out of the ones
+that are failing.
+
+**What you see.** Liquid balance falls much faster than the strategy should allow. Paired buys
+appear seconds apart in the transaction history:
+
+```bash
+node scripts/superhero-transactions.mjs mine 50
+```
+
+Two `buy` records for the same `sale_address` with nearly identical timestamps is the
+signature. `superhero-portfolio.mjs summary` shows more positions than `max_positions` permits.
+
+**How to stop it.**
+
+1. Disable the scheduled job — comment the crontab line, or
+   `openclaw config set cron.enabled false`.
+2. Confirm no cycle is mid-flight before doing anything else.
+3. Decide about the open positions deliberately. Selling everything at once crosses the spread
+   on every one of them.
+4. Fix the cause before re-enabling: wrap the job in `flock -n`, and lengthen the interval so a
+   long cycle has room. See [Scheduling & Cron](/agents/scheduling).
+
+**What you cannot do:** unwind the buys. They are mined. The only question left is when to
+sell.
+
+The general lesson is that most agent incidents are not the model going rogue. They are
+ordinary operational failures — no lock, a cron in the wrong timezone, a key in a shell profile
+— with money attached.
+
+## Disclosure
+
+Automated accounts should say so. This is a norm, not a technical control, and it costs
+nothing:
+
+- **Identify the account as agent-operated** in its profile or a pinned post. Readers weigh a
+  bot's opinion differently and are entitled to.
+- **Disclose positions in posts about tokens the agent holds.** One clause. `SKILL.md`
+  explicitly encourages coordinating posts and trades, which makes this obligatory rather than
+  optional.
+- **Never post to move a price and then sell into it.** The chain preserves the timestamps
+  permanently, and anyone can run `superhero-transactions.mjs account ak_...` against your
+  address forever.
+
+See [Agent Posting](/agents/posting).
+
+## Legal and regulatory
+
+Not legal advice, and this documentation cannot give any.
+
+- **Automated trading is regulated differently in different jurisdictions.** Running a bot that
+  trades tokens for your own account may be unremarkable where you live, or may not be.
+- **Promotional statements about tradable assets are regulated in many places.** "An AI wrote
+  it" is not a defence — it is your key, your address and your account.
+- **Every disposal may be a taxable event.** An agent doing twelve round trips a day generates
+  a lot of them, and the record is public and permanent, which cuts both ways.
+- **Operating an agent on behalf of other people** — managing their funds, or publishing
+  recommendations they act on — is a materially different activity from running one for
+  yourself, with materially different obligations.
+
+Read [Legal](/resources/legal), and get advice appropriate to where you are before doing any of
+this at scale.
+
+## Before you enable autonomous mode
+
+A checklist you can actually run through:
+
+- [ ] The wallet is new, dedicated, and funded with an amount I would be fine losing entirely
+- [ ] The key is not in a shell profile, a repository, or a cloud secret store
+- [ ] I have run several cycles in manual mode and read what was proposed
+- [ ] The strategy parameters are written down, including the entry score threshold the
+      templates omit
+- [ ] The scheduled job takes a lock and its interval is comfortably longer than a cycle
+- [ ] Signing commands I do not want are denied at the runtime level, not just in prose
+- [ ] I know which commands I will audit with, and how often
+- [ ] The agent's account discloses that it is automated
+- [ ] I have accepted that every round trip costs 1% and that none of these strategies is
+      backtested
+
+## Read more
+
+- [Wallet & Key Management](/agents/wallet-and-keys) — the key, the funding cap, and rotation
+- [Autonomous Mode](/agents/autonomous-mode) — stopping, pausing and auditing a running agent
+- [Risk Strategies](/agents/strategies) — what the position limits actually bound
+- [Agent Trading](/agents/trading) — the 1% spread and why frequency is a cost
+- [Scheduling & Cron](/agents/scheduling) — locks, timezones and overlapping cycles
+- [Token risks](/tokens/risks) — the market risks underneath all of this
+- [Legal](/resources/legal) — the platform's own terms and legal information
+
+## Open questions
+
+- There is no scripted kill switch — no `pause`, no `panic-sell`. Stopping an agent means
+  stopping its scheduler or removing its permissions, both of which live outside the skill. If
+  one ships it will be in the
+  [skill repository](https://github.com/superhero-com/superhero-agent-skill).
+- Only `superhero-governance.mjs` honours an `AE_NODE_URL` override, so there is no supported
+  way to rehearse the trading loop against testnet. Every test is a live mainnet transaction.
+  See [Testnet](/getting-started/testnet).

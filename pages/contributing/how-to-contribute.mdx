@@ -1,40 +1,162 @@
 ---
 title: "How to Contribute"
-description: "The workflow for turning a briefed outline into a finished page."
+description: "The workflow for taking a page from unwritten to finished, and the rules that keep it trustworthy."
 ---
 
 # How to Contribute
 
-> **Page brief** — A concrete, repeatable procedure. Optimise it for an AI agent working one page per session.
->
-> `status: outline` · `depth: deep`
+This page is the procedure. It is written for one writer — human or agent — working a small
+number of pages per session, against two source repositories they can read directly. Follow it
+in order; most of the failure modes come from skipping step 2.
 
-### The loop
+## Before you start
 
-1. **Pick a page** with `status: outline` — prefer `depth: deep` pages in the
-   [Tokens](/tokens), [Agents](/agents) and [Contracts](/contracts) sections first.
-2. **Read the sources** listed at the bottom of the page. Do not write from memory; every
-   factual claim should trace to a file, a contract, or a live endpoint.
-3. **Verify** anything you can actually run — call the endpoint, read the contract, run the
-   CLI command. Mark anything you could not verify explicitly.
-4. **Write the page**, replacing the brief with real content.
-5. **Update the status marker** from `outline` to `draft`, and to `reviewed` once a second
-   pass has checked it.
-6. **Delete** the "What this page still needs" and "Sources to mine" sections once they are
-   exhausted — or leave the residue if items remain.
+Clone the three repositories side by side. The docs site expects the other two to be readable:
 
-### Rules
+| Repository | Role |
+| --- | --- |
+| `superhero-developer` | This site. Nextra 2, `pages/` plus `_meta.json`. |
+| `superhero` | The web app. The primary source of truth for routes, config, contracts and copy. |
+| `superhero-agent-skill` | The agent skill: `SKILL.md`, `guides/`, `scripts/`, `contracts/`. |
 
-- **Never invent a number.** If you cannot verify a fee, a limit or an address, say so.
-- **Prefer the repository over the marketing site** when the two disagree, and note the
-  disagreement.
-- **Link, do not repeat.** Terms are defined once in the [Glossary](/concepts/glossary).
-- **Keep the agent CLI reference exhaustive** — it is generated from real `case` blocks.
-- **Escape braces and angle brackets** in prose. MDX parses a bare curly brace as an
-  expression and a bare angle bracket as JSX; wrap placeholders in backticks.
+Then get the site running:
 
-## What this page still needs
+```bash
+pnpm install
+pnpm dev      # http://localhost:3000
+```
 
-- Add a PR checklist.
-- Add instructions for running the docs site locally.
-- Define who reviews and merges.
+## The loop
+
+### 1. Pick a page
+
+Take the next item from the [roadmap](/contributing/roadmap). A page that still carries a
+**page brief** blockquote, a `status:` marker or a **Sources to mine** list is unwritten —
+that scaffolding is the marker, and deleting it is part of finishing the page.
+
+Prefer depth over breadth. One finished page beats three half-written ones.
+
+### 2. Read the sources before writing a word
+
+This is the step that decides whether the page is worth publishing. The richest sources, in
+priority order:
+
+| Source | What it gives you |
+| --- | --- |
+| `superhero/src/views/Whitepaper.tsx` | A full technical whitepaper in the `WHITEPAPER_CONTENT` template literal — bonding-curve math, fee splits, DAO rules, affiliation percentages, security model, glossary |
+| `superhero/server/lib/faq-content.cjs` | 23 canonical FAQ entries |
+| `superhero/src/config.ts` | Every endpoint and contract address, for both networks |
+| `superhero/src/routes.tsx` | The authoritative route table for superhero.com |
+| `superhero/src/locales/en.json` | All UI copy, including landing page under `common.views.landing` |
+| `superhero/docs/api-superhero-com-endpoints-and-fields.md` | REST endpoint inventory |
+| `superhero-agent-skill/contracts/*.json` | Contract ACIs — real entrypoint signatures, with `stateful` and `payable` flags |
+| `superhero-agent-skill/scripts/*.mjs` | The real CLI surface. Read the `case` blocks; the guides are incomplete |
+
+Read the code, not just the comments, and prefer the repository over the marketing site when
+the two disagree — then note the disagreement.
+
+### 3. Verify what you can actually run
+
+Call the endpoint. Read the ACI. Run the CLI command. Search for the canonical documentation URL
+rather than guessing it. Anything you could not verify is not a fact yet.
+
+### 4. Write the page
+
+Replace the scaffolding with real content, following the
+[page template](/contributing/page-template). Keep and expand anything already on the page — it
+was sourced from the repositories and is correct. Do not delete an accurate table in order to
+rewrite it from memory.
+
+End with `## Read more`. Add `## Open questions` only if something is genuinely unresolved.
+
+### 5. Delete the scaffolding
+
+The page brief blockquote, the `status` / `depth` line, **What this page still needs** and
+**Sources to mine** all come out. They told you what to write; once written, they are noise.
+Unresolved items from "still needs" move to `## Open questions`, rephrased as specific questions.
+
+### 6. Lint, then build
+
+```bash
+python3 scripts/lint-mdx.py    # must print "0 issues"
+pnpm build                     # about 90 seconds; full confidence
+```
+
+The linter catches the five MDX mistakes that break `next build`, plus broken internal links and
+`_meta.json` drift. It is fast — run it after every page, not once at the end.
+
+### 7. Update the roadmap
+
+If you finished something the roadmap listed, remove it. If you opened a new gap, add it. The
+roadmap is the only handoff between sessions; a stale one costs the next writer an hour.
+
+## The rules
+
+**Never invent a fact.** Every number, address, endpoint, percentage, limit and entrypoint must
+trace to a file you read or a search result you saw. If you cannot verify it, it goes under
+`## Open questions`. Plausible fabrications are the one failure this site cannot absorb, because
+a reader cannot tell them apart from the verified material around them.
+
+**Only link URLs you have evidence for.** A URL that appeared in a search result, a
+`superhero.com` route derived from `src/routes.tsx`, or a URL already present in the
+repositories. Never guess a documentation URL — æternity's docs have moved more than once, and a
+plausible-looking 404 is worse than no link.
+
+**Link, do not repeat.** Terms are defined once, in the [glossary](/concepts/glossary). Cross-link
+instead of restating.
+
+**State risks plainly.** This is documentation, not marketing. If a feature is unused, say so.
+If a number is an observation rather than a protocol constant, label it.
+
+**Keep the agent CLI reference exhaustive.** [Agent CLI reference](/agents/cli-reference) is
+generated from the real `case` blocks in `superhero-agent-skill/scripts/*.mjs`. A command that
+exists and is undocumented is a bug in that page.
+
+**Escape braces and angle brackets.** MDX parses a bare `{` as an expression and a bare `<` as
+JSX. Wrap placeholders in backticks or put them in a fenced block.
+
+## Voice
+
+- Second person, present tense, direct. "Open the token page and choose Buy."
+- Lead with what the reader needs; put background after it.
+- A table beats a list once there are more than three parallel facts.
+- Do not describe the documentation itself. Just document.
+- Aim for a genuinely complete page, not a word count. A reference page may be mostly tables; a
+  flagship explainer typically runs 800–2000 words. Do not pad.
+
+## Submitting
+
+There is no CI configuration and no PR template in this repository yet, so the checklist is
+yours to run:
+
+- [ ] `python3 scripts/lint-mdx.py` prints `0 issues`
+- [ ] `pnpm build` succeeds
+- [ ] Every page you touched has a `## Read more` section with reasons on the links
+- [ ] No page brief, `status:` marker, "What this page still needs" or "Sources to mine" remains
+      on a page you called finished
+- [ ] Every factual claim traces to a file, a contract, or a search result you actually saw
+- [ ] New pages are listed in their directory's `_meta.json`
+- [ ] [The roadmap](/contributing/roadmap) reflects what you did
+- [ ] You did not touch `package.json`, `next.config.js`, `theme.config.tsx` or the root
+      `pages/_meta.json` unless that was the point of the change
+
+Each page carries an "Edit this page on GitHub" link, configured in `theme.config.tsx`, which is
+the shortest route from spotting an error to fixing it.
+
+## Read more
+
+- [Page Template](/contributing/page-template) — the exact page shape, and the MDX rules in detail.
+- [Documentation Roadmap](/contributing/roadmap) — the work queue, built from real gaps.
+- [Contributing overview](/contributing) — the short version of this page.
+- [Glossary](/concepts/glossary) — where a term belongs if you are tempted to define it twice.
+- [superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) — one of the two source repositories.
+
+## Open questions
+
+- Who reviews and merges is not established. The repository has no `CODEOWNERS`, no
+  `.github/workflows`, and no PR template; `theme.config.tsx` points `docsRepositoryBase` at
+  `github.com/Jeanclaudeaoun/superhero-developer`. Until that is settled, treat the checklist
+  above as self-review.
+- There is no automated check in CI, so nothing prevents a page with broken MDX from being
+  merged. A workflow running `scripts/lint-mdx.py` and `pnpm build` on pull requests would close
+  that gap.

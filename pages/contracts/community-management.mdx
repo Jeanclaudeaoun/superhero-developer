@@ -5,26 +5,183 @@ description: "Moderators, write thresholds and community metadata."
 
 # CommunityManagement
 
-> **Page brief** — Full reference for CommunityManagement.aes.
->
-> `status: outline` · `depth: reference`
+`CommunityManagement.aes` holds everything about a community that is policy rather than
+economics: who the moderators are, who is muted, how many tokens you need to hold to write,
+and the community's free-form metadata.
 
-| Entrypoint | Signature | Notes |
+One instance is deployed per community by the factory. Its owner is the community's DAO, so
+every setting on it changes only through a DAO vote — except muting, which moderators do
+directly.
+
+Resolve it with `factory.get_community_management(token_sale)`. The ACI lives inside
+`superhero-agent-skill/contracts/CommunityFactory.aci.json`.
+
+## Entrypoints
+
+| Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `(initial_moderator, minimum_token_threshold, is_private, meta_info)` | Stateful |
-| `add_moderator` / `delete_moderator` | `(moderator: address)` | Stateful. DAO-governed. |
-| `mute_user_id` / `unmute_user_id` | `(user_id: string)` | Stateful. Moderator action. |
-| `change_minimum_token_threshold` | `(minimum_token_threshold: int)` | Stateful. DAO-governed. |
-| `change_meta_info` | `(meta_info)` | Stateful |
-| `moderator_accounts` / `muted_user_ids` / `minimum_token_threshold` / `meta_info` | — | Reads |
-| `owner` / `set_owner` / `get_state` / `version` | — | Metadata |
+| `init` | `(initial_moderator: address, minimum_token_threshold: int, is_private: bool, meta_info: CommunityManagement.meta_info) => state` | stateful |
+| `add_moderator` | `(moderator: address) => unit` | stateful |
+| `delete_moderator` | `(moderator: address) => unit` | stateful |
+| `mute_user_id` | `(user_id: string) => unit` | stateful |
+| `unmute_user_id` | `(user_id: string) => unit` | stateful |
+| `change_minimum_token_threshold` | `(minimum_token_threshold: int) => unit` | stateful |
+| `change_meta_info` | `(meta_info: CommunityManagement.meta_info) => unit` | stateful |
+| `set_owner` | `(owner: address) => unit` | stateful |
+| `moderator_accounts` | `() => Set.set(address)` | — |
+| `muted_user_ids` | `() => Set.set(string)` | — |
+| `minimum_token_threshold` | `() => int` | — |
+| `meta_info` | `() => CommunityManagement.meta_info` | — |
+| `owner` | `() => address` | — |
+| `version` | `() => int` | — |
+| `get_state` | `() => state` | — |
 
-## What this page still needs
+## Types
 
-- Document the `meta_info` record fields.
-- Document what a `user_id` string is — an address, a profile id, or something else.
-- Explain how `is_private` is enforced at read time.
+```sophia
+type meta_info = map(string, string)
 
-## Sources to mine
+record state =
+  { owner                   : address
+  , minimum_token_threshold : int
+  , is_private              : bool
+  , moderator_accounts      : Set.set(address)
+  , muted_user_ids          : Set.set(string)
+  , meta_info               : meta_info }
+```
 
-- `superhero-agent-skill/contracts/CommunityFactory.aci.json` — the `CommunityManagement` block
+`Set.set('a)` is the æternity standard library set, which is a record wrapping a map:
+
+```sophia
+record set('a) = { to_map : map('a, unit) }
+```
+
+Decoded in JavaScript the SDK gives you a `Set`, so membership is a plain `.has()`:
+
+```javascript
+const moderators = await cm.moderator_accounts().then((r) => r.decodedResult);
+moderators.has('ak_alice...');   // true or false
+```
+
+## The `meta_info` map
+
+`meta_info` is `map(string, string)` — no schema, no validation, nothing reserved. The
+contract stores whatever you put in it. The keys the Superhero app writes when it creates a
+community (`superhero/src/features/trending/views/CreateTokenView.tsx`) are:
+
+| Key | What the app puts there | Where it shows up |
+| --- | --- | --- |
+| `collection` | the collection slug, e.g. `word` | internal |
+| `description` | free text | the token page, truncated to 150 characters in the UI and 160 for the page meta description |
+| `website` | a URL | the token page |
+| `twitter` | an X handle or URL | the token page |
+
+All four are optional. A community created with `new Map()` — which is what the agent skill's
+`superhero-token-create.mjs` does — has no metadata at all, and the app falls back to a
+generated description.
+
+Changing metadata after creation goes through `change_meta_info`, which replaces the whole
+map. There is no per-key update, so read the current map, modify it, and write it back:
+
+```javascript
+const current = await cm.meta_info().then((r) => r.decodedResult);
+current.set('description', 'A new description');
+// change_meta_info is owner-gated: this must go through a ChangeMetaInfo DAO vote.
+```
+
+In practice you do not call `change_meta_info` directly. The DAO does, via a
+`ChangeMetaInfo(map(string, string))` vote subject.
+
+## Events
+
+```sophia
+datatype event =
+    ChangeMinimumTokenThreshold(int)
+  | AddModerator(address)
+  | DeleteModerator(address)
+  | MuteUserId(string)
+  | UnmuteUserId(string)
+  | SetOwner(address)
+  | ChangedMetaInfo
+```
+
+`ChangedMetaInfo` is the only event in the entire Superhero suite that carries **no
+arguments** — it signals that the map changed without saying how. An indexer that wants the
+new metadata has to re-read `meta_info()` when it sees this event.
+
+## Who may call what
+
+| Action | Caller |
+| --- | --- |
+| `add_moderator`, `delete_moderator` | the owner — the DAO, via an `AddModerator` / `DeleteModerator` vote |
+| `change_minimum_token_threshold` | the owner — via a `ChangeMinimumTokenThreshold` vote |
+| `change_meta_info` | the owner — via a `ChangeMetaInfo` vote |
+| `set_owner` | the owner — this is how a `ChangeDAO` migration hands over control |
+| `mute_user_id`, `unmute_user_id` | a moderator, directly |
+
+Muting is the one action that does not need a vote. That is the design: governance sets the
+policy and appoints the people, and those people act in real time.
+
+## Initial values at creation
+
+The factory deploys community management with fixed initial settings, from the public Sophia
+source of `create_community`:
+
+```text
+Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityManagement
+```
+
+| Field | Initial value |
+| --- | --- |
+| `initial_moderator` | `Call.caller` — whoever created the community |
+| `minimum_token_threshold` | `10 ^ 18`, i.e. exactly **one whole token** |
+| `is_private` | whatever you passed to `create_community` |
+| `meta_info` | whatever you passed to `create_community` |
+| `owner` | `Call.caller` at construction, then the DAO |
+
+The factory's own test suite asserts these values, including
+`minimum_token_threshold: 10n ** 18n` and `owner` being the DAO address rewritten to `ak_`.
+
+So by default, holding one token of a community is enough for write access, and the creator is
+the first moderator. Both can be changed by vote afterwards.
+
+## What a `user_id` is
+
+`mute_user_id` and `unmute_user_id` take a `string`, not an `address`. The contract itself
+places no constraint on the format — `muted_user_ids` is a `Set.set(string)` and any string
+can go in it.
+
+This is deliberately more general than an address: a "user" in the social layer may be
+identified by something other than a bare æternity account. But the exact identifier format
+the Superhero app writes was not verified — see Open questions. If you are building a client
+that reads the mute list, do not assume `ak_...`; compare against whatever the app writes.
+
+## How `is_private` is enforced
+
+`is_private` is a stored boolean that the contract exposes through `get_state()`. It is a
+**signal, not an access control**. Sophia contract state is public: anyone can read
+`get_state()` on any contract on the chain, and the middleware indexes it regardless. Nothing
+in `CommunityManagement.aes` gates a read on `is_private`.
+
+Enforcement is therefore at the application layer — the Superhero app and API decide what to
+show based on the flag. Treat a private community's on-chain data as public, because it is.
+
+## Open questions
+
+- **What string format `mute_user_id` is called with in production.** The contract accepts any
+  string. Whether the Superhero app writes an `ak_...` address, a profile id, or a chain name
+  was not determined from the app source. Read `muted_user_ids()` on a live community with
+  mutes to settle it.
+- **Exactly how the app enforces `is_private`.** The flag is stored on chain and read by the
+  app, but which reads or routes it gates was not traced.
+- **Whether `minimum_token_threshold` is checked at post time or only at vote time.** It is
+  read by `DAO.add_vote` to gate proposal creation; the whitepaper also describes it as the
+  write-access threshold for the community, which would be an application-layer check.
+
+## Read more
+
+- [DAO](/contracts/dao) — the owner of this contract and the source of every governed change
+- [CommunityFactory](/contracts/community-factory) — where the initial values above are set
+- [Moderators](/dao/moderators) — the moderator role explained for community members
+- [Moderation](/social/moderation) — what muting does in the social layer
+- [Proposals](/dao/proposals) — the vote subjects that change these settings

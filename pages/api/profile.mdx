@@ -1,30 +1,270 @@
 ---
 title: "Profile API"
-description: "Read and update profiles, and run the X attestation flow."
+description: "Read profiles, and the challenge-and-signature flow behind every write endpoint on api.superhero.com."
 ---
 
 # Profile API
 
-> **Page brief** — The only part of the API with write endpoints — document the auth model carefully.
->
-> `status: outline` · `depth: reference`
+This is the only part of `api.superhero.com` with write endpoints, and none of them takes a
+password, an API key or a session cookie. Every write is authorised by a **wallet signature over
+a server-issued challenge**: ask for a challenge, sign it with the key that owns the address, post
+the signature back. Understand that one pattern and the whole write surface follows.
 
-| Method & path | Notes |
+All paths are relative to `https://api.superhero.com`.
+
+## Reading a profile
+
+Two endpoints return overlapping data, and the web app uses both, in this order:
+
+1. **`GET /api/accounts/{address}`** — the primary read. Returns the account aggregate with the
+   verified `links` block. This is the authoritative source for a linked X handle, bio, website
+   and preferred `.chain` name. Documented on [Accounts](/api/accounts).
+2. **`GET /api/profile/{address}`** — a secondary read used only to fill fields the account
+   record did not supply.
+
+```bash
+curl -s "https://api.superhero.com/api/profile/ak_2ruXgsLy9jMwEqsgyQgEsxw8chYDfv2QyBfCsR6qtpQYkektWB"
+```
+
+| Method & path | Query | Returns |
+| --- | --- | --- |
+| `GET /api/profile/{address}` | `includeOnChain` | One `ProfileAggregate` |
+| `GET /api/profile` | `addresses`, `includeOnChain` | Array of `ProfileAggregate`, batched |
+
+`ProfileAggregate`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `address` | string | The `ak_...` |
+| `public_name` | string or null | Resolved display name |
+| `profile.fullname` | string | Display name |
+| `profile.bio` | string | Bio text |
+| `profile.avatarurl` | string | Avatar URL |
+| `profile.username` | string or null | Custom username |
+| `profile.x_username` | string or null | Linked X handle |
+| `profile.chain_name` | string or null | Linked `.chain` name |
+| `profile.display_source` | string or null | Which source the display name comes from: `custom`, `chain` or `x` |
+| `profile.chain_expires_at` | string or null | When the `.chain` name expires |
+
+`display_source` mirrors the on-chain resolution order in the profile registry contract, where
+chain names outrank X names, which outrank self-declared custom names. See
+[Profile registry](/identity/profile-registry).
+
+The batch form takes a comma-separated `addresses` list. It has no caller in the web app, so its
+exact envelope is untested — see [Open questions](#open-questions).
+
+## The write pattern
+
+Every write endpoint is one of these two shapes:
+
+```text
+claim   ->  server returns { message, nonce, value, verification_token }
+sign    ->  wallet signs `message`
+submit  ->  server verifies, returns { txHash }
+```
+
+or, for the reward and sponsorship flows:
+
+```text
+challenge ->  server returns { nonce, expires_at, message }
+sign      ->  wallet signs `message`
+submit    ->  server verifies, performs the action
+```
+
+The nonce is single-use and the challenge expires. Nothing is stored client-side between the two
+calls except the challenge object itself.
+
+## Address links
+
+An **address link** is a verified statement that an `ak_...` owns something off-chain — an X
+handle, a bio, a website, a preferred `.chain` name, or a Nostr key. Five families, all with the
+same four endpoints.
+
+| Link | Base path |
 | --- | --- |
-| `GET /api/profile/{address}` | A single profile |
-| `GET /api/profile` | The authenticated profile |
-| `GET /api/profile/feed` | The profile's feed |
-| `PATCH /api/profile/{address}` | Update profile fields |
-| `POST /api/profile/{address}/challenge` | Request a signing challenge |
-| `POST /api/profile/x/attestation` | Obtain a signed X attestation for the contract |
+| X handle | `/api/address-links/x` |
+| Bio | `/api/address-links/bio` |
+| Website | `/api/address-links/site` |
+| Preferred `.chain` name | `/api/address-links/prefered-aens-name` |
+| Nostr key | `/api/address-links/nostr` |
 
-## What this page still needs
+Note the spelling of `prefered-aens-name` — one `r`. It is wrong and it is the actual path.
 
-- Document the challenge/signature authentication flow end to end.
-- Document the request and response bodies for the two POST endpoints.
-- Document which profile fields are API-only versus mirrored on-chain.
+Each base path has `POST {base}/claim`, `POST {base}/submit`, `POST {base}/unclaim` and
+`POST {base}/unclaim/submit`.
 
-## Sources to mine
+### Claim
 
-- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.28–1.33
-- `superhero/src/views/ProfileXCallback.tsx`
+For bio, site and preferred name, the body is the address plus the value you are claiming:
+
+```bash
+curl -s -X POST "https://api.superhero.com/api/address-links/bio/claim" \
+  -H "Content-Type: application/json" \
+  -d '{"address":"ak_YOUR_ADDRESS","value":"Building things on aeternity."}'
+```
+
+Response — `AddressLinkClaimResponse`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `message` | string | The exact text the wallet must sign |
+| `nonce` | number | Single-use nonce, echoed back on submit |
+| `value` | string | The normalised value the server will record |
+| `verification_token` | string | Server-side proof that this claim was issued |
+
+### Submit
+
+Sign `message` with the address's key, then post everything back:
+
+```bash
+curl -s -X POST "https://api.superhero.com/api/address-links/bio/submit" \
+  -H "Content-Type: application/json" \
+  -d '{"address":"ak_YOUR_ADDRESS","value":"Building things on aeternity.",
+       "nonce":42,"signature":"sg_...","verification_token":"..."}'
+```
+
+Response is `{ "txHash": "th_..." }` — the server broadcasts the on-chain write on your behalf.
+That is the point of the flow: the API sponsors the transaction, and your signature is what
+authorises it.
+
+### Unclaim
+
+`POST {base}/unclaim` with `{ "address": "ak_..." }` returns `{ message, nonce }` — no `value`,
+no `verification_token`. Sign `message`, then `POST {base}/unclaim/submit` with
+`{ address, nonce, signature }` and receive a `txHash`.
+
+### Linking X
+
+X is the exception, because the value is not something you can type — it has to come from
+an OAuth round trip. Two accepted claim bodies:
+
+```json
+{ "address": "ak_...", "x_access_token": "..." }
+```
+
+```json
+{ "address": "ak_...", "x_code": "...", "x_code_verifier": "...", "x_redirect_uri": "https://superhero.com/profile/x/callback" }
+```
+
+The second is the PKCE form the web app uses: the browser redirects to X, X redirects back to
+`/profile/x/callback` with a code, and the app posts the code, the PKCE verifier and the redirect
+URI. The backend exchanges the code for a token itself, so the access token never has to be
+handled client-side. From there the flow is identical — claim returns a `message`, the wallet
+signs it, `submit` returns a `txHash`.
+
+Reading the result back: `GET /api/accounts/{address}` and read `links.x`, falling back to
+`profile.x_username` and then the legacy top-level `x_username`.
+
+## Sponsored `.chain` name registration
+
+Registering an AENS name normally costs AE. Superhero will fund it from a sponsor account if the
+name qualifies.
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /api/profile/chain-name/sponsorship/{name}` | Can the sponsor fund this name? |
+| `POST /api/profile/chain-name/challenge` | Get a challenge for `address` |
+| `POST /api/profile/chain-name/claim` | Submit the signed request |
+| `GET /api/profile/{address}/chain-name-claim` | Poll the claim's status |
+
+`{name}` is the label **without** the `.chain` suffix, and AENS rules apply — the generated client
+notes a minimum of 13 characters for a sponsored claim.
+
+The sponsorship check returns `ChainNameSponsorshipResponse`:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `name` | string | The name checked |
+| `sponsorable` | boolean | True when the sponsor can fund it, making the claim free for the user |
+| `sponsor_configured` | boolean | Whether a sponsor account is configured at all |
+| `sponsor_balance_aettos` | string or null | Sponsor balance, in **aettos** |
+| `required_balance_aettos` | string | Total estimated on-chain cost — preclaim, claim, update and transfer — in **aettos** |
+| `reason` | string or null | Why it is not sponsorable, when it is not |
+
+The claim body is `RequestChainNameDto`: `address`, `name`, `challenge_nonce`,
+`challenge_expires_at` and `signature_hex` (hex or an `sg_` string). It returns
+`{ status, message }`.
+
+Registration is asynchronous — it takes four on-chain transactions. Poll
+`GET /api/profile/{address}/chain-name-claim`, which returns `status` plus, as they happen,
+`preclaim_tx_hash`, `claim_tx_hash`, `update_tx_hash`, `transfer_tx_hash`, an `error`, and the
+name's expiry (which the API has returned under several key spellings: `expires_at`,
+`approximate_expire_time`, `approximateExpireTime`, `expire_time`, `expireTime` — the web app
+accepts any of them).
+
+```bash
+curl -s "https://api.superhero.com/api/profile/chain-name/sponsorship/mylongenoughname"
+```
+
+## X posting reward
+
+The one place in the API with an explicit rate limit.
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /api/profile/{address}/x-posting-reward` | Read status. No signature, no X-API cost |
+| `POST /api/profile/x-posting-reward/recheck-challenge` | Get a challenge for `address` |
+| `POST /api/profile/{address}/x-posting-reward/recheck` | Run the capped scan |
+| `POST /api/profile/{address}/x-reward/referral-link` | Get a referral link |
+
+The status payload carries `onboarding_status` (`not_started`, `pending`, `paid` or `failed`),
+`qualified_posts_count`, `tx_hash`, `next_check_allowed_at`, `x_username`,
+`per_post_total_paid_count`, `current_streak_days`, `tier_amount_ae`, `follower_count`,
+`referral_link`, and an `error` string that explains why a reward was **not** sent even on a
+successful HTTP 200 — below the follower minimum, the X identity already rewarded, or the payout
+failed.
+
+The recheck and referral-link endpoints both take the same signed proof body:
+`challenge_nonce`, `challenge_expires_at`, `signature_hex`.
+
+**The recheck is capped at once per 24 hours.** Exceeding it returns HTTP `429` with a body
+carrying `nextAllowedAt`, and the scan is skipped rather than queued. Handle the 429 explicitly:
+it is not a transient failure to retry.
+
+```bash
+curl -s "https://api.superhero.com/api/profile/ak_YOUR_ADDRESS/x-posting-reward"
+```
+
+## Deprecated: the legacy profile update
+
+Two endpoints implement an older, generic profile edit. Both are marked deprecated in
+`backend.ts` and neither has a caller:
+
+| Method & path | Body | Returns |
+| --- | --- | --- |
+| `POST /api/profile/{address}/challenge` | The editable payload | `challenge`, `payload_hash`, `expires_at`, `ttl_seconds` |
+| `PATCH /api/profile/{address}` | The payload plus `challenge` and `signature` | The updated profile row |
+
+The editable payload was `fullname`, `bio`, `nostrkey`, `avatarurl`, `username`, `x_username`,
+`chain_name`, `sol_name`; the response added `address`, `created_at` and `updated_at`. The source
+comment says it plainly: *"Legacy profile update flow; use on-chain writes instead."* Use the
+address-link endpoints above.
+
+## Read more
+
+- [API Conventions](/api/conventions) — the full list of challenge/submit pairs across the API
+- [Accounts API](/api/accounts) — `GET /api/accounts/{address}` and the `links` precedence rule
+- [Posts API](/api/posts) — `PostDto.sender`, the inlined profile on every post
+- [Profiles](/identity/profiles) — what a Superhero profile is, beyond its wire format
+- [Chain names](/identity/chain-names) — what a `.chain` name buys you
+- [X verification](/identity/x-verification) — the OAuth half of the X link flow
+- [Edit your profile on superhero.com](https://superhero.com/wallet) — where the flow runs for real
+
+## Open questions
+
+- **Where did `POST /api/profile/x/attestation` go?** The repository's own endpoint inventory
+  documents it, with a response of `signer`, `address`, `x_username`, `nonce`, `expiry`,
+  `message`, `signature_hex`, `signature_base64`. No such path exists in the current
+  `backend.ts` or the generated client, which use `/api/address-links/x/claim` instead. Either the
+  inventory is stale or the endpoint still exists and is unused — confirm before building against
+  either.
+- **What does `includeOnChain` change?** It is passed straight through as a boolean by both
+  profile read endpoints, and no source states what it adds. Likely: resolving the `.chain` name
+  against the chain rather than the index.
+- **What is the batch envelope of `GET /api/profile?addresses=...`?** Typed as
+  `ProfileAggregate[]` in `backend.ts`, but with no caller the shape is unverified, and the
+  repository's endpoint inventory suggests it may return `items` or `data` instead of a bare
+  array.
+- **Is the `nonce` on an address-link claim a number or a string?** `AddressLinkClaimResponse`
+  types it as a number and the submit body echoes it as a number, while every other challenge
+  flow in the API uses a string `nonce`. Echo back exactly what you received.

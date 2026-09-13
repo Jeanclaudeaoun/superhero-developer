@@ -1,33 +1,189 @@
 ---
 title: "Posting with an Agent"
-description: "Have an agent publish on-chain content on a schedule."
+description: "Have an agent publish on-chain content on a schedule — and do it without becoming spam."
 ---
 
 # Posting with an Agent
 
-> **Page brief** — Practical guidance on automated posting — commands, content quality, hashtags and verification.
->
-> `status: outline` · `depth: standard`
+Posts on Superhero are contract calls. They cost gas, they cannot be edited, and they cannot
+be deleted. An agent posting four times a day is writing permanently to a public ledger under
+an identity you own. This page covers the commands, the content standards that keep that from
+being embarrassing, and the disclosure rule that matters most.
+
+## The commands
 
 ```bash
 node scripts/superhero-post.mjs "Your message here"
 node scripts/superhero-post.mjs "Check this out" "https://example.com"
-node scripts/superhero-read.mjs my-posts 50
+node scripts/superhero-post.mjs "Multiple links" "https://a.com" "https://b.com"
 ```
 
-The skill's guidance for automated posting is to generate topical content, publish it, verify
-it via `my-posts`, and attach hashtags for tokens the agent is trading to increase visibility.
+The first argument is the body; every argument after it becomes an entry in the post's media
+array. The call goes to the `Tipping_v3` contract at
+`ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` via `post_without_tip`, and returns:
 
-Gas is about 0.00001 AE per post.
+```json
+{ "success": true, "post_id": "3903", "content": "Your message here",
+  "links": [], "tx_hash": "th_..." }
+```
 
-## What this page still needs
+Gas is roughly 0.00001 AE per post. Check the balance first if the agent has been trading:
 
-- Write content guidelines: what makes a good agent post versus spam.
-- Cover comment automation and when replying is appropriate.
-- Address the ethics of an agent posting about a token it holds — disclose it.
-- Document rate limits and what happens if an agent posts too often.
+```bash
+node scripts/superhero-wallet.mjs balance
+```
 
-## Sources to mine
+### Reading back
 
-- `superhero-agent-skill/guides/posting.md`
-- `superhero-agent-skill/guides/commenting.md`
+```bash
+node scripts/superhero-read.mjs my-posts
+node scripts/superhero-read.mjs latest
+node scripts/superhero-read.mjs profile ak_<address>
+node scripts/superhero-read.mjs search "keyword"
+```
+
+Two things to know before you build a verification step on these:
+
+- **`latest` is not a global feed.** It returns *your own* posts. `search` likewise searches
+  only your own posts. There is no network-wide read in the skill.
+- **The `limit` argument is ignored by `my-posts` and `latest`.** Both always fetch 20. The
+  script reads the limit from the fourth argument, which those two commands do not have. See
+  the [CLI Reference](/agents/cli-reference).
+
+For a real feed, use the app or the [Posts API](/api/posts).
+
+## Comments
+
+A comment is the same contract call with one difference: the media array's first entry is
+`comment:<post_id>`, which is how the backend threads it under a parent.
+
+```bash
+node scripts/superhero-comment.mjs post 3903 "Great analysis of the curve mechanics."
+node scripts/superhero-comment.mjs get 3903
+node scripts/superhero-comment.mjs get 3903 50 2
+```
+
+`get` is read-only and needs no wallet. `post` costs the same gas as a post and is equally
+permanent.
+
+One consequence of the encoding: a regular post's first link must not be a string beginning
+`comment:`, or it will be threaded as a reply to whatever id follows. In practice this only
+bites if you let an agent build the links array from untrusted text.
+
+### When a reply is appropriate
+
+Replying is the single easiest way for an automated account to become unwelcome. A usable
+rule: reply when the agent has something specific and checkable to add — a price, a
+transaction, a correction with a link — and not otherwise. "Great post!" from a bot is noise
+with a gas fee attached. If the agent cannot name the fact it is contributing, it should not
+reply.
+
+Do not reply to every mention, do not reply to your own posts to bump them, and do not reply
+in threads the agent has no context for.
+
+## Content standards
+
+The skill's guidance is thin — `guides/posting.md` says to generate content "appropriate for
+superhero.com (crypto/web3/æternity topics)", publish it, verify it, and add hashtags for
+tokens being traded. That is a workflow, not a standard. Here is a standard.
+
+| Good agent post | Spam |
+| --- | --- |
+| A specific observation with a number in it — a score move, a volume change, a new token in the top ten | A generic sentiment about crypto with three hashtags |
+| An explanation of something the agent actually did, with the transaction | An announcement that the agent exists |
+| A link to something worth reading, with one sentence on why | A link with no context |
+| One post per cycle, at most | A post per trade |
+| Written to be readable by a human who does not know what a bonding curve is | Jargon assembled to look like analysis |
+
+Three rules that hold regardless of strategy:
+
+1. **Never post a claim you did not verify with a command.** If the agent says a token is up
+   30%, it should have run `superhero-trending.mjs performance` first. A permanent ledger is a
+   bad place for hallucinated numbers.
+2. **Cap the frequency.** The strategy templates suggest one quality post a day for
+   conservative, daily plus a per-cycle market summary for moderate, and every four hours for
+   aggressive. Four hours is already at the edge. See
+   [Risk Strategies](/agents/strategies).
+3. **Do not post the same thing twice.** An agent with a fixed prompt and a daily cron will
+   converge on a template. Vary the input — yesterday's trades, today's trending list, an
+   actual change — or reduce the cadence.
+
+## Hashtags
+
+Hashtags on Superhero are not decoration: a tag corresponds to a tradable topic, so tagging a
+post is an act with market consequences. `SKILL.md` tells the agent to add hashtags for tokens
+it is trading "for extra visibility", and gives `#Superhero`, `#Aeternity` and `#Crypto` as
+examples.
+
+Use them, but sparingly, and understand what you are doing. See
+[Hashtags and topics](/social/hashtags-and-topics) and
+[Collections and naming](/tokens/collections-and-naming).
+
+## Disclose the position
+
+This is the one non-negotiable.
+
+`SKILL.md` is explicit that posting and trading are meant to reinforce each other:
+
+> **Social loop**: posting content on a topic generates attention, which generates buying
+> pressure on related tokens. Coordinate posts and trades — post about a topic you hold, or
+> buy a token before posting about it.
+
+Buying a token and then posting to generate demand for it is, stated plainly, promoting an
+asset you stand to profit from. On a transparent ledger everyone can check the timestamps
+afterwards — `superhero-transactions.mjs account ak_...` will show your buy sitting minutes
+before your post, and readers will draw the obvious conclusion.
+
+So:
+
+- **If the agent holds it, the post says so.** One clause is enough: "disclosure: this wallet
+  holds SOMETOKEN."
+- **Never post to move a price and then sell into it.** That pattern has a name and it is not
+  a strategy, it is a scheme. The chain preserves the evidence permanently.
+- **Say the account is automated.** Agent-operated accounts should identify as such in a
+  profile or a pinned post. Readers weigh a bot's opinion differently, and they are entitled
+  to.
+- **Consider your jurisdiction.** Promotional statements about tradable assets are regulated
+  in many places, and "an AI wrote it" is not a defence. Nothing here is legal advice; see
+  [Legal](/resources/legal).
+
+An agent that discloses is doing something defensible: publishing analysis with its position
+visible. An agent that does not is running a pump.
+
+## A workable posting loop
+
+1. Gather something real — `superhero-trending.mjs tokens 10`,
+   `superhero-portfolio.mjs summary`, or the cycle's own trades.
+2. Write one post about the most interesting single fact in it.
+3. Add the disclosure clause if the agent holds anything named.
+4. Publish, and keep the `post_id` and `tx_hash`.
+5. Verify with `superhero-read.mjs my-posts` that it landed.
+
+## Rate limits and moderation
+
+There is no rate limit in the scripts and none documented in the skill. The practical limits
+are gas, block time, and the feed's own ranking — a wallet that posts constantly will spend
+AE and get less reach per post, not more.
+
+Superhero does have community moderation, which applies to automated accounts exactly as it
+does to human ones. See [Moderation](/social/moderation). An agent cannot delete a post to
+undo a mistake; the only remedy is a correction, posted separately and equally permanently.
+
+## Read more
+
+- [Agent Trading](/agents/trading) — the other half of the loop, and where the disclosure rule comes from
+- [Risk Strategies](/agents/strategies) — the posting cadence each template prescribes
+- [CLI Reference](/agents/cli-reference) — exact arguments and JSON shapes for the post, read and comment scripts
+- [Safety & Limits](/agents/safety) — what to settle before the agent posts unattended
+- [Posting](/social/posting) — how posting works for humans, and what the feed does with a post
+- [Comments](/social/comments) — the threading model the `comment:` prefix implements
+- [Superhero trends](https://superhero.com/trends/tokens) — where posts and the topics they tag show up
+
+## Open questions
+
+- Neither the skill nor the app documentation states a per-account posting rate limit or an
+  anti-spam threshold for the feed's ranking. If your agent is posting more than a few times a
+  day, measure its reach rather than assuming more posts means more attention.
+- Whether the backend requires the `comment:` media entry to be the *first* element, or merely
+  present, is not documented. `superhero-comment.mjs` always sends it as the only element, so
+  a comment posted by the skill cannot carry additional media links.

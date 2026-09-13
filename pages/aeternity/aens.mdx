@@ -1,30 +1,166 @@
 ---
 title: "AENS — the æternity Naming System"
-description: "How .chain names work at the protocol level."
+description: "How .chain names work at the protocol level: preclaim, claim, pointers, expiry and the short-name auction."
 ---
 
 # AENS — the æternity Naming System
 
-> **Page brief** — The protocol-level companion to the user-facing chain names page.
->
-> `status: outline` · `depth: standard`
+AENS is part of the æternity protocol, not an application-level registry contract. A `.chain`
+name is an on-chain object (`nm_…`) owned by an account, carrying a set of pointers and an
+expiry height. Because it is protocol-level, a name Superhero shows you resolves identically in
+any æternity wallet or explorer. This page is the protocol companion to the user-facing
+[Chain names](/identity/chain-names) guide.
 
-| Rule | Value |
+## Length decides everything
+
+| Name length before `.chain` | What happens |
 | --- | --- |
-| Instant registration | 13+ characters before `.chain` |
-| Auction required | 12 characters or fewer |
+| 13 characters or more | Instant registration. Preclaim, claim, done. |
+| 12 characters or fewer | A first-price auction opens. Nobody gets the name immediately. |
 
-Registration is a three-step flow — **preclaim**, **claim**, then **pointer update** — which
-the Superhero tooling runs as one command.
+`superhero-name.mjs` encodes the threshold directly:
 
-## What this page still needs
+```js
+const AUCTION_LENGTH_THRESHOLD = 12; // names with <= 12 chars (before .chain) go to auction
+```
 
-- Document the commitment/preclaim mechanism and why it exists (front-running protection).
-- Document auction duration, bid increments and settlement.
-- Document name expiry, extension and the grace period.
-- Document pointer types beyond `account_pubkey`.
+and refuses to register anything at or below it, returning
+`error: "name_too_short_auction_required"`. The Superhero tooling registers long names only.
 
-## Sources to mine
+## Registration: preclaim, then claim
 
-- `superhero-agent-skill/scripts/superhero-name.mjs`
-- æternity AENS documentation
+Registration is deliberately two transactions in two different blocks.
+
+1. **Preclaim.** You pick a random salt, hash it together with the name, and publish only the
+   hash as a commitment (`cm_…`). The name itself is not in this transaction, so nobody watching
+   the mempool learns what you are claiming.
+2. **Claim.** In a *later* block, you publish the name and the salt. The protocol recomputes the
+   hash, matches it against your commitment, and awards the name — or opens an auction.
+
+Without this split, a bot watching the transaction pool could read your name out of the pending
+claim and submit its own claim with a higher fee. The commitment is what makes front-running
+pointless: by the time the name is public, your commitment already exists in an earlier block.
+Since the Lima hardfork, a claim that takes part in an auction must carry the `name_salt`.
+
+`superhero-name.mjs` enforces the block separation explicitly rather than hoping for it. After
+the preclaim is mined it reads the top block height and polls `/v3/headers/top` every 30 seconds
+until the height has advanced, then claims:
+
+```js
+const preclaimHeight = await getTopBlockHeight();
+await waitForNextBlock(preclaimHeight);   // polls until height increases
+const claimResult = await nameObj.claim();
+```
+
+It then adds a third step of its own — a `NameUpdateTx` pointing the name at your wallet — so
+the CLI's `register` is preclaim, claim, point:
+
+```bash
+node scripts/superhero-name.mjs available myagentname   # check first
+node scripts/superhero-name.mjs register myagentname    # three transactions
+node scripts/superhero-name.mjs resolve myagentname.chain
+```
+
+A freshly claimed name points nowhere until that update lands. Claiming and pointing are
+separate protocol operations.
+
+## The auction, for names of 12 characters or fewer
+
+This is the part most people trip over: short names cannot be bought, only bid on.
+
+- **Format:** first-price auction. The highest bid at close pays what it bid and takes the name.
+- **Starting bid:** scales with length. Shorter names start higher — a four-character name
+  starts in the region of 135 AE, while the floor drops steeply as names get longer.
+- **Bid increment:** every subsequent bid must be **at least 5% above** the previous bid.
+- **Duration:** also scales with length, counted in key blocks *after the most recent bid*, so
+  each new bid restarts the clock:
+
+| Name length | Auction timeout | Roughly, at ~3 min per key block |
+| --- | --- | --- |
+| 13 or more | 0 blocks | No auction |
+| 9 to 12 | 480 blocks | ~1 day |
+| 5 to 8 | 14,880 blocks | ~31 days |
+| 1 to 4 | 29,760 blocks | ~62 days |
+
+A bid is just a claim transaction on a name that already has an auction running, so the same
+preclaim-with-salt discipline applies to bidding as to claiming. Nothing settles until the
+timeout elapses with no higher bid; then the winner's claim takes effect.
+
+Live auctions are browsable on [æScan](https://aescan.io/), which tracks active names, ongoing
+auctions and recent registrations.
+
+## Pointers
+
+A name holds a list of pointers — key/value pairs mapping a label to a chain object. The one
+that matters for Superhero is `account_pubkey`, which is what "this name is this wallet" means:
+
+```js
+await nameObj.update({ account_pubkey: 'ak_...' }, { extendPointers: true });
+```
+
+`extendPointers: true` merges rather than replaces, which is what you want on a name that
+already points at something. Superhero's own resolver looks for exactly this key — both
+`superhero-name.mjs` (`getAccountPointer`) and the web app's
+`src/hooks/useClaimChainName.ts` (`extractAccountPointer`) search the pointer list for
+`account_pubkey` and ignore the rest.
+
+Beyond accounts, a pointer may target an oracle, a channel or a contract, and from the Ceres
+release it may also hold up to 1024 bytes of uninterpreted data. The protocol caps a name at
+**32 pointers**, forbids duplicate keys, and limits a key to 256 bytes.
+
+## Expiry and extension
+
+A name is a lease, not a purchase.
+
+- The name's TTL is a **delta in key blocks**, not an absolute height — the name enters the
+  revoked state that many blocks after the transaction that set it.
+- Since node v6.0.0 the maximum is **180,000 generations** (roughly 375 days), raised from the
+  earlier 50,000 (roughly 100 days).
+- Extending is a `NameUpdateTx`. The protocol charges no extra fee for the extension itself —
+  you still pay the transaction fee.
+- Let it lapse and the name becomes claimable by anyone again. There is no ownership memory.
+
+```bash
+node scripts/superhero-name.mjs extend myagentname.chain
+```
+
+Superhero surfaces the expiry it knows about: `useClaimChainName.ts` reads an
+`expires_at` / `approximate_expire_time` field off the backend's claim status, and the
+ProfileRegistry contract stores a chain name together with an expiration timestamp (see
+[ProfileRegistry](/contracts/profile-registry)).
+
+## Reading names without a wallet
+
+The middleware indexes names, so you can list what an address owns over plain HTTP:
+
+```bash
+curl "https://mainnet.aeternity.io/mdw/v3/names?owned_by=ak_...&state=active&limit=100"
+```
+
+That is the exact query `superhero-name.mjs lookup` makes. The web app does the same against
+whatever `MIDDLEWARE_URL` its build is configured with — see [Networks](/aeternity/networks).
+
+## Read more
+
+- [Chain names](/identity/chain-names) — the same system from the Superhero user's side.
+- [Claim a name](/getting-started/claim-name) — the in-app flow, step by step.
+- [Accounts & Keys](/aeternity/accounts-and-keys) — what `nm_` and `cm_` are, next to every other prefix.
+- [Profiles](/identity/profiles) — how a resolved name becomes a display name.
+- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the official AENS overview, including auction pricing.
+- [AENS in the protocol spec](https://github.com/aeternity/protocol/blob/master/AENS.md) — the normative source for auction timeouts, commitments and pointer limits.
+- [æScan](https://aescan.io/) — browse active names and live auctions.
+
+## Open questions
+
+- The exact starting-bid formula is not reproduced here. The official AENS page gives one worked
+  figure (a four-character name starting around 134.6269 AE) and states that the starting bid is
+  a decreasing function of name length; the coefficients live in
+  [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md) and in the node's own
+  `aens` module, which is where to settle it.
+- Whether the Ceres release changed the post-bid extension from the per-length timeouts above to
+  a flat 120 key blocks is unresolved. Search results reference both, and the two rules give very
+  different auction lengths for a four-character name. Check the Ceres section of the protocol
+  spec before relying on either.
+- Superhero's tooling has no bidding command at all. Whether the web app can bid on a short name,
+  or whether short names must be handled in a different æternity wallet, is not documented in
+  either repository.

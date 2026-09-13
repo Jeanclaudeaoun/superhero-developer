@@ -1,43 +1,262 @@
 ---
 title: "Registry & Poll"
-description: "The æternity governance poll contracts."
+description: "The æternity governance poll contracts: creating, listing, voting and delegating."
 ---
 
 # Registry & Poll
 
-> **Page brief** — Full reference for the two governance contracts.
->
-> `status: outline` · `depth: reference`
+These two contracts are the æternity network's own governance system, not Superhero's
+community DAOs. They are separate from `DAO.aes` and `DAOVote.aes` in almost every respect:
+polls are multiple-choice, votes are weighted off chain by AE balance rather than by locked
+tokens, and delegation exists.
 
-### Registry
+Superhero surfaces them at `https://superhero.com/voting`. The agent skill drives them with
+`superhero-governance.mjs`.
 
-| Entrypoint | Signature |
-| --- | --- |
-| `add_poll` | `(poll: Poll, is_listed: bool) => int` (stateful) |
-| `delegate` | `(delegatee: address)` (stateful) |
-| `revoke_delegation` | `()` (stateful) |
-| `polls` / `poll` | `() => polls` / `(poll_id: int) => poll_data` |
-| `delegations` / `delegatee` / `delegators` | Delegation reads |
-| `created_height` / `version` | Metadata |
+| Contract | Mainnet | Testnet | ACI |
+| --- | --- | --- | --- |
+| Registry | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` | `RegistryWithEventsACI.json` |
+| Poll | one per poll, deployed on creation | — | `PollACI.json`, `PollBytecode.json` |
 
-### Poll
+## Registry
 
-| Entrypoint | Signature |
-| --- | --- |
-| `init` | `(metadata, vote_options, close_height: option(int))` |
-| `vote` | `(option: int)` (stateful) |
-| `revoke_vote` | `()` (stateful) |
-| `title` / `metadata` / `close_height` / `votes` | Reads |
-| `has_voted` / `voted_option` / `is_author` / `is_closed` | Status |
-| `get_state` / `version` | Metadata |
+One deployed instance per network. It indexes polls and records delegations.
 
-## What this page still needs
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `() => Registry.state` | — |
+| `add_poll` | `(poll: Poll, is_listed: bool) => int` | stateful |
+| `delegate` | `(delegatee: address) => unit` | stateful |
+| `revoke_delegation` | `() => unit` | stateful |
+| `polls` | `() => Registry.polls` | — |
+| `poll` | `(poll_id: int) => Registry.poll_data` | — |
+| `delegations` | `() => Registry.delegations` | — |
+| `delegatee` | `(account: address) => option(address)` | — |
+| `delegators` | `(account: address) => Registry.delegations` | — |
+| `created_height` | `() => int` | — |
+| `version` | `() => int` | — |
 
-- Document the `metadata` and `vote_option` record shapes.
-- Document the events the registry emits (the ACI is named `RegistryWithEvents`).
-- Explain how stake weighting is derived off-chain from delegations and balances.
+### Registry types
 
-## Sources to mine
+```sophia
+record poll_data =
+  { poll         : Poll            // the poll contract address
+  , is_listed    : bool            // whether it appears in the default listing
+  , title        : string          // cached from the poll
+  , close_height : option(int) }   // cached from the poll
 
-- `superhero-agent-skill/contracts/RegistryWithEventsACI.json`
-- `superhero-agent-skill/contracts/PollACI.json`, `PollBytecode.json`
+type polls       = map(int, poll_data)
+type delegations = map(address, address)   // delegator -> delegatee
+
+record state =
+  { polls          : polls
+  , seq_id         : int
+  , delegations    : delegations
+  , created_height : int }
+```
+
+`poll_data` caches the title and close height so a listing UI can render without calling into
+every poll contract. `add_poll` returns the new `poll_id`, which is `seq_id` at the time of
+registration.
+
+`is_listed` is a soft flag, not access control. An unlisted poll is still on chain, still
+readable, and still votable — it simply does not appear in the default listing.
+
+### Registry events
+
+```sophia
+datatype event =
+    AddPoll(Poll, int)              // poll contract, poll id
+  | Delegation(address, address)    // delegator, delegatee
+  | RevokeDelegation(address)       // delegator
+```
+
+The ACI is named `RegistryWithEvents` precisely because there is an older event-free Registry
+build. If you are indexing, confirm the deployed contract emits these — a registry without
+them forces you back to polling `polls()`.
+
+## Poll
+
+A fresh `Poll` contract is deployed for every poll, then registered. Its address is the
+poll's identity; the registry's integer id is a convenience.
+
+| Entrypoint | Signature | Flags |
+| --- | --- | --- |
+| `init` | `(metadata: Poll.metadata, vote_options: Poll.vote_option, close_height: option(int)) => Poll.state` | — |
+| `vote` | `(option: int) => unit` | stateful |
+| `revoke_vote` | `() => unit` | stateful |
+| `title` | `() => string` | — |
+| `metadata` | `() => Poll.metadata` | — |
+| `close_height` | `() => option(int)` | — |
+| `votes` | `() => Poll.votes` | — |
+| `has_voted` | `(voter: address) => bool` | — |
+| `voted_option` | `(voter: address) => option(int)` | — |
+| `is_author` | `(author: address) => bool` | — |
+| `is_closed` | `() => bool` | — |
+| `version` | `() => int` | — |
+| `get_state` | `() => Poll.state` | — |
+
+### Poll types
+
+```sophia
+record metadata =
+  { title       : string
+  , description : string
+  , link        : string
+  , spec_ref    : option(hash) }   // optional hash of a specification document
+
+type vote_option = map(int, string)    // option index -> label
+type votes       = map(address, int)   // voter -> chosen option index
+
+record state =
+  { metadata      : metadata
+  , vote_options  : vote_option
+  , close_height  : option(int)
+  , create_height : int
+  , votes         : votes
+  , author        : address }
+```
+
+Two type names are misleading and worth reading twice.
+
+**`vote_option` is the whole option set, not one option.** It is
+`map(int, string)` — the index-to-label table for the entire poll. The `vote(option: int)`
+entrypoint takes an index into it. This is the opposite of `DAOVote`, where `vote_option` is a
+single `bool`.
+
+**`close_height` is `option(int)`.** `None` means the poll never closes — it stays open
+indefinitely. The agent skill maps a supplied close height of `0` to `undefined` (Sophia
+`None`) for exactly this reason.
+
+`spec_ref` is an `option(hash)` for pinning a specification document to the poll. The agent
+skill passes `undefined`, so in practice it is unused.
+
+### Poll events
+
+```sophia
+datatype event =
+    Vote(address, address, int)     // three args
+  | RevokeVote(address, address)    // two args
+```
+
+Note that these collide by name with `DAOVote`'s `Vote` and `RevokeVote` but have different
+argument counts and, being computed from the name, **the same middleware topic hash**. Any
+indexer covering both governance polls and community DAOs must filter by contract address
+before decoding, or it will mis-parse. See [Events](/contracts/events).
+
+## Creating a poll
+
+Poll creation is two transactions: deploy the poll from bytecode, then register it. The ACI
+alone is not enough — you need `PollBytecode.json` as well, which is why the agent skill
+vendors it.
+
+```javascript
+import { AeSdk, Node, MemoryAccount, Contract } from '@aeternity/aepp-sdk';
+import fs from 'fs';
+
+const pollAci = JSON.parse(fs.readFileSync('./contracts/PollACI.json', 'utf8'));
+const { bytecode } = JSON.parse(fs.readFileSync('./contracts/PollBytecode.json', 'utf8'));
+
+// 1. Deploy the poll.
+const poll = await Contract.initialize({
+  aci: pollAci,
+  bytecode,
+  onAccount: aeSdk,
+  onNode: aeSdk.api,
+});
+
+await poll.init(
+  {
+    title: 'Should we do the thing?',
+    description: 'A description of the thing, at most 300 characters.',
+    link: 'https://forum.example.com/thread/1',
+    spec_ref: undefined,                 // None
+  },
+  new Map([[0, 'Yes'], [1, 'No'], [2, 'Abstain']]),
+  undefined,                             // None = never closes
+);
+
+const pollAddress = poll.$options.address;
+
+// 2. Register it so it shows up in the listing.
+const registry = await Contract.initialize({
+  aci: JSON.parse(fs.readFileSync('./contracts/RegistryWithEventsACI.json', 'utf8')),
+  address: 'ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq',
+  onAccount: aeSdk,
+  onNode: aeSdk.api,
+});
+
+const pollId = await registry.add_poll(pollAddress, true).then((r) => r.decodedResult);
+```
+
+`vote_options` must be a `Map`, keyed by integer. Options are indexed from zero and the index
+is what `vote()` takes.
+
+The limits the agent skill enforces are **client-side validation**, not contract constraints:
+title at most 50 characters, description at most 300, link must start with `http://` or
+`https://`, and at least two options. The contract itself imposes none of these.
+
+A non-`None` close height must be in the future — the skill checks it against the top block
+height before deploying, because a poll deployed already-closed is unusable and unrecoverable.
+
+## Voting
+
+```javascript
+await poll.vote(1);           // vote for option index 1
+await poll.revoke_vote();     // retract
+```
+
+There is no stake, no allowance and no lock. A vote is a single map entry keyed by your
+address, and `revoke_vote` deletes it. Voting on a poll costs only gas.
+
+## Delegation and stake weighting
+
+The registry records delegation as a plain `map(address, address)`. `delegate(delegatee)`
+records you as delegating to that address; `revoke_delegation()` removes the entry.
+`delegatee(account)` reads one direction, `delegators(account)` the other.
+
+**The contracts do not compute weighted results.** This is the most important thing to
+understand about this system, and it surprises people:
+
+- `Poll.votes` records *which option* each address chose. It does not record an amount.
+- `Registry.delegations` records *who delegated to whom*. It does not record an amount either.
+- Neither contract reads any account's AE balance.
+
+The weighted outcome is computed **off chain** by the governance backend
+(`https://governance-server-mainnet.prd.service.aepps.com/` on mainnet,
+`https://governance-server-testnet.prd.service.aepps.com/` on testnet, per
+`superhero/src/config.ts`). It reads the raw votes and delegations from chain, looks up each
+participating account's AE balance at the relevant height, follows delegation chains, and
+produces the tally that the UI shows.
+
+Two consequences for anyone integrating:
+
+1. **A tally you compute yourself from `Poll.votes()` is unweighted** — it counts addresses,
+   not stake, and it ignores delegation entirely. It will not match what superhero.com shows.
+2. **The governance backend is a trusted component** for the result, even though the votes
+   themselves are trustless and independently verifiable. Anyone can recompute the tally from
+   chain data, but the contract does not do it for you.
+
+## Open questions
+
+- **At which block height are balances snapshotted for weighting?** Close height, vote height,
+  or current height would each give a different result, and none of the three is documented in
+  either repository. For an open-ended poll with `close_height = None` the question is sharper
+  still. Read the governance backend's source, or compare a live tally against balances at
+  several heights.
+- **How delegation cycles and chains are resolved.** The registry stores a flat map, so
+  `A -> B -> C` chains and `A -> B -> A` cycles are both expressible on chain. The resolution
+  rule lives in the backend.
+- **Whether the deployed mainnet registry is the `RegistryWithEvents` build.** The vendored
+  ACI is named for it, but the deployed bytecode was not checked.
+- **Whether `add_poll` is permissioned.** The ACI shows no gating, implying anyone may register
+  any poll contract, including one they did not deploy.
+
+## Read more
+
+- [Polls](/governance/polls) — the same system for a non-developer audience
+- [Create a poll](/governance/create-a-poll) — a step-by-step walkthrough
+- [Delegation](/governance/delegation) — what delegating actually does to your weight
+- [DAOVote](/contracts/dao-vote) — the community DAO voting contract, which works quite differently
+- [Events](/contracts/events) — why the `Vote` name collision matters for indexers
+- [Vote on superhero.com](https://superhero.com/voting) — the live governance interface
