@@ -1,40 +1,150 @@
 ---
 title: "Collections & Naming Rules"
-description: "Why your token name was rejected, and which collection it belongs to."
+description: "Why your token name was rejected, which collection it belongs to, and how the app works that out."
 ---
 
 # Collections & Naming Rules
 
-> **Page brief** — Demystify collections — a concept that is invisible in the UI until it blocks you.
->
-> `status: outline` · `depth: deep`
+A **collection** is a namespace inside the community factory. It owns a character set, a maximum name
+length, and a registry of the token sales created inside it. Names are unique per collection, not
+globally, and you never pick a collection explicitly in the app — it is derived from the characters
+you type. This page explains the derivation, so that "Unsupported" stops being a mystery.
 
-A **collection** is a namespace inside the community factory. Each collection defines:
+## What a collection defines
 
-- `allowed_name_length(collection_name)` — the maximum name length it accepts
-- `allowed_name_chars(collection_name)` — the whitelisted character classes
-
-The factory enforces name uniqueness within a collection and requires the token name to match
-its symbol. Because every collection allows `-`, a name like `A-B` can match several
-collections at once, which is why the app derives the target collection from the typed name
-rather than asking up front.
-
-| Factory entrypoint | Purpose |
+| Factory entrypoint | Returns |
 | --- | --- |
-| `create_collection(collection_name, allowed_name_length, allowed_name_chars)` | Create a namespace |
-| `token_sale_registry(collection_name)` | The registry of sales in a collection |
+| `allowed_name_length(collection_name)` | Maximum name length the collection accepts |
+| `allowed_name_chars(collection_name)` | The whitelisted character classes |
+| `token_sale_registry(collection_name)` | Map of name to sale contract for everything in the collection |
 | `has_community(collection_name, name)` | Availability check |
 | `get_token_sale(collection_name, name)` | Resolve a name to its sale contract |
 | `token_contract(collection_name, name)` | Resolve a name to its AEX-9 contract |
+| `create_collection(collection_name, allowed_name_length, allowed_name_chars)` | Create a namespace. Payable |
 
-## What this page still needs
+The registry enforces two rules beyond the character set: a community's name must be unique within
+its collection, and the token's name must match its symbol. There is one name, and it is the symbol.
 
-- List the collections that actually exist on mainnet today, with their rules.
-- Explain the `WORDS-ak_...` collection naming convention seen in the CLI.
-- Document who can create a collection and what it costs.
+## The collection id
 
-## Sources to mine
+On-chain a collection is identified by a compound string, not a bare name:
 
-- `superhero-agent-skill/contracts/CommunityFactory.aci.json`
-- `superhero/src/utils/collectionNameChars.ts`
-- `GET /api/factory` — the live factory schema
+```text
+<NAME>-ak_<deployer address>
+
+WORDS-ak_2X6…      the English collection
+```
+
+Everything before `-ak_` is the collection's own name; the address is the account that created it.
+The UI splits on `-ak_` to get the display name and then applies a label override, so what you see on
+a token page is not always the on-chain name:
+
+| On-chain name | Displayed as |
+| --- | --- |
+| `WORDS` | English |
+| `CHINESE` | Chinese |
+| `RUSSIAN` | Russian |
+| `ARABIC` | Arabic |
+
+Any collection not in that override map is displayed under its own name. `WORDS` is the default the
+rest of the app assumes: it is what `preferredCollection` falls back to, and it is the collection
+the agent skill's `create` command always uses.
+
+The API returns the resolved collection on a token as `collection` (the full id) and
+`collection_info`, which carries `id`, `name`, `description` and `allowed_name_length`.
+
+## How character rules are expressed
+
+`allowed_name_chars` is a list of Sophia variants, each either a set of single code points or an
+inclusive code point range:
+
+```text
+allowedNameChars = SingleChar(int) | CharRangeFromTo(int, int)
+```
+
+The English collection is three rules:
+
+```text
+[ SingleChar([45]), CharRangeFromTo(48, 57), CharRangeFromTo(65, 90) ]
+
+  45        =  "-"
+  48 to 57  =  "0" to "9"
+  65 to 90  =  "A" to "Z"
+```
+
+The app turns each rule set into the body of a regular expression character class — `\-0-9A-Z` for
+the English collection — anchored as a whole-string match with the `u` flag so that astral code
+points count as one character rather than as a surrogate pair. A name is valid for a collection when
+every one of its characters is in that class.
+
+Note what the English rule set does *not* include: lowercase letters, spaces, underscores, dots and
+emoji are all outside it. That is why the create form uppercases as you type and rewrites spaces as
+dashes — it is turning near-misses into valid names rather than rejecting them.
+
+## How the app picks a collection for you
+
+Because every collection allows `-`, a name such as `A-B` is valid in all of them at once. The app
+resolves this in three steps, re-derived on every keystroke rather than stored:
+
+1. **Detect.** `detectMatchingCollections(name, collections)` returns every collection whose character rules accept the name, in schema order.
+2. **Prefer.** If more than one matches, `preferredCollection` picks the English one, or the first in the list if English is absent.
+3. **Honour an explicit choice.** If you picked a collection from the chip's dropdown and it still accepts the current name, that choice wins; otherwise the preference takes over again.
+
+If the detected list is **empty**, the name goes to no collection: the form shows an "Unsupported"
+badge and disables submit. That gate exists because a name no collection accepts would otherwise burn
+gas and revert on-chain.
+
+The dropdown only appears when the name genuinely fits more than one collection. If your name is
+unambiguous — `HELLO` is Latin-only, `ПРИВЕТ` is Cyrillic-only — there is nothing to choose and the
+chip is just a label.
+
+## Name length
+
+The cap comes from the collection, not from the app: `allowed_name_length(collection_name)`, exposed
+on the API as `collection_info.allowed_name_length`. The create form hardcodes a 20-character
+`maxLength` on the input and shows a counter against 20, which matches the English collection's
+published length. A collection with a different limit would not be reflected in that counter.
+
+## Creating a collection
+
+`create_collection(collection_name, allowed_name_length, allowed_name_chars)` is a payable entrypoint
+on the factory and emits `CreateCollection(string, address)`. Calling it is what mints a new
+namespace such as a new language.
+
+Nothing in the ACI restricts who may call it, and no price is stated anywhere in the repositories —
+see Open questions. The web app has no UI for it; the agent skill has no command for it. In practice
+collections are created by the platform, and `WORDS` is the one virtually every token lives in.
+
+## Checking a name yourself
+
+From the CLI, against the live factory:
+
+```bash
+node scripts/superhero-token-create.mjs check "MYTOKEN"
+```
+
+Or directly, if you want to test against a specific collection rather than the default:
+
+```js
+const exists = (await factory.has_community(collectionId, name)).decodedResult;
+const maxLen = (await factory.allowed_name_length(collectionId)).decodedResult;
+const chars = (await factory.allowed_name_chars(collectionId)).decodedResult;
+```
+
+`has_community` is the authoritative check. The create form's live tick uses a search against the
+token index instead, which is faster but can lag a very recent creation by a few minutes.
+
+## Read more
+
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — where the collection chip and the availability tick appear
+- [Create a Token (CLI)](/tokens/create-from-cli) — how the script resolves a collection, and how to override it
+- [Community Tokens](/tokens/overview) — what the name you are choosing is actually attached to
+- [Community factory contract](/contracts/community-factory) — the registry and collection entrypoints in full
+- [Factory and contracts API](/api/factory-and-contracts) — `GET /api/factory`, the schema the app reads collections from
+- [Create a token on superhero.com](https://superhero.com/trends/create) — the form that performs this derivation live
+- [Trending tokens](https://superhero.com/trends/tokens) — filterable by collection, to see what exists in each
+
+## Open questions
+
+- **The live set of collections on mainnet is unverified.** `WORDS` (English), `CHINESE`, `RUSSIAN` and `ARABIC` appear in the app's label-override map, which is strong evidence they exist, but the map is a display convenience and not a registry. `GET /api/factory` returns the authoritative `collections` object with each id, name, description and `allowed_name_length`; it was not reachable from the authoring environment.
+- **Who may call `create_collection`, and what it costs.** The entrypoint is payable, which implies a fee, but no amount is documented in the app, the whitepaper or the agent skill, and the ACI does not express access control. Reading the deployed `CommunityFactory.aes` source, or inspecting a past `CreateCollection` event and its transaction value on aeScan, would answer both.

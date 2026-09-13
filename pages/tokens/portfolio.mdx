@@ -1,41 +1,147 @@
 ---
 title: "Portfolio & PnL"
-description: "Track what you hold, what it is worth, and what you have made or lost."
+description: "Track what you hold, what it is actually worth on exit, and what you have made or lost."
 ---
 
 # Portfolio & PnL
 
-> **Page brief** — Document holdings, portfolio snapshots and PnL — including the exact field names, since agents parse them.
->
-> `status: outline` · `depth: deep`
+Superhero keeps two separate views of a position: the **holdings** list, which is your current
+balances priced at spot, and the **portfolio history**, which is a series of valuation snapshots with
+profit and loss attached. Both are addressable for any account, not just your own. This page
+documents the exact field names — agents parse them — and explains why a position's quoted value is
+systematically higher than what you would get for selling it.
+
+## From the command line
 
 ```bash
 node scripts/superhero-portfolio.mjs holdings          # your positions
 node scripts/superhero-portfolio.mjs holdings ak_...   # anyone's positions
+node scripts/superhero-portfolio.mjs holdings ak_... 20 2   # limit 20, page 2
 node scripts/superhero-portfolio.mjs summary           # holdings + latest snapshot
 node scripts/superhero-portfolio.mjs history           # value over time
 ```
 
+`holdings` and `summary` read the public API and need no signing key for another account's address —
+but the script derives *your* address from `AE_PRIVATE_KEY`, so the no-argument forms require it to
+be set.
+
+## Holdings
+
+Backed by `GET /api/accounts/{address}/tokens`, with `includes=token` so each row carries the full
+token record.
+
+| Field in the script's output | Source | Meaning |
+| --- | --- | --- |
+| `token_name` | `token.name` | The token's name, which is also its symbol |
+| `token_symbol` | `token.symbol` | Same string in practice |
+| `sale_address` | `token.sale_address` | The bonding-curve contract — the handle for buy and sell |
+| `token_address` | `aex9_address` or `token.address` | The AEX-9 contract, for allowances and transfers |
+| `balance` | `balance` | Tokens held |
+| `buy_price_ae` | `token.price` | Current spot **buy** price, per token |
+| `sell_price_ae` | `token.sell_price` | Current spot **sell** price, per token — 0.5% below buy |
+| `trending_score` | `token.trending_score` | Momentum signal for that token |
+
+Value a position at `sell_price_ae`, never at `buy_price_ae`. The buy price is what the next person
+pays to enter; the sell price is the side you are on.
+
+The agent skill's portfolio guide documents a `balance_ae_value` field — "current AE value of that
+position" — which the current script does not emit. Compute it yourself from `balance` and
+`sell_price_ae`, with the caveat in the next section.
+
+## Portfolio history
+
+Backed by `GET /api/accounts/{address}/portfolio/history`, which accepts `startDate`, `endDate`,
+`interval`, `convertTo` and `include`. Pass `include=pnl-range` to get the PnL block.
+
+Each snapshot:
+
 | Field | Meaning |
 | --- | --- |
-| `sale_address` | The bonding-curve contract — the handle for buy/sell |
-| `balance` | Tokens held |
-| `balance_ae_value` | Current AE value of the position |
-| `trending_score` | Momentum signal for that token |
-| `total_value_ae` / `total_value_usd` | Portfolio value at a snapshot |
+| `timestamp` | When the snapshot was taken |
+| `total_value_ae` | Everything the account holds, in AE |
 | `ae_balance` | Liquid AE |
-| `tokens_value_ae` | Value locked in token positions |
-| `total_pnl` | Profit/loss since first purchase |
-| `tokens_pnl` | Per-token PnL breakdown |
+| `tokens_value_ae` | Value held in token positions |
+| `total_value_usd` | The same total, converted |
+| `total_pnl` | Present when `include=pnl-range`; see below |
 
-## What this page still needs
+And inside `total_pnl`:
 
-- Explain how PnL is computed — cost basis method, and whether fees are included.
-- Document snapshot frequency for `/api/accounts/{address}/portfolio/history`.
-- Explain why a position's AE value can fall purely from other people selling.
+| Field | Meaning |
+| --- | --- |
+| `percentage` | Return over the range |
+| `invested` | Amount put in, as `ae` and `usd` |
+| `current_value` | Present value, as `ae` and `usd` |
+| `gain` | Difference, as `ae` and `usd` |
+| `range` | The `from` and `to` bounds the figures cover |
 
-## Sources to mine
+The skill's guide also documents a `tokens_pnl` per-token breakdown. It is not listed in the app's
+API inventory, so request it and check before depending on it.
 
-- `superhero-agent-skill/guides/portfolio.md`
-- `superhero-agent-skill/scripts/superhero-portfolio.mjs`
-- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.18
+The `history` command prints the newest and oldest snapshots, the count, the full array, and a
+period PnL it computes itself as `latest.total_value_ae − oldest.total_value_ae`. That is a
+difference in **valuation**, not a realised result: it moves when prices move, even if you never
+traded.
+
+## Your position is worth less than it says
+
+This is the single most important thing on this page. A holdings row prices your balance at the
+current spot sell price — one number times another. But selling is an integral: as your tokens burn,
+the supply falls and every subsequent token in your own sell fetches less than the one before it.
+
+```text
+quoted value  =  balance × sell_price          ← a rectangle
+actual exit   =  0.995 × ∫ from (S − balance) to S of buy(x) dx
+```
+
+For a token with 10,000,000 tokens in supply:
+
+| Your balance | Share of supply | Quoted value (AE) | Actual sell return (AE) | Shortfall |
+| --- | --- | --- | --- | --- |
+| 100,000 | 1% | 10.47 | 10.42 | 0.5% |
+| 1,000,000 | 10% | 104.74 | 99.26 | 5.2% |
+| 5,000,000 | 50% | 523.72 | 388.53 | 25.8% |
+
+A small position is quoted accurately. A position that is a meaningful fraction of the supply is
+not — and the discrepancy grows with your share, which is exactly the case where it matters most. If
+you hold half a token's supply, your portfolio page is overstating your exit by a quarter.
+
+To compute the honest figure, call `sell_return(balance)` on the sale contract. That is the number
+the curve will actually pay, and it costs nothing to ask. See
+[Buying & Selling](/tokens/buying-and-selling).
+
+## Why a position can lose value without you doing anything
+
+Three distinct mechanisms, worth separating because they call for different responses:
+
+1. **Other people sell.** The supply falls, the curve slides down, and every remaining holder's position is repriced lower. Nothing about your holding changed; the price function moved beneath it.
+2. **Other people buy.** Your position's AE value rises — but your *share* of the supply falls, because new tokens were minted. On a governance stake, that dilution matters even while the value line goes up.
+3. **The AE price moves.** `total_value_usd` can fall while `total_value_ae` is flat, or vice versa. Decide which unit you are actually measuring in and be consistent.
+
+There is no mechanism by which a position gains or loses value from time alone. There is no staking
+yield, no rebasing and no inflation schedule.
+
+## Realised versus unrealised
+
+Nothing in the portfolio view is realised until you sell, and the 1% spread means a freshly opened
+position starts about 1% underwater. The public
+[trading leaderboard](https://superhero.com/trends/leaderboard) takes a different cut: it ranks
+accounts by `pnl_usd`, `roi_pct`, `aum_usd` and `mdd_pct` (maximum drawdown) alongside `buy_count`,
+`sell_count`, `created_tokens_count` and `owned_trends_count`. Those are the numbers to compare
+against if you want to know how a strategy is doing relative to other people rather than relative to
+its own entry.
+
+## Read more
+
+- [Buying & Selling](/tokens/buying-and-selling) — `sell_return` and the allowance step, for turning a position back into AE
+- [Bonding Curves](/tokens/bonding-curve) — the integral behind the shortfall table above
+- [Transaction History](/tokens/transactions) — your actual fills, which is where a cost basis has to come from
+- [Reading a Token Page](/tokens/token-page) — the same caveat applied to a token's market cap
+- [Accounts API](/api/accounts) — the endpoints behind both views, including the leaderboard
+- [Trading leaderboard on superhero.com](https://superhero.com/trends/leaderboard) — live realised PnL, ROI and drawdown by account
+- [Trending tokens](https://superhero.com/trends/tokens) — where the positions come from
+
+## Open questions
+
+- **How is `total_pnl` computed?** Specifically: the cost-basis method (FIFO, average cost, or something else), whether the 0.5% affiliation fee and gas are counted as part of `invested`, and how a partial sell is attributed. None of this is documented in the app, the API inventory or the agent skill.
+- **How often are portfolio snapshots taken?** `GET /api/accounts/{address}/portfolio/history` accepts an `interval` parameter, but the underlying snapshot frequency — and therefore the finest interval that returns real rather than interpolated data — is not stated.
+- **Does `tokens_pnl` exist on the current API?** The agent skill's portfolio guide documents it; the app's endpoint inventory does not list it. One request with `include=pnl-range` would settle it.

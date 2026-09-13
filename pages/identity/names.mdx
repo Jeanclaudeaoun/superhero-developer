@@ -5,32 +5,157 @@ description: "The three kinds of public name, their trust levels, and what happe
 
 # Names: Custom, Chain and X
 
-> **Page brief** — Explain the name hierarchy precisely — this is subtle and currently documented nowhere but the whitepaper.
->
-> `status: outline` · `depth: deep`
+`ProfileRegistry.aes` supports three categories of public name with different trust levels and
+different registration mechanisms. They are not equal: a verified name can take a custom name
+away from the account holding it, and the displaced name is silently rewritten. If you are
+building anything that displays a Superhero handle, read this page before you cache one.
 
-The registry supports three categories of public name with different trust levels:
+## The three types
 
-| Type | Entrypoint | Trust | Notes |
+| Type | Entrypoint | Backed by | Priority |
 | --- | --- | --- | --- |
-| Custom name | `set_custom_name` | Unverified | Anyone can claim an available name. Lowest priority — can be preempted. |
-| Chain name | `set_chain_name` | Verified | Backed by an AENS `.chain` name plus its expiration. |
-| X name | `set_x_name_with_attestation` | Verified | Backed by a signed backend attestation of an X handle. |
+| Custom name | `set_custom_name` | Nothing. First claimant wins. | Lowest — can be preempted |
+| X name | `set_x_name_with_attestation` | A backend-signed attestation of an X handle | Middle |
+| Chain name | `set_chain_name` | An AENS `.chain` name plus its expiration timestamp | Highest |
 
-**Conflict resolution.** A verified name (Chain or X) can forcibly displace a custom name
-occupying the same normalized key. The displaced custom name is automatically renamed with a
-random suffix and a `CustomNameAutoRenamed` event is emitted. Verified users always get
-priority access to their canonical name; displaced users keep a functional, modified name.
+Each type is cleared independently by its owner — `clear_custom_name`, `clear_chain_name`,
+`clear_x_name` — which releases that name for anyone else to register.
 
-**Display source.** `set_display_source` picks which of `Custom`, `Chain` or `X` frontends
-should render as your primary public identity.
+## Resolution precedence
 
-## What this page still needs
+`resolve_public_name` maps a name string to an address in a fixed order:
 
-- Document name normalization rules (case, unicode, length).
-- Explain what happens when a chain name expires while it is the display source.
-- Add worked examples of each `set_*` call.
+```text
+chain name  →  X name  →  custom name
+```
 
-## Sources to mine
+Read it as a trust ladder. An on-chain AENS claim is the strongest evidence available on
+æternity, so chain names resolve first. An X attestation proves a backend signer observed a
+valid OAuth session, so X names resolve next. A custom name proves only that somebody typed it
+in before anyone else, so it resolves last.
 
-- `superhero/src/views/Whitepaper.tsx` — Name Types and Registration, Display Source
+The practical consequence: if `alice` exists as both a custom name owned by one address and a
+chain name owned by another, `resolve_public_name("alice")` returns the chain name owner. The
+custom-name owner is not merely outranked in resolution — they lose the name outright, as
+below.
+
+## Conflict resolution and the auto-rename
+
+This is the part that is documented nowhere except the whitepaper, and the part that surprises
+people.
+
+When a **verified** name (Chain or X) is registered with a normalized key that collides with an
+existing **custom** name owned by a different user, the contract resolves the conflict in
+favour of the verified name, automatically, in the same transaction:
+
+1. The custom-name owner's profile is updated with an auto-generated alternative: the original
+   name base plus a random four-digit suffix. The whitepaper's own example is `alice` becoming
+   `alice_4827`.
+2. A `CustomNameAutoRenamed(address, string)` event is emitted carrying both the original and
+   the new name, so frontends can notify the affected user.
+3. If the generated suffix itself collides with an existing name, the contract retries with
+   different entropy until it finds a unique candidate.
+
+The stated intent is that verified identities always have priority access to their canonical
+name, while displaced users keep a functional — if modified — custom name. Nobody is left
+nameless, but nobody is warned in advance either.
+
+### What this means in practice
+
+- **A custom name is a squat, not a reservation.** Claiming `vitalik` as a custom name buys you
+  nothing the moment someone registers `vitalik.chain` or verifies the matching X handle.
+- **A displayed custom name can change without any action by its owner.** Any cached mapping
+  from name to address can go stale between two blocks. Cache the address, not the name.
+- **The rename is one-directional.** Releasing the verified name later does not restore the
+  original custom name to its previous owner; it just makes the name available again.
+- **Verified names never displace each other this way.** The documented conflict path is
+  verified-over-custom only. What happens when a chain name and an X name normalize to the same
+  key is an open question below.
+
+## Display source
+
+Holding several names does not mean showing several names. `set_display_source` stores a
+preference of `Custom`, `Chain` or `X` on-chain, and emits `DisplaySourceUpdated`. Frontends
+and indexers read it to decide which name to render as the account's primary public identity.
+Over the REST API the same value appears lowercased as `display_source`, one of `custom`,
+`chain` or `x`.
+
+The preference is a hint about presentation, not about resolution. `resolve_public_name` still
+walks the chain-then-X-then-custom ladder regardless of what any individual account prefers.
+
+## What the app actually displays
+
+The web client does not read the registry directly for the profile header. It derives the name
+shown on an account page in this order, taking the first non-empty value:
+
+```text
+links.prefered_aens_name   (the preferred AENS name the user linked)
+public_name                (the name the API resolved)
+chainName                  (the AENS name looked up for the address)
+formatAddress(address)     (a shortened ak_… fallback)
+```
+
+A separate verified badge is rendered when an X link resolves — that is the only "verified"
+marker in the profile header, and it means an X link exists, nothing more.
+
+## Normalization
+
+The client normalizes names by trimming and lowercasing before comparison, and strips a
+trailing `.chain` when it is handling a chain-name label. Those are the rules the app applies
+when deciding whether your input differs from what is already stored.
+
+```text
+normalizeName(value)            = value.trim().toLowerCase()
+normalizeChainNameLabel(value)  = normalizeName(value) without a trailing ".chain"
+```
+
+Sponsored `.chain` claims add validation of their own: letters, numbers and hyphens, no leading
+or trailing hyphen, and more than 12 characters before the suffix. See
+[Chain Names (AENS)](/identity/chain-names).
+
+## Worked examples
+
+**Claiming a custom name.** Call `set_custom_name` with an available name. Your address is
+recorded as the owner and `CustomNameUpdated` fires. No fee beyond gas, no verification, no
+guarantee it survives.
+
+**Registering a chain name.** Claim the AENS name first — the registry does not claim it for
+you — then call `set_chain_name` with the name and its expiration timestamp. `ChainNameUpdated`
+fires; if a custom name collided, `CustomNameAutoRenamed` fires for the displaced account in
+the same transaction.
+
+**Verifying an X handle.** Complete the OAuth plus attestation flow, then submit the signed
+attestation to `set_x_name_with_attestation`. `XNameUpdated` fires, the attestation nonce is
+recorded, and — again — a colliding custom name is renamed out of the way.
+
+**Switching what people see.** Call `set_display_source` with `Chain` to render your `.chain`
+name even though you also hold a custom and an X name.
+
+## Open questions
+
+- **What is the contract's normalization exactly?** The whitepaper says conflicts are detected
+  on a "normalized key" without defining it. Case folding, Unicode handling, and any length
+  cap are unverified; the client-side `normalizeName` is a lowercase-and-trim and may not match
+  the contract.
+- **Chain name versus X name collisions.** Both are verified. The documented auto-rename path
+  covers only verified-displacing-custom. Whether a later chain-name registration can take a
+  key already held as an X name, or whether the second registration simply fails, is not
+  stated.
+- **What happens when a chain name expires while it is the display source?** The registry
+  stores the expiry the caller supplied, but nothing in the available sources describes an
+  expiry sweep, a fallback to another source, or who pays to keep the record fresh. The
+  profile aggregate does expose `chain_expires_at`, which suggests clients are expected to
+  handle this themselves.
+- **Is there a length or character limit on custom names?** None appears in the whitepaper or
+  the client.
+
+## Read more
+
+- [The ProfileRegistry contract](/identity/profile-registry) — the entrypoints and events
+  referenced throughout this page.
+- [Chain Names (AENS)](/identity/chain-names) — how to actually get the `.chain` name that
+  outranks everything else.
+- [Verifying Your X Account](/identity/x-verification) — the attestation behind an X name.
+- [Profiles & Accounts](/identity/profiles) — where the resolved name ends up on screen.
+- [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) —
+  the protocol-level name system a chain name is anchored to.

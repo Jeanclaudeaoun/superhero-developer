@@ -5,18 +5,121 @@ description: "How SuperheroID maps onto the W3C decentralized identifier specifi
 
 # DIDs and the W3C Standard
 
-> **Page brief** — For an audience that already knows DIDs: the method, the document shape, resolution, and verification.
->
-> `status: outline` · `depth: standard`
+Superhero markets SuperheroID as "following the W3C standard for decentralized identifiers".
+This page is for readers who already know DID Core and want to know exactly how far that claim
+goes. The short version: the substance of the model lines up well — a self-controlled
+identifier, cryptographic verification material, and independently checkable assertions — but
+**no DID method name, DID syntax, or DID document is defined anywhere in the Superhero
+repositories**. Take the claim as a statement of design intent, not as a conformance claim you
+can test.
 
-## What this page still needs
+## What DID Core requires
 
-- State the DID method name and syntax used.
-- Show a full DID document with verification methods and service endpoints.
-- Explain resolution: who resolves, from what source, and how to verify without trusting Superhero.
-- Compare with `did:key` / `did:web` for readers coming from other ecosystems.
+Per [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did/), a DID is a URI that
+associates a DID subject with a DID document. The document expresses cryptographic material,
+verification methods and services, giving a DID controller the means to prove control. A DID is
+resolvable through a **DID method**: a named scheme, registered in the
+[DID Specification Registries](https://www.w3.org/TR/2024/NOTE-did-spec-registries-20240516/),
+that defines the identifier syntax and the create, read, update and deactivate operations.
 
-## Sources to mine
+Three things are therefore load-bearing for any compliance claim:
 
-- `superhero/src/views/Whitepaper.tsx` — Superhero Onchain ID
-- W3C DID Core specification
+1. A method name, giving identifiers of the form `did:` plus the method name plus a
+   method-specific identifier.
+2. A resolution procedure that turns such an identifier into a DID document.
+3. A DID document with verification methods, and optionally services and `alsoKnownAs`.
+
+## What Superhero actually has
+
+| DID Core concept | Superhero equivalent | Status |
+| --- | --- | --- |
+| DID subject and controller | The æternity account, an `ak_…` address | Present |
+| Verification method | The Ed25519 public key the address encodes; signatures verified on-chain with `Crypto.verify_sig` | Present |
+| Authentication | Wallet signed messages, using the æternity signed-message prefix | Present |
+| Assertion / credential | The X attestation signed by the registry's backend signer | Present, but single-issuer |
+| `alsoKnownAs` | The custom, chain and X names in `ProfileRegistry.aes` | Present in substance |
+| Service endpoint | The Nostr key used for chat; the linked website | Present in substance |
+| Verifiable data registry | `ProfileRegistry.aes` state plus AENS | Present |
+| DID method name | — | **Not defined anywhere** |
+| DID syntax | — | **Not defined anywhere** |
+| DID document | — | **Not produced by any endpoint** |
+| DID resolver | — | **None found** |
+
+Every row marked present is real and checkable. Every row marked missing is missing: grepping
+the web app and the agent skill for `did:`, `DID`, `W3C` or "decentralized identifier" turns up
+the landing-page copy and nothing else. `GET /api/profile/{address}` returns a plain profile
+aggregate, not a DID document, and there is no `.well-known` DID route in the server.
+
+## An illustrative mapping
+
+The following is **illustrative only**. It is not a resolvable document, not a registered
+method, and not produced by any Superhero surface. It exists to show what the existing state
+would correspond to if somebody did define a method.
+
+```text
+Illustrative — NOT a real Superhero DID document.
+
+id                  <- the ak_… account address
+verificationMethod  <- Ed25519 public key decoded from the ak_… address
+authentication      <- that key, used via the aeternity signed-message scheme
+alsoKnownAs         <- chain name, X handle, custom name from ProfileRegistry state
+service             <- Nostr pubkey for chat; linked website
+```
+
+If you need a DID today for interoperability with an external system, the honest options are to
+derive a `did:key` from the account's Ed25519 key — which is deterministic and needs no
+registry — or to publish a `did:web` document yourself. Neither is what Superhero does.
+
+## Verifying a SuperheroID without a resolver
+
+The absence of a DID method does not stop independent verification; it just means you do the
+resolution yourself. In practice:
+
+1. **Prove control of the address.** Ask for a signed message and verify it against the
+   `ak_…` public key using the æternity signed-message construction. This is exactly what the
+   app's own address-link flows do before submitting anything.
+2. **Check a chain name.** Resolve the `.chain` name through AENS on any node or middleware and
+   compare its `account_pubkey` pointer to the address. This needs no Superhero infrastructure
+   at all.
+3. **Check an X handle.** Read the registry state and verify the stored attestation against the
+   backend signer's key. This is a single-issuer trust anchor, not a decentralized one — it is
+   the weakest link in the model.
+4. **Check authorship of content.** A post's author is the address that signed the transaction,
+   recorded by the `Tipping` contract; it does not depend on the registry at all.
+
+## Where the model is genuinely strong, and where it is not
+
+Strong: the identifier is a key you hold, there is no account to be suspended, name ownership
+and the used-nonce set are consensus state, and every assertion carries a signature that a
+third party can check without asking Superhero for permission.
+
+Weak, relative to DID Core: there is no method, so nothing interoperates with a DID resolver;
+the X attestation has exactly one issuer, so that class of claim is federated rather than
+decentralized; and there is no documented key-rotation or deactivation story for the identifier
+itself — losing the seed loses the identity, with no controller-change operation.
+
+## Open questions
+
+- **Is there a DID method name?** No `did:` string, method specification, or resolver appears
+  in the Superhero web app or the agent skill. To settle it, check the contracts repository
+  where `ProfileRegistry.aes` lives, the `superhero-api` backend, or ask whether a method is
+  registered in the DID Specification Registries.
+- **Is a DID document served anywhere?** No endpoint in the REST inventory returns one, and the
+  server defines no `.well-known` route for it.
+- **What does "W3C standard compliant" mean here operationally?** Until a method exists, the
+  claim cannot be tested against the DID Core conformance criteria. Anyone relying on it for an
+  integration should ask for the method specification first.
+
+## Read more
+
+- [SuperheroID](/identity/superhero-id) — the product-level description and what it links.
+- [The ProfileRegistry contract](/identity/profile-registry) — the verifiable data registry
+  behind the model.
+- [Verifying Your X Account](/identity/x-verification) — the one signed assertion in the system,
+  and its single issuer.
+- [Accounts and keys](/aeternity/accounts-and-keys) — where the Ed25519 key behind an `ak_`
+  address comes from.
+- [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did/) — the normative
+  specification the claim refers to.
+- [DID Specification Registries](https://www.w3.org/TR/2024/NOTE-did-spec-registries-20240516/) —
+  where a Superhero method would have to be registered to be discoverable.

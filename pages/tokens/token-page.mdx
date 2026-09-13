@@ -1,31 +1,152 @@
 ---
 title: "Reading a Token Page"
-description: "Market cap, charts, holders and transactions — what each panel actually tells you."
+description: "Market cap, charts, holders and transactions — what each panel actually tells you, and what it does not."
 ---
 
 # Reading a Token Page
 
-> **Page brief** — Teach a reader to evaluate a token from its page rather than from its price alone.
->
-> `status: outline` · `depth: standard`
+A token page at `/trends/tokens/NAME` puts five panels in front of you, and only two of them tell you
+anything about whether the token is worth buying. This page walks through each one, defines market
+cap precisely for a bonding-curve token — it is not what it looks like — and gives heuristics for
+reading the holders and transactions tabs.
 
-Price and market cap are displayed in AE. Trending defaults to Market Cap so larger
-communities surface first. Token pages include candlestick charts, recent transactions and
-holders.
+Open one at [superhero.com/trends/tokens](https://superhero.com/trends/tokens) and follow along.
+
+## The tabs
 
 | Tab | What it shows |
 | --- | --- |
-| Holders | Top addresses and their balances |
+| Posts / Feed | The community's feed and chat room. Where the token's actual community lives, if it has one |
+| Trade | The buy/sell card, the candlestick chart, and your position |
+| Info | Token summary: price, market cap, DAO balance, supply, creation date, every contract address |
 | Transactions | Recent buys and sells with timestamps and transaction hashes |
+| Holders | Top addresses and their balances |
 
-## What this page still needs
+Trade, Transactions and Holders are disabled for a name that does not exist yet — the page doubles as
+the "this token has not been created" screen, with a Create Token call to action.
 
-- Define market cap precisely for a bonding-curve token — it is not the same as a redeemable value.
-- Explain the candlestick data source and interval options.
-- Give heuristics for reading the holders tab (concentration) and the transactions tab (organic vs single-whale flow).
+## The Info tab
 
-## Sources to mine
+The token summary is the one panel where every field is a hard fact rather than an interpretation:
 
-- `superhero/src/features/trending/views/TokenSaleDetails.tsx`
-- `superhero/server/lib/faq-content.cjs` — `qHoldersVsTx`, `qAnalytics`
-- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.7, §1.9, §1.17
+| Field | Meaning |
+| --- | --- |
+| Price | Current spot **buy** price, one token, in AE |
+| Market cap | See below. Displayed in AE, convertible to fiat |
+| DAO balance | AE accumulated in the community treasury from the spread |
+| Total supply | Tokens currently in circulation. Minted by buys, burned by sells |
+| Creation date | When the community was deployed |
+| Contract address | The AEX-9 token contract |
+| Sale address | The bonding-curve sale contract — the handle for all trading |
+| Created by | The account that called `create_community` |
+
+The API record behind it carries more than the panel shows, and these are the fields worth reading if
+you are querying it yourself: `sell_price` (the spot sell price, 0.5% under `price`),
+`circulating_supply`, `rank`, `holders_count`, `tx_count`, `trending_score`,
+`trending_score_update_at`, `unlisted`, and a `performance` object with `past_24h`, `past_7d`,
+`past_30d` and `all_time` sub-objects. See [Tokens API](/api/tokens).
+
+**DAO balance is the most under-read number on the page.** It is cumulative spread, so it is a direct
+measure of how much value has actually traded through this token since launch — much harder to fake
+than a price, and not resettable by a single large buy.
+
+## Market cap, precisely
+
+Market cap for a bonding-curve token is **not** the amount of money in the token, and it is **not**
+what holders would receive if they all sold. Taking the conventional definition — spot price times
+total supply, which is consistent with the `price` and `total_supply` fields served beside it — it
+is a rectangle, while the AE actually in the reserve is the area under the curve:
+
+```text
+market cap    =  buy(S) × S                     ← a rectangle: today's price, every token
+reserve paid  =  ∫ from 0 to S of buy(x) dx     ← the area under the curve
+redeemable    =  0.995 × that same integral     ← what selling everything would return
+```
+
+On a rising convex curve the rectangle is always bigger than the area. Concretely:
+
+| Total supply | Market cap (AE) | AE ever paid in (AE) | Redeemable if everyone sold (AE) | Market cap overstates by |
+| --- | --- | --- | --- | --- |
+| 10,000,000 | 1,052.71 | 518.09 | 515.50 | 2.04× |
+| 100,000,000 | 171,838.20 | 71,838.18 | 71,478.99 | 2.40× |
+
+So a token showing a 1,000 AE market cap is backed by roughly 500 AE of real reserve, and the gap
+widens as the curve steepens. This is not a flaw or a trick — it is what "market cap" means for any
+asset whose price is marginal rather than average. It is just far more visible here, because the
+reserve is a number you can actually check on-chain rather than a matter of speculation.
+
+Practical consequence: **market cap is a ranking signal, not a valuation.** The trending list defaults
+to sorting by it so that larger communities surface first, and for that job it is fine. Do not read it
+as money that exists.
+
+## The chart
+
+The candlestick chart on the Trade tab is fed by `GET /api/tokens/{address}/history`, paginated 100
+candles at a time, with three series overlaid: price, volume and market cap.
+
+| Control | Options |
+| --- | --- |
+| Interval | 1m, 5m, 15m, 1h, 4h, D, W, M — default 5m |
+| Currency | AE, or your selected display currency |
+
+The interval is passed to the API in **seconds** (300 for 5m, 86400 for D). The chart also subscribes
+to live transaction events, so the rightmost candle updates as trades land rather than waiting for a
+refetch.
+
+A caution specific to this market: on a thin token, a 5-minute candle chart is mostly noise. Two buys
+an hour apart produce a chart that looks like a trend. Widen the interval to D or W before drawing
+conclusions from shape.
+
+## Reading the Holders tab
+
+Holders shows the top addresses and their balances. What to look for:
+
+- **Concentration.** If the top one or two addresses hold most of the supply, the price you see is set by whoever is smallest, and their exit would walk the curve down past everyone below them. Compare the top holder's balance against `total_supply`.
+- **The creator's share.** Pre-buys at creation happen at the very bottom of the curve — the first 437,000 tokens cost 1 AE. A creator holding a large share got them far cheaper than anyone buying now, and that asymmetry is the whole reason the curve is steep at the start.
+- **Holder count versus supply.** A high `holders_count` with a small supply is a community. A low holder count with a large supply is one person's position with a price attached.
+
+## Reading the Transactions tab
+
+Transactions lists recent buys and sells with amounts, unit prices, timestamps and transaction
+hashes. Every hash links out to [aeScan](https://aescan.io), where you can verify it independently
+of Superhero's indexer.
+
+The heuristic the agent guides use, and it is a good one:
+
+> Many small buyers suggests organic momentum. One large buyer suggests a pump with higher exit risk.
+
+Two refinements worth adding:
+
+- **Look at the ratio of distinct accounts to transactions.** Twenty trades from three addresses is not twenty people.
+- **Look at what follows a spike.** A large buy with no follow-through is a position, not a trend; the curve holds its new price until someone sells, so an elevated price proves nothing about demand.
+
+You can pull the same data outside the UI — filtered by token, by account, or both — with the
+transactions script or the API. See [Transaction History](/tokens/transactions).
+
+## A checklist
+
+Before buying, in the order the page makes them available:
+
+1. **DAO balance** — has real volume ever passed through this token?
+2. **Holders** — how concentrated is it, and how cheap was the top holder's entry?
+3. **Transactions** — distinct accounts, or one address round-tripping?
+4. **Feed** — is there a community here, or just a ticker?
+5. **Your own slippage** — how big is your trade relative to `total_supply`? Check it against the table on [Fees & Slippage](/tokens/fees-and-slippage).
+6. **Price and market cap** — last, and with the caveat above firmly in mind.
+
+## Read more
+
+- [Bonding Curves](/tokens/bonding-curve) — why the price on this page rises the way it does
+- [Transaction History](/tokens/transactions) — querying the same trade data outside the UI
+- [The Trending Score](/tokens/trending-score) — the other ranking signal on the trending list
+- [Portfolio & PnL](/tokens/portfolio) — the same numbers from your own side of the trade
+- [Tokens API](/api/tokens) — the full record behind every field on this page
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list these pages hang off
+- [Trading leaderboard](https://superhero.com/trends/leaderboard) — who is actually making money, by realised PnL
+- [aeScan](https://aescan.io) — verify any address or transaction hash on this page independently
+
+## Open questions
+
+- **The exact formula behind the `market_cap` field is unverified.** It is computed by the Superhero backend, which is not in the repositories consulted here; the arithmetic above assumes the conventional spot-price-times-supply definition, which is consistent with the sibling `price` and `total_supply` fields but not proven. Whichever definition is used, the gap between a marginal-price valuation and the redeemable reserve is real — only its exact size would change.
+- `circulating_supply` is served alongside `total_supply` and can be null. What distinguishes the two for a token whose entire supply is minted on demand is not documented.
+- The `performance` object's `current_change_percent` is used by the app for a 7-day change badge, but the window boundaries and the reference price it compares against are not described in the API inventory.

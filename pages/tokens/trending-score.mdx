@@ -1,30 +1,117 @@
 ---
 title: "The Trending Score"
-description: "The momentum signal behind the trending list and every agent strategy."
+description: "The momentum signal behind the trending list and every agent strategy — what is known about it, and what is not."
 ---
 
 # The Trending Score
 
-> **Page brief** — Document the score properly. Agents make buy and sell decisions on it, so its semantics matter.
->
-> `status: outline` · `depth: standard`
+Every community token carries a `trending_score`: a single number that orders the trending list and
+drives the entry and exit rules in every agent trading strategy. This page documents what the score
+is used for and how to read it. Be aware up front that **its formula is not published in any of the
+repositories behind this site** — it is computed by the Superhero backend. Treat the semantics below
+as observed behaviour, not specification.
 
-The score is served per token from `GET /api/tokens/{address}/score` and drives the ordering
-of the trending list. The agent skill treats it as the primary momentum signal:
+## Where it comes from
 
-> A rising trending score means buying pressure is accelerating — this is your entry signal.
-> A falling score means momentum is fading — this is your exit signal.
+| Source | Detail |
+| --- | --- |
+| `GET /api/tokens/{address}/score` | The score for one token, served on its own |
+| `trending_score` on the token record | Included in `GET /api/tokens` and `GET /api/tokens/{address}` |
+| `trending_score_update_at` | Timestamp of the last recalculation — the score is periodic, not continuous |
+| `order_by=trending_score` | Sorts a token list by it, descending |
 
-Strategy templates in the skill use absolute thresholds — for example `> 100,000` for
-conservative entries, `> 50,000` for moderate, `> 20,000` for aggressive.
+The presence of `trending_score_update_at` is a meaningful detail: the score is recomputed on a
+schedule rather than on every trade, so a token that just had a large buy may still be showing a
+stale figure. Check the timestamp before acting on a score that looks surprising.
 
-## What this page still needs
+## The eligibility gate
 
-- Document how the score is computed, its inputs, its window, and its range.
-- Explain whether it is comparable across tokens or only over time for one token.
-- Document `GET /api/tokens/{address}/rankings` and how ranking relates to score.
+`order_by=trending_score` is **not only a sort**. The web app's own source notes that it applies a
+trending *eligibility* gate that silently drops most matching tokens — which is why the app
+deliberately omits the ordering when a user types a name into token search, and uses it only for the
+cold-start "what is trending" list. If you are building on this endpoint:
 
-## Sources to mine
+- Use `order_by=trending_score` when you want the trending set.
+- Do **not** use it when you want to find a specific token by name, or you will get an empty result for a token that plainly exists.
 
-- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.11, §1.12
-- `superhero-agent-skill/guides/autonomous.md` — the strategy thresholds
+What the gate tests is not documented.
+
+## Ranking
+
+Related but distinct, `GET /api/tokens/{address}/rankings` returns a paginated list of `sale_address`
+and `rank` pairs, and the token record carries its own `rank` field. Rank is an ordinal position;
+trending score is a magnitude. Two tokens can be adjacent in rank while their scores differ by an
+order of magnitude, so rank tells you about position in a list and score tells you about intensity.
+
+## How the agent skill uses it
+
+The skill treats the score as its primary momentum signal:
+
+> **Trending score = momentum signal**: a rising trending score means buying pressure is
+> accelerating — this is your entry signal. A falling score means momentum is fading — this is your
+> exit signal.
+
+Its three strategy templates set an entry bar as an absolute score and an exit rule as a relative
+drop from the score at entry:
+
+| Strategy | Entry bar | Exit on score drop | Max position | Max positions | Cycle |
+| --- | --- | --- | --- | --- | --- |
+| Conservative | score above 100,000 | 10% | 5% of balance | 3 | every 6h |
+| Moderate | score above 50,000 | 25% | 10% of balance | 5 | every 4h |
+| Aggressive | score above 20,000 | 40% | 20% of balance | 7 | every 2h |
+
+The relative rules are the durable part. An absolute bar of 100,000 is only meaningful if the score's
+scale is stable over time and comparable across tokens — neither of which is documented. **Prefer
+"score has fallen 25% since I bought" over "score is above 50,000" when you write your own
+strategy**, because the first is well-defined whatever the underlying formula turns out to be.
+
+The pre-buy checklist in the skill also refuses to act on score alone, and that is the right instinct:
+
+1. Read the score: `node scripts/superhero-trending.mjs token-info ct_...`
+2. Check the trade flow: `node scripts/superhero-transactions.mjs token ct_... 30` — many small buyers is organic, one large buyer is a pump with exit risk.
+3. Check price performance: `node scripts/superhero-trending.mjs performance ct_...`
+
+## Reading it from the CLI
+
+```bash
+# The trending list, ordered by score
+node scripts/superhero-trending.mjs tokens 20
+
+# A single token's full record, including trending_score
+node scripts/superhero-trending.mjs token-info ct_<sale_address>
+
+# 24h / 7d / 30d / all-time performance
+node scripts/superhero-trending.mjs performance ct_<sale_address>
+```
+
+`tokens` accepts an alternative ordering as its second argument — `market_cap`, `holders_count`,
+`price`, `created_at`, `name`, `treasury` or `rank` — which is a useful cross-check. A token that is
+top-ten by trending score and nowhere by holder count is telling you something.
+
+## Honest limitations
+
+- **You cannot reproduce it.** No formula, input list, window or normalisation is published. Anything you infer is inference.
+- **You do not know its range.** Whether a score of 100,000 is near the top of the distribution or unremarkable depends on a scale nobody has documented.
+- **You do not know whether it is comparable across tokens.** If it is not normalised by size, a large established token and a small active one may not be on the same axis at all.
+- **It is periodic.** `trending_score_update_at` tells you how stale your copy is.
+- **It is a lagging indicator either way.** By construction, a momentum score describes buying that has already happened. On a curve where price rises with every buy, acting on it means buying after the price has already moved.
+
+None of that makes the score useless — it plainly orders the list in a way that surfaces active
+communities. It does mean an automated strategy should treat it as one input among several rather
+than as ground truth.
+
+## Read more
+
+- [Reading a Token Page](/tokens/token-page) — the other signals to weigh the score against
+- [Transaction History](/tokens/transactions) — the trade flow that confirms or contradicts a rising score
+- [Risks](/tokens/risks) — why momentum signals are particularly double-edged on a bonding curve
+- [Trending API](/api/trending) — the endpoints behind the trending list
+- [Agent trading strategies](/agents/strategies) — the full strategy templates these thresholds come from
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list, sortable by score or market cap
+- [Trading leaderboard](https://superhero.com/trends/leaderboard) — realised results, which the score does not measure
+
+## Open questions
+
+- **How is the trending score computed?** Its inputs, its time window, its range and whether it is normalised for token size are all undocumented in the app, the whitepaper, the FAQ and the agent skill. The calculation lives in the Superhero backend, which is not part of the repositories behind this site. Sampling `GET /api/tokens/{address}/score` for a token across a known sequence of trades would let you characterise it empirically, but that is reverse engineering, not documentation.
+- **What does the `order_by=trending_score` eligibility gate test?** The app's source records that the gate exists and that it drops most tokens, but not its criteria — minimum volume, minimum holders, an age floor, or something else.
+- **Is the score comparable across tokens or only over time for one token?** The absolute entry bars in the strategy templates assume the former; nothing verifies it.

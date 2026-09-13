@@ -5,29 +5,64 @@ description: "Community tokens, the exponential bonding curve that prices them, 
 
 # Tokens & Bonding Curves
 
-> **Page brief** — The most important section on the site. It must leave a reader able to launch a token, price a trade by hand, and explain the fee split from memory.
->
-> `status: outline` · `depth: overview`
+Every Superhero community token is an AEX-9 token minted and burned against an **exponential bonding
+curve**. There is no order book and no counterparty: you always trade against the curve, price is a
+pure function of supply, and the contract always holds enough reserve to buy the entire supply back.
 
-Every Superhero community token is an AEX-9 token minted and burned against an **exponential
-bonding curve**. There is no order book and no counterparty: you always trade against the
-curve, price is a pure function of supply, and the contract always holds enough reserve to buy
-the entire supply back.
+This section is written so that by the end of it you can launch a token, price a trade by hand, and
+explain where every fraction of the fee goes.
 
-Start with [Bonding Curves](/tokens/bonding-curve) — the rest of this section assumes it.
+## The numbers to remember
+
+| Fact | Value |
+| --- | --- |
+| Curve | `buy(x) = 0.001 · e^(0.00000001 · x) − 0.0009999`, in AE per token |
+| Sell curve | `sell(x) = buy(x) · 0.995` |
+| Price of a trade | The integral of the curve across the supply you mint into or burn out of |
+| Launch price | 0.0000001 AE per token, at supply 0 |
+| Spread | 1% of the curve value — 0.5% to the community DAO, 0.5% to affiliation |
+| Instant round trip | Returns 0.99502 of what you paid, before gas |
+| Affiliation split | 0.300% / 0.125% / 0.050% / 0.025% across four referral levels; burned if unreferred |
+| ProtocolDAO reward | Minted to the buyer on every buy, proportional to its AE value |
+| Token standard | AEX-9, 18 decimals |
+| Solvency | The sell curve is strictly below the buy curve at every supply, so the reserve always covers the full supply |
+
+## Where to start
+
+1. **[Bonding Curves](/tokens/bonding-curve)** — the formula, integrated by hand, with two worked buys. Everything else assumes it.
+2. **[Curve Parameters & Units](/tokens/curve-parameters)** — read before you call a contract, so you are not off by 10^18.
+3. **[Fees & Slippage](/tokens/fees-and-slippage)** — the three things that separate the price you see from the price you get.
+4. **[Risks](/tokens/risks)** — read before you buy anything.
+
+Want to do rather than read? Launch a token at
+[superhero.com/trends/create](https://superhero.com/trends/create) or buy one from
+[the trending list](https://superhero.com/trends/tokens).
 
 ## In this section
 
-- [Community Tokens](/tokens/overview) — Frame the token before the math: utility, membership, governance rights, and what it is explicitly not.
-- [Bonding Curves](/tokens/bonding-curve) — The flagship explainer. Define what a bonding curve is, give the exact Superhero formulas, and show why the reserve is always solvent.
-- [Curve Parameters & Units](/tokens/curve-parameters) — The page that stops implementers from being off by a factor of 10^18. Pin down every unit.
-- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — The primary creation guide for non-developers. Every field, every rule, every cost, with screenshots.
-- [Create a Token (CLI)](/tokens/create-from-cli) — The developer/agent path. Must be copy-pasteable and must state the pre-flight checks.
-- [Collections & Naming Rules](/tokens/collections-and-naming) — Demystify collections — a concept that is invisible in the UI until it blocks you.
-- [Buying & Selling](/tokens/buying-and-selling) — The trading reference. Must cover quoting, slippage protection, allowances and confirmation.
-- [Fees & Slippage](/tokens/fees-and-slippage) — Separate the three cost components clearly: the curve spread, network gas, and slippage from your own trade size.
-- [Reading a Token Page](/tokens/token-page) — Teach a reader to evaluate a token from its page rather than from its price alone.
-- [The Trending Score](/tokens/trending-score) — Document the score properly. Agents make buy and sell decisions on it, so its semantics matter.
-- [Portfolio & PnL](/tokens/portfolio) — Document holdings, portfolio snapshots and PnL — including the exact field names, since agents parse them.
-- [Transaction History](/tokens/transactions) — A reference for the transaction views, useful both for research and for agent pre-trade checks.
-- [Risks](/tokens/risks) — An honest risk page. It protects users and it is the page a regulator or a journalist will read first.
+| Page | What it covers |
+| --- | --- |
+| [Community Tokens](/tokens/overview) | What a token is, which five contracts it deploys, and what holding one gets you |
+| [Bonding Curves](/tokens/bonding-curve) | The curve formula, its integral, worked numeric examples, slippage, and how it compares with linear and constant-product curves |
+| [Curve Parameters & Units](/tokens/curve-parameters) | Aettos, token decimals, `Frac.frac`, and a reference implementation that matches the contract |
+| [Create a Token (Dashboard)](/tokens/create-from-dashboard) | The web form: both input modes, name normalisation, collection derivation, costs and failure modes |
+| [Create a Token (CLI)](/tokens/create-from-cli) | The same deployment from a terminal, every error path, and a raw SDK example |
+| [Collections & Naming Rules](/tokens/collections-and-naming) | Namespaces, character rules, and why a name was rejected |
+| [Buying & Selling](/tokens/buying-and-selling) | Quoting, `minimal_return_required`, AEX-9 allowances, and a complete SDK trade |
+| [Fees & Slippage](/tokens/fees-and-slippage) | The 1% spread, curve slippage with worked numbers, slippage guards, and gas |
+| [Reading a Token Page](/tokens/token-page) | What each panel tells you, and why market cap is not what it looks like |
+| [The Trending Score](/tokens/trending-score) | The momentum signal, what is known about it, and what is not |
+| [Portfolio & PnL](/tokens/portfolio) | Holdings, snapshots, PnL fields, and why a position is worth less than it says |
+| [Transaction History](/tokens/transactions) | Querying trades by token, account or both, and verifying them on-chain |
+| [Risks](/tokens/risks) | The 1% starting loss, reflexivity, thin communities, contract risk and audit status |
+
+## Read more
+
+- [Value flow](/concepts/value-flow) — how AE moves through the whole platform, of which the curve is one part
+- [DAO overview](/dao/overview) — the treasury every token creates, and who controls it
+- [Affiliation rewards](/rewards/affiliation) — where the other half of the spread goes
+- [Token sale contract](/contracts/token-sale) — the entrypoint-level reference behind this section
+- [Tokens API](/api/tokens) — the REST surface for everything documented here
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — every live community token
+- [Create a token](https://superhero.com/trends/create) — the launch form
+- [Superhero whitepaper](https://superhero.com/whitepaper) — the primary source for the curve, the spread and the deployment sequence

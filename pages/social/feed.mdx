@@ -5,22 +5,140 @@ description: "How the feed is assembled, ranked and paginated."
 
 # The Feed
 
-> **Page brief** — Explain the popular/latest feeds, what drives ranking, and how the infinite feed pages through the API.
->
-> `status: outline` · `depth: standard`
+The Superhero home feed at `https://superhero.com/` has two modes: a ranked **popular** feed
+and a chronological **latest** feed. Both are infinite, both blend on-chain posts with token
+activity, and the popular ranking is tunable per reader. This page covers what drives each
+mode, the exact query parameters, and how paging works.
 
-The feed is served from `GET /api/posts/popular` with `window`, `page` and `limit` query
-parameters, returning `items` plus a `meta` block (`currentPage`, `totalPages`, `totalItems`,
-`itemCount`). The popular feed is behind the `POPULAR_FEED_ENABLED` config flag.
+## Choosing a mode
 
-## What this page still needs
+| Mode | URL | Query |
+| --- | --- | --- |
+| Popular (default) | `/?sortBy=hot` | `GET /api/posts/popular` |
+| Latest | `/?sortBy=latest` | `GET /api/posts` ordered by `created_at` descending |
 
-- Document the `window` parameter's accepted values and what 'popular' actually ranks on.
-- Explain the difference between the popular feed, the latest feed and a topic feed.
-- Cover the live/WebSocket update path.
+The sort key lives in the URL, so a feed state is linkable. The popular mode is behind the
+`POPULAR_FEED_ENABLED` configuration flag; when it is off the app forces `latest` and hides the
+popular option entirely.
 
-## Sources to mine
+A separate `filterBy` query parameter filters the assembled list client-side:
 
-- `superhero/src/features/social/views/FeedList.tsx`
-- `superhero/docs/api-superhero-com-endpoints-and-fields.md` — §1.1, §1.27
-- `superhero/src/config.ts` — `POPULAR_FEED_ENABLED`
+| Value | Effect |
+| --- | --- |
+| `all` | Everything (default) |
+| `withMedia` | Only items carrying media |
+| `withComments` | Only items with at least one comment |
+
+## What "popular" ranks on
+
+Popular ranking is **all-time**, with a temporary freshness boost for new posts. The `window`
+parameter still exists on the endpoint but is deprecated and ignored — it is accepted only for
+backwards compatibility. Do not build anything that relies on it.
+
+The reader can scale eight signals, each to `low`, `med` or `high`. `med` is the default and
+the client omits it from the query, so a request carries only the signals you actually changed.
+
+| Query parameter | Signal |
+| --- | --- |
+| `comments` | Comment impact |
+| `tipsAmountAE` | Total tipped amount |
+| `tipsCount` | Number of tips |
+| `uniqueTippers` | Number of distinct tippers |
+| `trendingBoost` | Trending-topic boost |
+| `contentQuality` | Content quality |
+| `reads` | Reads |
+| `interactionsPerHour` | Engagement velocity from comments, tips and unique tippers per hour |
+
+In the app these are the **Customize** controls next to the sort selector, with a reset that
+clears every override back to the default. Adding `debug=1` to the request asks the backend to
+return its scoring detail alongside the items.
+
+What the underlying formula is — how the three scale steps translate into weights, and what
+"content quality" and "reads" are computed from — is not documented anywhere available. See
+Open questions.
+
+One client-side detail worth knowing if you compare two browsers: the app applies a seeded
+shuffle to each popular page before rendering, so two readers with identical weights see the
+same posts in a different order.
+
+## Request shapes
+
+```text
+GET /api/posts/popular?page=1&limit=10&tipsCount=high&reads=low
+GET /api/posts?order_by=created_at&order_direction=DESC&limit=10&page=1
+```
+
+`GET /api/posts` accepts more filters than the home feed uses:
+
+| Parameter | Values |
+| --- | --- |
+| `order_by` | `total_comments` or `created_at` |
+| `order_direction` | `ASC` or `DESC` |
+| `search` | Free-text over content and topics |
+| `account_address` | Restrict to one author — this is what a profile feed uses |
+| `topics` | Comma-separated topic names, partial matching |
+| `limit`, `page` | Pagination |
+
+Both endpoints return the same envelope: an `items` array and a `meta` block with
+`currentPage`, `totalPages`, `totalItems` and `itemCount`. Paging is "fetch page N+1 while
+`currentPage` is below `totalPages`".
+
+Each post item carries `id`, `tx_hash`, `tx_args`, `sender_address`, an embedded `sender`
+profile, `contract_address`, `type`, `content`, `trend_mentions`, `media`, `total_comments`
+and `created_at`, plus a `slug` used for SEO links.
+
+## What else is in the feed
+
+The feed is not only posts. In latest mode the app runs a second infinite query over
+`GET /api/tokens` ordered by `created_at` and maps each new token sale into a feed item, then
+merges the two lists. Trade activity items appear the same way. That is why a brand-new
+community token shows up in the feed without anyone posting about it.
+
+Those activity items are the one thing in the feed that updates live: the app subscribes to the
+API socket's token-created channel and prepends new sales to the cached activity list as they
+arrive. Posts themselves are not pushed — the feed refetches on window focus and treats data as
+fresh for 10 seconds, so a new post from someone else appears on the next refetch rather than
+instantly.
+
+Your own new post is the exception. The composer optimistically inserts it at the top of the
+latest-feed cache before the indexer has seen it; see [Posting](/social/posting).
+
+## When popular runs out
+
+The popular feed is finite in a way the latest feed is not. When it is exhausted — or when the
+first page comes back with fewer than 10 items — the app starts appending latest posts below,
+de-duplicating against what popular already returned. A reader scrolling long enough therefore
+crosses from ranked content into chronological content without a visible seam.
+
+## Topic feeds
+
+A hashtag has its own feed. `GET /api/topics/name/{name}` returns the topic's `posts` and a
+`post_count`, and token pages render it as the token's discussion tab. That tab defaults to
+showing posts by token holders only, and falls back to showing everyone when the holders-only
+filter would leave it empty. The composer on a topic feed requires the topic's hashtag before
+the Post button enables.
+
+See [Hashtags & Topics](/social/hashtags-and-topics) for how a tag becomes a topic in the first
+place.
+
+## Open questions
+
+- **What is the popular scoring formula?** The endpoint documents eight scalable signals and a
+  freshness boost, but not the base score, the boost decay, or how `low`, `med` and `high` map
+  to multipliers. Only the backend knows.
+- **How are "content quality" and "reads" measured?** Both are ranking inputs with no stated
+  definition. "Reads" in particular implies client-side telemetry that is not described in the
+  app repository.
+- **Is there a live post channel?** The API socket carries token-created, token-updated,
+  token-transaction and token-history channels. No post channel appears in the client, so live
+  post delivery would be new.
+- **What does `debug=1` return?** Documented as "debug info" with no shape.
+
+## Read more
+
+- [Posting](/social/posting) — how an item gets into the feed in the first place.
+- [Tipping](/social/tipping) — three of the eight ranking signals come from tips.
+- [Hashtags & Topics](/social/hashtags-and-topics) — topic feeds and the trending boost.
+- [Posts API](/api/posts) — the endpoint-level reference.
+- [WebSocket API](/api/websocket) — the channels behind the live activity items.
+- [Superhero](https://superhero.com/) — the live feed, with the sort and customize controls.

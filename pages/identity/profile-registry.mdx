@@ -5,19 +5,103 @@ description: "The on-chain contract that stores profiles, names and display pref
 
 # The ProfileRegistry Contract
 
-> **Page brief** — A contract-level reference for ProfileRegistry.aes: the data model, the entrypoints, and the events.
->
-> `status: outline` · `depth: deep`
+`ProfileRegistry.aes` is the identity layer of the Superhero protocol: a Sophia contract
+(compiler version 6 or later) holding user profiles and the three kinds of public name, with
+typed events for every mutation so indexers can follow identity changes in real time. This
+page is the contract-level reference — the data model, the entrypoints, the events, and what
+`get_state()` returns.
+
+## Data model
 
 Each profile is a `profile` record combining user-facing metadata with identity sources:
 
 | Field | Meaning |
 | --- | --- |
 | `nostr` | A Nostr public key or identifier, used for chat and messaging |
-| `x_username` | An optional X (Twitter) handle, verified through backend attestation |
-| `chain_name` | An optional æternity (AENS) name, with an expiration timestamp |
+| `x_username` | An optional X (formerly Twitter) handle, verified through backend attestation |
+| `chain_name` | An optional æternity AENS name, with an associated expiration timestamp |
 
-Mutations emit typed events so indexers can follow identity changes in real time:
+Alongside the profile map the contract keeps name-ownership maps (one per name type, keyed by
+the normalized name), the set of consumed attestation nonces, and a version string.
+
+The API's profile aggregate exposes the same fields plus display metadata that the registry
+does not model itself:
+
+```json
+{
+  "address": "ak_...",
+  "profile": {
+    "fullname": "",
+    "bio": "",
+    "avatarurl": "",
+    "username": null,
+    "x_username": null,
+    "chain_name": null,
+    "display_source": null,
+    "chain_expires_at": null
+  },
+  "public_name": null
+}
+```
+
+`username` is the custom name, `display_source` is one of `custom`, `chain` or `x` over the
+wire, and `public_name` is the name the backend resolved for display.
+
+## Entrypoints
+
+These are the entrypoints named in the whitepaper's "Superhero Onchain ID" section. The
+`ProfileRegistry.aes` ACI is not vendored in the agent skill's `contracts/` folder, so exact
+argument lists and return types below are described rather than quoted — verify against the
+contract source before you encode a call.
+
+| Entrypoint | Purpose |
+| --- | --- |
+| `set_custom_name` | Claim an available custom name. The caller's address is recorded as owner. |
+| `set_chain_name` | Register an AENS name plus its expiration timestamp as a verified chain name. |
+| `set_x_name_with_attestation` | Register an X handle against a backend-signed attestation. |
+| `clear_custom_name` | Release the caller's custom name back to the pool. |
+| `clear_chain_name` | Release the caller's chain name. |
+| `clear_x_name` | Release the caller's X name. |
+| `set_display_source` | Choose which name renders as the primary identity: `Custom`, `Chain` or `X`. |
+| `resolve_public_name` | Resolve a name string to an æternity address. |
+| `get_state` | Return the full contract state. |
+
+`set_chain_name` and `set_x_name_with_attestation` are the two privileged paths: both carry
+verified status and both can displace a conflicting custom name. See
+[Names: Custom, Chain and X](/identity/names) for the precedence rules and the auto-rename
+behaviour.
+
+## Name resolution order
+
+`resolve_public_name` resolves a name string to an address using a fixed priority:
+
+```text
+chain name  >  X name  >  custom name
+```
+
+On-chain-verified names outrank attestation-based names, which outrank self-declared ones.
+A resolver that walks this order will never return a custom-name owner for a string that a
+verified name also claims.
+
+## Attestation verification
+
+X names are admitted only against a signature from the backend signer configured at contract
+deployment. The contract:
+
+1. Rebuilds the attestation message from the caller's address, the normalized X username, an
+   expiry timestamp and a unique nonce.
+2. Hashes it with Blake2b.
+3. Prepends the æternity signed-message prefix — the string `aeternity Signed Message:` plus
+   a newline, framed by a fixed 28-byte header — producing a 60-byte payload.
+4. Verifies the resulting digest against the signer's signature with `Crypto.verify_sig`.
+5. Records the nonce in `nonce_used` so the same attestation cannot be replayed.
+
+The full flow, including the client-side OAuth leg, is on
+[Verifying Your X Account](/identity/x-verification).
+
+## Events
+
+Every profile and name mutation emits a typed event, so an indexer never has to poll state:
 
 | Event | Emitted when |
 | --- | --- |
@@ -28,16 +112,43 @@ Mutations emit typed events so indexers can follow identity changes in real time
 | `DisplaySourceUpdated(address, string)` | The display-source preference changes |
 | `CustomNameAutoRenamed(address, string)` | A custom name is forcibly renamed after a verified-name conflict |
 
-`get_state()` returns the full contract state — all profiles, name-ownership maps, used
-nonces, and the contract version (currently `"v1"`).
+`CustomNameAutoRenamed` is the one to subscribe to if you run a frontend: it is the only signal
+that a user's handle changed without them asking, and the whitepaper's stated reason for
+emitting it is so frontends can notify the affected user. The event carries both the original
+and the new name.
 
-## What this page still needs
+## Reading the whole registry
 
-- Add the full entrypoint signature table once the ACI is available (it is not in the agent-skill `contracts/` folder yet).
-- Document the deployed ProfileRegistry address on mainnet and testnet.
-- Add an example of reading a profile from the contract with the æternity SDK.
+`get_state()` returns the full contract state: all profiles, the name-ownership maps, the used
+nonces, and a version identifier (currently `"v1"`). That is enough to reconstruct the complete
+identity registry from the contract's state tree without replaying events.
 
-## Sources to mine
+Reading state requires no wallet — it is a dry-run contract call. The mechanics of making one
+with the æternity SDK are on [Calling contracts](/contracts/calling-contracts); the shape is
+the same as any other `get_state` read, with the registry's address and ACI substituted.
 
-- `superhero/src/views/Whitepaper.tsx` — Superhero Onchain ID
-- The `ProfileRegistry.aes` source in the contracts repository (ACI not yet vendored)
+## Open questions
+
+- **Deployed address.** Neither the mainnet nor the testnet `ProfileRegistry` address appears
+  in `src/config.ts`, the REST endpoint inventory, or the vendored ACIs. `CONTRACT_V3_ADDRESS`
+  in the app config is the Tipping v3 contract, not the registry. Settle it from the contracts
+  repository's deployment record.
+- **ACI.** `superhero-agent-skill/contracts/` ships ACIs for Tipping v3, the community factory,
+  the bonding curves, the token and the governance registry, but not for `ProfileRegistry.aes`.
+  Until it is vendored, exact entrypoint signatures have to come from the Sophia source.
+- **Name normalization.** The whitepaper refers to a "normalized key" for conflict detection
+  but does not define the normalization. The web client's own helper lowercases and trims
+  (`normalizeName` in `src/utils/chainNames.ts`), and strips a trailing `.chain` for chain-name
+  labels, but whether the contract applies the same rule — and how it treats Unicode or length
+  limits — is not documented anywhere available.
+
+## Read more
+
+- [Names: Custom, Chain and X](/identity/names) — how the three name types interact and who
+  wins a conflict.
+- [Verifying Your X Account](/identity/x-verification) — the attestation the contract checks.
+- [Contract events](/contracts/events) — how to subscribe to the events above across the
+  protocol's contracts.
+- [Calling contracts](/contracts/calling-contracts) — making a read or write call with the SDK.
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) —
+  the reference for `Crypto.verify_sig` and the Blake2b primitives the contract uses.

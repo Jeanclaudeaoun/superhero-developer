@@ -5,22 +5,46 @@ description: "Posting, commenting, tipping, hashtags and chat on Superhero."
 
 # Social
 
-> **Page brief** — Everything about the social layer — the part of Superhero that is a social network rather than a market.
->
-> `status: outline` · `depth: overview`
+Posts and comments are written to the `Tipping` v3 contract, so they are permanent,
+attributable and impossible to delete. Chat is deliberately *not* on-chain: it runs over Nostr
+relays for realtime messaging. Know which is which before you publish anything.
 
-Posts and comments are written to the `Tipping` v3 contract, so they are permanent and
-attributable. Chat is deliberately *not* on-chain: it runs over Nostr relays for realtime
-messaging. Know which is which before you publish anything.
+## On-chain or not
+
+| Surface | Where it lives | Permanent? |
+| --- | --- | --- |
+| Posts | `Tipping` v3 contract, one entry per `tip_id` | Yes — no edit, no delete |
+| Comments | The same contract, with a `comment:` media prefix | Yes |
+| Tips | A plain AE transfer with a payload naming the post | Yes — it is a transaction |
+| Hashtags and topics | Derived by the indexer from post content | Follow the posts |
+| Chat messages | Nostr relays, off-chain | No — relay-dependent |
+| Notifications | The Superhero API, delivered over a socket and web push | No |
+| Moderation state | `CommunityManagement.aes` per community | Yes, but it hides rather than deletes |
 
 ## In this section
 
-- [The Feed](/social/feed) — Explain the popular/latest feeds, what drives ranking, and how the infinite feed pages through the API.
-- [Posting](/social/posting) — The canonical posting reference: the contract call, the cost, the limits, and both the UI and CLI paths.
-- [Delegated & Gasless Posting](/social/delegated-posting) — Document `post_without_tip_sig` precisely enough that someone could implement a relayer against it.
-- [Comments](/social/comments) — Explain the `comment:<post_id>` media-prefix convention that turns a post into a reply.
-- [Tipping](/social/tipping) — Document the tipping flow, where the AE goes, and how tip totals are aggregated and displayed.
-- [Hashtags & Topics](/social/hashtags-and-topics) — The bridge page between the social layer and the token layer. This is the mechanism the whole product rests on.
-- [Chat](/social/chat) — Document the chat system honestly — it is Nostr-based, off-chain, and relay-dependent.
-- [Notifications](/social/notifications) — List every notification type, where it is delivered, and how deep links resolve.
-- [Moderation](/social/moderation) — Explain community-level moderation: moderators appointed by DAO vote, muting, and write thresholds.
+- [The Feed](/social/feed) — the popular and latest feeds, what "popular" actually ranks on,
+  and how the infinite feed pages.
+- [Posting](/social/posting) — the canonical posting reference: the contract call, the limits,
+  the content encoding, and both the UI and CLI paths.
+- [Delegated & Gasless Posting](/social/delegated-posting) — `post_without_tip_sig` in enough
+  detail to build a relayer against it.
+- [Comments](/social/comments) — the `comment:` media-prefix convention that turns a post into
+  a reply.
+- [Tipping](/social/tipping) — where the AE goes, and why tipping is not a contract call.
+- [Hashtags & Topics](/social/hashtags-and-topics) — the bridge from the social layer to the
+  token layer.
+- [Chat](/social/chat) — Nostr-based, off-chain, relay-dependent, and gated by a CSP allowlist.
+- [Notifications](/social/notifications) — every notification type, how it is delivered, and
+  where a click lands.
+- [Moderation](/social/moderation) — how a network with no delete button moderates itself.
+
+## Read more
+
+- [On-chain social](/concepts/on-chain-social) — the design argument for putting content on a
+  chain at all.
+- [The Tipping contract](/contracts/tipping) — the contract-level reference for the content
+  layer.
+- [Your first post](/getting-started/first-post) — the shortest path from a funded wallet to a
+  published post.
+- [Superhero](https://superhero.com/) — the live feed.
