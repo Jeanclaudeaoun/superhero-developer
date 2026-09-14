@@ -40,6 +40,17 @@ Two things that surprise people:
   At the default 1% slippage that is about 2% plus 0.001 AE. Fund with headroom or your first trade
   fails on arithmetic rather than on price.
 
+**A working floor: 0.01 AE.** That is the balance the agent skill tells its agent to confirm before
+doing anything on chain (`SKILL.md`), and it is the most defensible number available because
+everything else is an estimate. One contract-call gas figure does come from a measurement: the
+affiliation treasury's own source comments that redeeming an invitation costs "~2.01e14" aettos —
+**0.000201 AE** — and the contract requires a fivefold over-provision of `10^15` aettos (0.001 AE) to
+cover it (`bcl-contracts/contracts/AffiliationTreasury.aes`). So 0.01 AE is roughly fifty simple
+contract calls' worth of room, before anything you actually want to spend.
+
+Add to that whatever you intend to trade, plus the Max button's reserve above. Funding with **0.1 AE
+or more** means you never think about any of this again for a first session.
+
 ## Earn it
 
 The cheapest AE is AE you did not buy.
@@ -73,6 +84,13 @@ custody anything on your behalf.
 | [SwapSpace](https://swapspace.co/?direction=direct&from=eth&fromNetwork=ETH&to=ae&toNetwork=AE) | ETH to AE with direct routing when available |
 
 Availability and pairs change. Confirm details with the provider before sending anything.
+
+**Superhero Wallet has a card-purchase entry too, and it is switched off in released builds.** Its
+"Buy AE" panel item and dashboard card link a Simplex integration at `https://simplex.superhero.com`
+(`AE_SIMPLEX_URL`), but both are rendered under `isNodeMainnet && UNFINISHED_FEATURES`, and
+`.env.production` sets `UNFINISHED_FEATURES=false`. So you will not see it in the extension or the
+app you installed from a store. That is the same pattern as superhero.com's disabled bridge and
+buy-with-ETH routes below: the on-ramp code exists in both codebases and is turned off in both.
 
 ### Withdrawing to your own address
 
@@ -134,12 +152,20 @@ The get-AE page's own warnings, which are the right ones:
 
 ## Open questions
 
-- Are the `/defi/bridge` and `/defi/buy-ae-with-eth` routes disabled temporarily or permanently? The
-  router keeps both the redirect and the commented-out view, which reads as "re-enable later", but
-  nothing states the intent.
-- Which exchanges besides Gate.io support AE **withdrawal to a native `ak_` address**? The app links
-  Gate.io plus three swap aggregators; no list of withdrawal-capable exchanges exists in the
-  repositories, and a docs page should not invent one.
-- What is a realistic minimum starting balance? Only two figures are verifiable here — roughly
-  0.00001 AE gas for a post, and the 0.001 AE trade reserve. A measured end-to-end figure for the
-  full first-post-plus-first-trade path has not been captured.
+- **Are the `/defi/bridge` and `/defi/buy-ae-with-eth` routes disabled temporarily or permanently?**
+  The router keeps both the redirect and the commented-out view, which reads as "re-enable later",
+  but nothing states the intent — and neither of the other two codebases resolves it. `superhero-api`
+  has no bridge or on-ramp module at all, only the aeETH token address the DEX needs to price the
+  pair; `superhero-wallet` keeps its own on-ramp (Simplex) behind an `UNFINISHED_FEATURES` flag that
+  production builds set to `false`, which is consistent with "parked" but is evidence about a
+  different product. Only a maintainer can say; ask on
+  [the issue tracker](https://github.com/superhero-com/superhero/issues). See
+  [Bridging from Ethereum](/defi/bridge).
+- **Which exchanges besides Gate.io support AE withdrawal to a native `ak_` address?** The app links
+  Gate.io plus three swap aggregators and nothing more; no list of withdrawal-capable exchanges
+  exists in any repository, and it would go stale the moment it was written. Check the specific
+  exchange's own withdrawal page for the æternity network before depositing, and test with a small
+  amount.
+- **What does a full first-post-plus-first-trade path actually cost, end to end?** The 0.01 AE floor
+  above is a working answer, not a measurement. Capturing the real figure means running both actions
+  on mainnet and summing the fees and gas off the two transactions.

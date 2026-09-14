@@ -6,10 +6,15 @@ description: "The Superhero technical whitepaper, version 0.7 — its sections, 
 # Whitepaper
 
 The Superhero technical whitepaper, **version 0.7, February 2026**, is published in-app at
-[superhero.com/whitepaper](https://superhero.com/whitepaper). It is the protocol specification these
-docs are built from: when a number here disagrees with the whitepaper, the whitepaper is the source
-and this site has the bug. Use this page to find the right section fast, and to jump from a section
-to the page that expands it.
+[superhero.com/whitepaper](https://superhero.com/whitepaper). It is the best available prose
+description of the protocol, and most of these docs are built from it. Use this page to find the
+right section fast, to jump from a section to the page that expands it, and — the section that
+matters most below — to see where it no longer matches the deployed contracts.
+
+**Order of authority:** the Sophia sources are the specification, the whitepaper is a description of
+them, and this site is a description of both. Where they disagree, believe the `.aes`. Every
+divergence listed below was found by reading the contracts, and each one names the file so you can
+check it yourself.
 
 The whitepaper renders as Markdown with GitHub-flavoured tables and KaTeX math in the app itself.
 There is no PDF — see the open questions.
@@ -27,7 +32,7 @@ There is no PDF — see the open questions.
 | Community Factory | Collection registry, per-community deployment, naming and uniqueness rules | [CommunityFactory](/contracts/community-factory), [Collections & Naming Rules](/tokens/collections-and-naming) |
 | ProtocolDAO Token | 1,000× issuance on buys, planned staking and governance | [ProtocolDAO Token](/dao/protocol-dao) |
 | Community Management | Moderators, muting, the minimum token threshold for write access | [Moderators & Write Thresholds](/dao/moderators) |
-| DAO and DAO Vote | The six vote subjects, the 555 AE cost, two-week close in key-blocks, 55% approval, 10% quorum, the two-day execution window, `ReplaceableDAO` | [How DAOs Work](/dao/overview), [Proposals & Vote Subjects](/dao/proposals), [Quorum & Thresholds](/dao/quorum-and-thresholds) |
+| DAO and DAO Vote | Six of the seven vote subjects, the 555 AE cost, two-week close in key-blocks, 55% approval, 10% quorum, the two-day execution window, `ReplaceableDAO` | [How DAOs Work](/dao/overview), [Proposals & Vote Subjects](/dao/proposals), [Quorum & Thresholds](/dao/quorum-and-thresholds) |
 | Exponential Bonding Curve | The buy and sell functions, the integrals, and the 1% spread | [Bonding Curves](/tokens/bonding-curve) |
 | Affiliation Bonding Curve Token Sale | The four referral levels at 0.300 / 0.125 / 0.050 / 0.025 percent, and burning of unaffiliated fees | [The Affiliation System](/rewards/affiliation), [AffiliationBondingCurveTokenSale](/contracts/token-sale) |
 | System Architecture | On-chain layers, off-chain components, the seven-step deployment sequence | [Architecture Overview](/concepts/architecture) |
@@ -38,23 +43,50 @@ There is no PDF — see the open questions.
 
 ## The numbers worth memorising
 
-Every figure below is stated in the whitepaper and used throughout these docs.
+Every figure below is stated in the whitepaper and used throughout these docs. Where the deployed
+contract is more specific, the third column says so.
 
 | Quantity | Value | Section |
 | --- | --- | --- |
-| Buy curve | `0.001 * e^(0.00000001 * x) - 0.0009999` | Exponential Bonding Curve |
+| Buy curve | `0.001 * e^(0.00000001 * x) - 0.0009999` — the idealised curve the contract approximates | Exponential Bonding Curve; see divergence 3 |
 | Sell curve | buy curve × 0.995 | Exponential Bonding Curve |
 | Total buy-sell spread | 1% — 0.5% to the community DAO, 0.5% to affiliation | Exponential Bonding Curve |
 | Affiliation levels | 0.300%, 0.125%, 0.050%, 0.025% of transaction value | Affiliation Bonding Curve Token Sale |
-| Unaffiliated fees | Burned | Affiliation Bonding Curve Token Sale |
-| ProtocolDAO issuance | 1,000 × the AE value of each buy | ProtocolDAO Token |
+| Unaffiliated fees | Burned — and so are unclaimed and unqualified ones | Affiliation Bonding Curve Token Sale; see divergence 5 |
+| ProtocolDAO issuance | 1,000 × the AE value of each buy, where "AE value" is the all-in amount | ProtocolDAO Token; see divergence 2 |
 | Cost to open a DAO vote | 555 AE, paid to the DAO | DAO and DAO Vote |
+| Cost to create a collection | 555 AE, burned | Not in the whitepaper; see divergence 7 |
+| Minimum tradable amount | 10^12 aettos = 10^-6 tokens | Not in the whitepaper; see divergence 10 |
+| Vote description limit | 300 characters | Not in the whitepaper; see divergence 8 |
 | Vote duration | Two weeks, measured in key-blocks | DAO and DAO Vote |
 | Approval threshold | 55% of vote stake in favour | DAO and DAO Vote |
 | Quorum | 10% of total token stake participating | DAO and DAO Vote |
 | Execution window after close | Approximately two days | DAO and DAO Vote |
 | Expected supply utilisation | 10–20% of total supply | Exponential Bonding Curve |
 | Contract versions | Tipping `"v3"`, ProfileRegistry `"v1"` | Posting & Tipping, Superhero Onchain ID |
+
+## Where the whitepaper diverges from deployed code
+
+All ten BCL Sophia sources are readable, so these are checkable claims rather than suspicions. None
+of them is large enough to change what the protocol *is*; several will change a number you compute.
+
+| # | Whitepaper says | The contracts do | File |
+| --- | --- | --- | --- |
+| 1 | Six vote subjects | **Seven.** `ChangeMetaInfo(map(string, string))` — a vote to change a community's metadata — is implemented but never mentioned | `DAOVote.aes` |
+| 2 | ProtocolDAO issuance is "1,000 × the AE value of each buy" | 1,000 × the **all-in** AE debited, affiliation fee included — so 1,005× the curve price. The app displays 950× | `CommunityFactory.aes`, `superhero/src/utils/constants.ts` |
+| 3 | The buy curve is `0.001 * e^(0.00000001 * x) - 0.0009999` | The contract evaluates a **bounded Maclaurin series**, not that closed form: `curve_type()` returns `"TAYLOR_EXPONENTIAL_V1"` and the expansion stops at 100 terms | `BondingCurveExponential.aes` |
+| 4 | Not mentioned | `get_sell_return_precision()` returns `sell_return_percentage` (9950) instead of `sell_return_precision` (10000). **On-chain sell math is correct** — `calculate_sell_return` uses the constants directly — but an off-chain caller that derives the ratio from the two getters computes 1.0 and overstates sell returns by 0.5% | `BondingCurveExponential.aes` |
+| 5 | "If no referrer: burned" | Two further amounts burn the same way and neither is mentioned: rewards go unclaimable after two 30-day payout periods, and an inviter cannot withdraw at all until four distinct invitees have each bought ≥ 10 AE | `AffiliationTreasury.aes` |
+| 6 | "The protocol's contract suite is designed for independent audit and formal verification" | Every source file carries the header **"THIS IS NOT SECURITY AUDITED — DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST"**, followed by a full liability disclaimer | all ten `.aes` files |
+| 7 | Describes the 555 AE cost of opening a DAO vote | The same 555 AE is also required to **create a collection**, and unlike the vote donation it is sent to `ak_11111111111111111111111111111111273Yts` — burned, not paid to anyone. The whitepaper does not mention a collection creation cost | `CommunityFactory.aes` |
+| 8 | Not mentioned | A vote's `description` is capped at **300 characters** by `init`; longer proposals abort | `DAOVote.aes` |
+| 9 | 99.0% / 0.5% / 0.5% | 99.005% / 0.4975% / 0.4975% of what the buyer sends. The whitepaper's figures are that split rounded | `AffiliationBondingCurveTokenSale.aes` |
+| 10 | Not mentioned | There is a **minimum tradable amount**: `minimum_count = 10^12` aettos, or 10^-6 of a token. Anything smaller aborts with `MINIMUM_TOKENS_REQUIRED` | `BondingCurveExponential.aes` |
+| 11 | A backend relayer submits signed posts through `post_without_tip_sig` | `superhero-api` implements no such endpoint; the backend never broadcasts a post. The contract entrypoint is real but unused | `superhero-api/src/` |
+| 12 | Identity is `ProfileRegistry.aes` | The backend's identity indexer targets a different contract — `AddressLink`, a provider-keyed linking contract with per-provider nonces and signature-authorised `link` / `unlink`, plus DID and principal variants | `superhero-api/src/plugins/address-links/` |
+
+Items 2, 3 and 4 are the ones that will bite an integration. Items 6 and 11 are the ones to raise
+before you rely on a claim in a risk assessment.
 
 ## How to read it
 
@@ -75,7 +107,10 @@ whitepaper's rounding differ.
 If you are **assessing risk**, read Security Considerations alongside the honest caveats in
 [Risks](/tokens/risks) and the failure modes in [Attention Markets](/concepts/attention-markets).
 Note the whitepaper's own wording: the contract suite is "designed for independent audit and formal
-verification" — designed for, not audited.
+verification" — designed for, not audited. The contracts are blunter than that. Every one of the ten
+`.aes` files opens with "THIS IS NOT SECURITY AUDITED / DO NEVER USE THIS WITHOUT SECURITY AUDIT
+FIRST" and a disclaimer of all liability by BCTSL, the copyright holder. Take the contract headers
+as the current audit status until a published report says otherwise.
 
 ## Read more
 
@@ -85,12 +120,21 @@ verification" — designed for, not audited.
 - [Smart Contracts](/contracts) — entrypoints and events, which the whitepaper does not list.
 - [Glossary](/concepts/glossary) — the whitepaper's glossary, extended to cover the whole site.
 - [Security Model](/contracts/security) — the Security Considerations section expanded.
+- [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) — the Sophia sources the divergence table is checked against.
 
 ## Open questions
 
 - **Is there a downloadable PDF?** The whitepaper is a Markdown string rendered client-side in
   `src/views/Whitepaper.tsx`. No PDF asset exists in the repository's `public/` directory and no
-  download link appears in the app.
+  download link appears in the app. Only Superhero can publish one.
 - **Is there a version history?** The document is labelled "Version 0.7 — February 2026" with no
   changelog, and versions 0.1 through 0.6 are not published anywhere in these repositories. A reader
-  who needs to know what changed between versions has nothing to compare against.
+  who needs to know what changed between versions has nothing to compare against. Superhero would
+  have to publish the earlier revisions or a changelog.
+- **Are the divergences above intended, or is the whitepaper simply behind the code?** Each row is a
+  factual difference; none of them says which side is the mistake. Only the authors can say whether,
+  for example, the ProtocolDAO multiplier is meant to apply to the curve price or to the all-in
+  price, and whether the app's 950× display is the intended figure.
+- **Has any contract been audited since publication?** The contract headers say no, and no report
+  appears in any repository. A published audit — with a firm, a date and a commit hash — would close
+  this; nothing short of that should.

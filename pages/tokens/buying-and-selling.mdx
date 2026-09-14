@@ -23,7 +23,11 @@ Open a token at `/trends/tokens/NAME` and use the **Trade** tab.
 4. Confirm in your wallet.
 
 The slippage tolerance defaults to **1%** and is remembered per browser in local storage. A buy sends
-that much extra AE; a sell sets its return floor that much below the quote.
+that much extra AE — refunded if unused — and a sell sets its return floor that much below the quote.
+
+The ProtocolDAO reward the card previews is an underestimate. The app shows
+`0.95 × 1000 × ae_value`; `CommunityFactory.aes` mints `1000 ×` the AE actually paid, fee included.
+See [The ProtocolDAO Token](/dao/protocol-dao).
 
 A sell is **two transactions**, and the UI says so with a "step 1 of 2" notice: first an AEX-9
 allowance letting the sale contract move your tokens, then the sell itself. Both need a signature.
@@ -57,16 +61,43 @@ On the sale contract (`AffiliationBondingCurveTokenSale`):
 
 | Entrypoint | Notes |
 | --- | --- |
-| `price(count)` | Read-only quote: aettos required to buy `count` |
+| `price(count)` | Read-only quote: aettos required to buy `count`, **including the 0.5% affiliation fee** |
 | `sell_return(count)` | Read-only quote: aettos you would receive for selling `count` |
 | `buy(count)` | Payable, stateful. Mints `count` tokens to the caller |
-| `buy_with_affiliation(count, affiliation_rewardee)` | Payable, stateful. Same, but names the account that receives the affiliation reward |
+| `buy_with_affiliation(count, affiliation_rewardee)` | Payable, stateful — but **factory-only**, see below |
 | `sell(count, minimal_return_required)` | Stateful. Burns `count` tokens and pays out, reverting if the return is below the floor |
 | `token_contract()` | The AEX-9 contract address, needed for the allowance |
 | `bonding_curve()` | The pricing contract, if you want to compute quotes yourself |
 
 Every `count` is in token decimal units and every AE figure is in aettos. See
 [Curve Parameters & Units](/tokens/curve-parameters).
+
+**Attach exactly `price(count)`, or more.** `buy` requires `Call.value >= total_price` and refunds
+the difference with `Chain.spend` in the same transaction, so an over-attachment is returned rather
+than kept. Attaching less aborts with `AE_AMOUNT_NOT_SUFFICIENT`. Do not add the affiliation fee on
+top of `price(count)` yourself — it is already in there. See
+[Fees & Slippage](/tokens/fees-and-slippage).
+
+### You cannot call `buy_with_affiliation` yourself
+
+`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes` gates it:
+
+```sophia
+payable stateful entrypoint buy_with_affiliation(count : int, affiliation_rewardee: address): unit =
+  require(Call.caller == state.factory.address, "ONLY_FACTORY_CAN_CALL")
+  buy_with_affiliation_inner(count, affiliation_rewardee)
+```
+
+Only the `CommunityFactory` that deployed the sale can call it, and it does so exactly once — during
+`create_community`, to attribute a creator's initial buy to the creator's own address. Any other
+caller gets `ONLY_FACTORY_CAN_CALL`.
+
+For an ordinary buy, use `buy(count)`. It calls the same internal function with
+`affiliation_rewardee = Call.caller`, so **the affiliation reward is always attributed to the buyer's
+own position in the affiliation tree** — there is no per-transaction referrer argument to set. Who
+gets paid is decided by `AffiliationTreasury.affiliation_tree`, which is populated once when the
+buyer redeems an invitation or calls `register_invitation`, and never by the trade itself. See
+[Affiliation](/rewards/affiliation).
 
 A successful trade emits `Buy(int, int, int)` or `Sell(int, int)` on the sale contract, plus `Mint`
 or `Burn` on the token contract, plus a second `Mint` from the ProtocolDAO token contract on a buy.
@@ -204,11 +235,13 @@ const amount = new BigNumber(price.toString())
   .times(100 + SLIPPAGE).div(100)
   .toFixed(0);
 
+// Anything above price(count) comes straight back in the same transaction.
 const bought = await sale.buy(count, { amount, omitUnknown: true });
 console.log('buy tx', bought.hash);
 
-// Use buy_with_affiliation(count, rewardee) instead to credit a referrer:
-// await sale.buy_with_affiliation(count, 'ak_...', { amount, omitUnknown: true });
+// buy_with_affiliation(count, rewardee) is NOT callable here — the contract
+// requires Call.caller == factory and aborts with ONLY_FACTORY_CAN_CALL.
+// The affiliation reward for a normal buy follows the buyer's own inviter chain.
 
 // ---- SELL 5 tokens ------------------------------------------------------
 const forAccount = SALE.replace('ct_', 'ak_');
@@ -234,11 +267,17 @@ Four separate reasons, worth keeping apart:
 | --- | --- | --- |
 | Your own trade size walking up the curve | Always against you | Already inside the quote — see the slippage table on [Bonding Curves](/tokens/bonding-curve) |
 | Other trades landing between quote and execution | Either way | Bounded by your tolerance; this is what the guards are for |
-| The 0.5% affiliation fee on a buy | Against you | 0.5% of the curve value |
+| The 0.5% affiliation fee on a buy | Against you | 0.5% of the curve value — already inside `price()`, not inside `calculate_buy_price()` |
 | Off-chain estimates using a trapezoidal integral | Overstates by up to ~20 ppm on very large trades | Negligible, but see [Curve Parameters & Units](/tokens/curve-parameters) |
 
 The quote you get from `price()` or `sell_return()` is exact at the supply it was read at. Everything
 that moves it afterwards is other people.
+
+What you receive is also recoverable after the fact without re-deriving anything. A buy emits
+`Buy(total_price, affiliation_amount, total_supply)` and a sell emits `Sell(return, total_supply)`,
+both carrying the executed figures, and both are preceded by
+`PriceChange(previous_price, next_price)` with the unit price before and after your trade. The
+`total_supply` in those events is the supply **before** the trade.
 
 ## Read more
 
@@ -250,8 +289,3 @@ that moves it afterwards is other people.
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — find a token and open its Trade tab
 - [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the allowance semantics used by the sell flow
 - [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/) — call options such as `amount` and `omitUnknown`
-
-## Open questions
-
-- Whether `price(count)` on the sale contract already includes the 0.5% affiliation fee, or returns only the curve integral, is not settled by the ACI. The CLI sends exactly `price()` plus 3% and succeeds, which is consistent with either reading. Comparing `sale.price(n)` with `curve.calculate_buy_price(total_supply, n)` for the same token and count would answer it immediately.
-- `buy_with_affiliation` takes an `affiliation_rewardee` address, but the conditions under which a rewardee is accepted — whether the pair must already exist in the affiliation tree, and what happens when it does not — are not described in the ACI. See [Affiliation](/rewards/affiliation).

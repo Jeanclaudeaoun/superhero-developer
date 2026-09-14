@@ -45,6 +45,14 @@ The two Superhero codebases point at different mainnet nodes:
 | --- | --- | --- |
 | Web app (`src/config.ts`) | `https://mdw.wordcraft.fun` | `https://mdw.wordcraft.fun/mdw` |
 | Agent skill (`scripts/*.mjs`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw/v3` |
+| **Backend indexer** (`superhero-api/src/configs/network.ts`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw`, plus `wss://mainnet.aeternity.io/mdw/v2/websocket` |
+
+That third row is the one people get wrong. **`api.superhero.com` does not index through
+`mdw.wordcraft.fun`** — the string does not appear anywhere in the backend's source. The indexer
+reads the Foundation's public middleware, including its WebSocket feed for live transactions and key
+blocks, while your browser reads chain state through Superhero's own host. Both serve `ae_mainnet`,
+so they agree on what happened, but they are independent dependencies that can lag or fail
+independently.
 
 **They are the same API, on two different hosts.** Both expose the æternity node HTTP API at
 `/v3/...` and the middleware at `/mdw/v3/...`, which you can read off the call sites directly:
@@ -74,8 +82,10 @@ through one is visible through the other. What differs is who you depend on for 
 
 - **The web app depends on Superhero's own node**, so a Foundation outage does not take the app
   down, and Superhero can size the node for its own traffic.
-- **The agent skill depends on the Foundation's public node**, which needs no coordination with
-  Superhero ops but is a shared resource.
+- **The agent skill and the backend indexer depend on the Foundation's public node**, which needs no
+  coordination with Superhero ops but is a shared resource. A Foundation outage therefore does not
+  stop the browser reading the chain, but it does stop `api.superhero.com` ingesting new blocks —
+  which is why the app can show you a fresh on-chain balance while a feed or a chart goes stale.
 
 Two practical consequences:
 
@@ -91,6 +101,30 @@ Two practical consequences:
 
 If you are writing your own integration, either host works. Pick the Foundation's node unless
 you have a reason to prefer Superhero's.
+
+## The `disabled: true` flag on mainnet
+
+`NETWORKS.ae_mainnet` in `src/config.ts` carries `disabled: true`, and testnet carries no such flag.
+It looks alarming and it is inert. Trace it end to end:
+
+1. `disabled?: boolean` is an optional field on `NetworkDefinition` (`src/config.ts`).
+2. `toRuntimeNetworkConfig()` — which builds the `NetworkConfig` the app actually runs on —
+   **destructures a fixed list of fields and `disabled` is not among them**. It is dropped, along
+   with `name`, before `mainnetConfig` or `testnetConfig` is constructed.
+3. The one place it survives is `toNetwork()` in `src/utils/constants.ts`, which copies
+   `disabled: network.disabled` into `CURRENT_NETWORK`.
+4. Nothing reads `CURRENT_NETWORK.disabled`. A search across `src/` and `server/` for a read of
+   that property returns no call sites; the only other `disabled` reads in the codebase belong to
+   the Buy AE payment-method cards, which are unrelated.
+
+What it appears to be vestigial *of* is a network switcher. `AeSdkProvider` still exposes
+`activeNetwork` and `setActiveNetwork` through context, initialised from `CURRENT_NETWORK` — but
+`setActiveNetwork` is never called anywhere in the application, so the switcher has no UI and the
+flag has nothing to hide from.
+
+**Do not read it as "mainnet is off."** The network a build runs on is decided entirely by
+`VITE_NETWORK` at compile time. Why the flag was set is not recorded in any repository, and only
+the authors can say.
 
 ## API version paths are not uniform
 
@@ -113,14 +147,29 @@ Do not assume a single version prefix. Check the call site.
 - [æternity node API reference](https://api-docs.aeternity.io/) — the node HTTP API served at `/v3`.
 - [ae_mdw middleware](https://github.com/aeternity/ae_mdw) — what is served under `/mdw`, and its OpenAPI spec.
 
+## Rate limits
+
+One of these hosts has a documented limit, because its source is public.
+
+**`api.superhero.com` allows 10 requests per minute**, keyed on client IP *and* route path, in a
+fixed 60-second window, returning HTTP 429 with a `retryAfter` field
+(`superhero-api/src/api-core/guards/rate-limit.guard.ts`). The counter lives in a per-process `Map`,
+so it is not shared across replicas and resets on deploy — meaning the limit you observe may be a
+multiple of 10, and you should not design against the larger number. The guard is applied to the
+generic entity controllers and to the profile, notification-feed and room controllers; others carry
+no limit today. See [the developer FAQ](/concepts/faq) for what that means for a polling client.
+
+No limit is documented for the node, middleware, compiler, governance or DEX-backend hosts. Treat
+them as best-effort, back off on failure, and cache what you can.
+
 ## Open questions
 
-- No rate limits or uptime commitments are documented for any of these hosts in either
-  repository. Treat both public nodes as best-effort and back off on failure.
-- `NETWORKS.ae_mainnet` in `src/config.ts` carries `disabled: true`. The flag is copied into
-  `INetwork` by `src/utils/constants.ts` but no code in `src/` reads
-  `CURRENT_NETWORK.disabled`, so its intended effect — probably hiding mainnet from a network
-  switcher that no longer exists — is unverified. Do not read it as "mainnet is off".
-- Whether `mdw.wordcraft.fun` runs the same node and middleware versions as
-  `mainnet.aeternity.io` is not recorded anywhere. A `GET /v3/status` against each would settle
-  it; that request could not be made from this environment.
+- **What uptime can you expect from any of these hosts?** No SLA, availability target or maintenance
+  policy is published for `api.superhero.com`, `mdw.wordcraft.fun`, the `*.prd.service.aepps.com`
+  hosts or the public æternity nodes. Superhero and the æternity Foundation would each have to state
+  their own; nothing in any repository does.
+- **Does `mdw.wordcraft.fun` run the same node and middleware versions as `mainnet.aeternity.io`?**
+  A `GET /v3/status` against each returns `node_version`, `node_revision` and `mdw_version`, and
+  comparing the two answers would settle it in one step. That request could not be made from this
+  environment — outbound HTTP is blocked — so it stays open. It matters if you depend on a
+  middleware feature added in a specific release.

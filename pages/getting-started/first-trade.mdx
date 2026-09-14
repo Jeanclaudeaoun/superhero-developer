@@ -46,6 +46,17 @@ receive for a given amount of AE can be slightly fewer than quoted.
 
 That is what slippage tolerance is for.
 
+**The quote does not tick.** It is recomputed only when you change the amount, or flip between Buy
+and Sell — the effect in `src/features/trending/hooks/useTokenTrade.ts` depends on the input value,
+the buy/sell direction and the focused field, and nothing else. There is no refresh interval, no
+poll and no recompute when the token's supply updates underneath you: the calculation reads
+`total_supply` out of a ref at the moment it runs, so the figure it produced earlier stays on screen
+unchanged.
+
+The practical rule: **a quote you have been looking at for a while is older than it looks.** Retype
+the amount before you press Buy if the card has been open, and treat the slippage setting — not the
+displayed number — as your actual protection.
+
 ### Slippage
 
 | | |
@@ -151,13 +162,26 @@ Specifically for curve tokens:
 - [superhero.com/trends/tokens](https://superhero.com/trends/tokens) — the trending list, where this starts.
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the curve, the spread and the affiliation split, from the source.
 
+## Every token uses the same curve
+
+There is no per-community or per-collection curve configuration, and this is worth knowing before
+you compare two tokens: **the factory deploys one shared `BondingCurveExponential` contract and
+every community sale points at it.** `CommunityFactory.init` creates it once
+(`bonding_curve = (Chain.create() : BondingCurveExponential) : BondingCurve`) and
+`create_community` passes `state.bonding_curve` into each new sale, so the parameters are
+`let`-bound constants in a single contract with no setter:
+
+```sophia
+a = 10^15    k = 10^10    initial_price = 10^11    decimals = 10^18
+minimum_count = 10^12     sell_return_percentage = 9950    sell_return_precision = 10000
+```
+
+So two tokens at the same supply cost exactly the same. A token's price says something about how
+much has been bought, and nothing about how it was configured. `minimum_count = 10^12` aettos —
+10^-6 of a token — is the smallest tradable amount; below it the call aborts with
+`MINIMUM_TOKENS_REQUIRED`. See [Curve Parameters](/tokens/curve-parameters).
+
 ## Open questions
 
-- What exponential curve parameters does a new community launch with, and are they configurable per
-  collection? The whitepaper describes the curve qualitatively and expects only 10–20% of total
-  supply to be reached, but the concrete parameters were not traced for this page — see
-  [Curve Parameters](/tokens/curve-parameters).
-- Is the quote recomputed continuously while the trade card is open, or only on input change? The
-  trade hook reads store state at submit time; the refresh cadence was not established.
 - An annotated screenshot of the trade card, with every field labelled, is wanted here. None exists
   in the repositories.

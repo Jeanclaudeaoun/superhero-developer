@@ -18,6 +18,10 @@ Wrap and unwrap at `https://superhero.com/defi/wrap`.
 | Mainnet | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` |
 | Testnet | `ct_JDp175ruWd7mQggeHewSLS1PFXt9AzThCDaFedxon8mF8xTRF` |
 
+These come from the app's own configuration (`src/config.ts`) and are the same two addresses
+the contracts repository lists as the official deployments in its README — two independently
+maintained sources agreeing, which is worth more than either alone.
+
 ## Why native AE cannot be pooled
 
 AE is the chain's native coin, not a contract. A liquidity pair, by contrast, is a contract
@@ -42,10 +46,19 @@ The widget at `/defi/wrap` has two modes:
 | Mode | Direction | What runs |
 | --- | --- | --- |
 | Wrap | AE → WAE | `deposit()` on the WAE contract, with your AE attached as call value |
-| Unwrap | WAE → AE | `withdraw(amount, referrer)` on the WAE contract, with `referrer` passed as `null` |
+| Unwrap | WAE → AE | `withdraw(amount)` on the WAE contract |
 
 Both use the `WAE` ACI shipped in `dex-contracts-v2`, at the address configured for the
 current network.
+
+**`withdraw` takes one argument, not two.** The Superhero client calls it as
+`wae.withdraw(aettos, null)` and annotates the extra argument `referrer: null`
+(`src/components/dex/hooks/useSwapExecution.ts`), but no such parameter exists: both
+`dex-contracts-v2/contracts/WAE.aes` and the `deployment/aci/WAE.aci.json` the app itself imports
+declare `withdraw : (int) => unit`. The same `referrer` name is used in `src/libs/dex.ts` for the
+router's last swap argument, where the contract actually calls it `callback_opt` — it is a
+client-side label carried across several calls, and it has no on-chain meaning in either place.
+Nothing is diverted to anyone.
 
 Using it:
 
@@ -66,6 +79,33 @@ The widget nominally passes a 0.5% slippage tolerance and a 20-minute deadline i
 shared swap executor, but neither has any effect: the executor recognises the AE-and-WAE pair
 and short-circuits straight to `deposit` or `withdraw` before any router call is built. The
 rate is fixed at 1:1 by the contract.
+
+## What the contract actually does
+
+`WAE.aes` is about two hundred lines, most of them the standard AEX-9 allowance machinery. The
+wrapping is four entrypoints:
+
+| Entrypoint | Body, in one line |
+| --- | --- |
+| `deposit()` | Payable. Credits `Call.value` to `Call.caller` and emits `Deposit` |
+| `deposit_to(to)` | Payable. Credits `Call.value` to `to`, emitting `Deposit` and `Transfer` |
+| `withdraw(amount)` | Debits `Call.caller`, then `Chain.spend(Call.caller, amount)` and emits `Withdrawal` |
+| `total_supply()` | Returns `Contract.balance` — the contract's own AE balance, not a stored counter |
+
+Three things follow from those four lines.
+
+- **`withdraw` always pays the caller.** There is no recipient argument, which is why the router
+  unwraps into itself and then does a separate `Chain.spend(to, amount)` — see the AE-side swap
+  entrypoints on [Swapping](/defi/swap).
+- **The peg cannot drift.** `total_supply()` is defined as the contract's AE balance rather than
+  tracked separately, so total WAE issued and AE held are the same number by construction. The
+  only way the sum of balances could exceed it is a Sophia bug.
+- **Withdrawing more than you hold aborts with `WAE: LOW_BALANCE`.** An address that has never
+  deposited is treated as holding zero rather than erroring, so the failure is the same either way.
+
+Its metadata is a literal: `name` "Wrapped Aeternity", `symbol` "WAE", `decimals` 18. It declares
+`aex9_extensions() = ["allowances"]` — no minting or burning, because `deposit` and `withdraw` are
+the only ways supply changes.
 
 ## When the app wraps for you
 
@@ -88,17 +128,14 @@ router allowance up front, or to interact with a pair contract directly.
 
 - **WAE is an ordinary AEX-9 token in your wallet.** It shows up alongside community tokens
   and may need to be added manually in some wallets.
-- **The peg is mechanical, not a market.** The WAE contract holds exactly the AE backing the
-  WAE it has issued. There is no oracle, no redemption queue and no depeg scenario short of a
-  contract bug.
+- **The peg is mechanical, not a market.** `total_supply()` *is* the contract's AE balance, so the
+  WAE contract holds exactly the AE backing the WAE it has issued. There is no oracle, no
+  redemption queue and no depeg scenario short of a contract bug.
+- **Nobody can take the AE out.** `init` records the deployer as `state.owner`, but no entrypoint
+  reads it for anything — there is no owner-only withdrawal, pause or upgrade. The only path AE
+  takes out of the contract is `withdraw`, paying the caller against their own balance.
 - **aeETH is a different thing entirely.** WAE wraps the chain's own coin; aeETH represents
   Ethereum-side value moved across a bridge. See [Bridging from Ethereum](/defi/bridge).
-
-## Open questions
-
-- **What is `withdraw`'s second argument for?** The client always passes `null` as
-  `referrer`. Whether the WAE contract can route a referral share on unwrap, and to whom, is
-  defined in `WAE.aes` in `dex-contracts-v2` rather than in anything the app reveals.
 
 ## Read more
 

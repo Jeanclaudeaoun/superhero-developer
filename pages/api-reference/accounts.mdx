@@ -76,14 +76,40 @@ curl -s "https://api.superhero.com/api/accounts/ak_2ruXgsLy9jMwEqsgyQgEsxw8chYDf
 
 | Parameter | Notes |
 | --- | --- |
-| `search` | Matches address or name |
-| `order_by` | `total_volume`, `total_tx_count`, `total_buy_tx_count`, `total_sell_tx_count`, `total_created_tokens`, `total_invitation_count`, `total_claimed_invitation_count`, `total_revoked_invitation_count`, `created_at` |
-| `order_direction` | `ASC` or `DESC` |
-| `has_nostr` | When true, only accounts with a linked Nostr key |
-| `limit`, `page` | Standard pagination |
+| `search` | `ILIKE` across the account's `address` and `chain_name` and the profile cache's `public_name`, `chain_name`, `username` and `fullname`. Rejected above 100 characters |
+| `order_by` | Default `total_volume`. See the row table below for the full set; anything outside it is a 400 |
+| `order_direction` | `ASC` or `DESC`, default `DESC`. Anything else is a 400 |
+| `has_nostr` | `true` or `1` restricts to accounts with a non-empty `links.nostr` |
+| `limit`, `page` | `limit` defaults to 100, must be 1–100. Cached 60 seconds |
 
-The `order_by` enum doubles as a list of the counters the API keeps per account — volume, trade
-counts split by side, tokens created, and invitations issued, claimed and revoked.
+### What a list row contains
+
+A row is the `Account` entity
+(`superhero-api/src/account/entities/account.entity.ts`), returned whole:
+
+| Field | Type | Sortable | Meaning |
+| --- | --- | --- | --- |
+| `address` | string | | The `ak_...`, primary key |
+| `bio` | string or null | | Legacy bio |
+| `chain_name` | string or null | | Cached `.chain` name |
+| `chain_name_updated_at` | string or null | | Last successful resolution |
+| `total_volume` | string | yes | Lifetime trade volume in **AE** — a `numeric` column, so a string |
+| `total_tx_count` | number | yes | All indexed trades |
+| `total_buy_tx_count` | number | yes | |
+| `total_sell_tx_count` | number | yes | |
+| `total_created_tokens` | number | yes | |
+| `total_invitation_count` | number | yes | Invitations issued |
+| `total_claimed_invitation_count` | number | yes | |
+| `total_revoked_invitation_count` | number | yes | |
+| `links` | object | | A `jsonb` map, `{}` when empty — the verified links described above |
+| `banned` | boolean | | |
+| `created_at` | string | yes | ISO 8601 |
+
+One column exists but is never returned: `chain_name_checked_at` is declared `select: false`
+because it is sweep bookkeeping, not account data.
+
+Searching by an `ak_...` that the table has not seen triggers a hydration attempt from the
+transactions table first, so a brand-new trader can be found by their exact address.
 
 ```bash
 curl -s "https://api.superhero.com/api/accounts?order_by=total_volume&order_direction=DESC&limit=10"
@@ -105,23 +131,51 @@ most 200, and returns the matching accounts.
 
 ## `GET /api/accounts/{address}/tokens`
 
-An account's holdings. `order_by` accepts only `balance`; `order_direction` is `ASC` or `DESC`.
-The `search` parameter narrows server-side, which matters because **`limit` is capped at 100** —
-an unfiltered fetch only ever returns the top 100 holdings by balance.
+An account's holdings.
 
-Item shape varies slightly by deployment, which the web app handles explicitly: usually
-`{ token, balance, ... }` with the full `TokenDto` nested under `token`, but some environments
-flatten it to `token_name` / `token_symbol` / `token_address` on the item itself. Read `item.token`
-first and fall back to the item.
+| Parameter | Notes |
+| --- | --- |
+| `order_by` | Only `balance`. Anything else is a 400 |
+| `order_direction` | `ASC` or `DESC`, default `DESC` |
+| `search` | `ILIKE` on the token's name |
+| `factory_address` | Restrict to one factory. **Without it the list is restricted to the current factory** |
+| `creator_address` | Switches modes — see below |
+| `owner_address` | Switches modes — see below |
+| `limit`, `page` | `limit` defaults to 100, must be 1–100 |
 
-The agent skill reads `h.balance`, `h.aex9_address`, and `h.token.name` / `h.token.symbol` /
-`h.token.sale_address` / `h.token.price` / `h.token.sell_price` / `h.token.trending_score`.
+There is **no `includes` parameter** here; the token is always nested. Each item is a holder row
+with a `token` object attached, and that token carries a freshly computed `rank`:
 
-```bash
-curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/tokens?includes=token&order_by=balance&order_direction=DESC&limit=50"
+```json
+{
+  "id": "...", "aex9_address": "ct_...", "address": "ak_...",
+  "balance": "1500000000000000000000", "block_number": 1104233,
+  "last_tx_hash": "th_...", "created_at": "2026-05-02T11:04:19.000Z",
+  "token": { "rank": 17 }
+}
 ```
 
-Balances are in token base units — divide by 10 raised to the token's `decimals`.
+Balances are in **token base units** — divide by 10 raised to the token's `decimals`. Because
+`limit` is capped at 100, an unfiltered fetch only ever returns the top 100 holdings by balance;
+use `search` to narrow rather than paging blindly.
+
+### `creator_address` and `owner_address` change what the endpoint means
+
+Pass either and the handler switches to a different query entirely: it lists **tokens the path
+address created or owns**, regardless of balance, and attaches whatever balance exists (or the
+string `"0"`). Without them, it lists tokens the path address *holds a positive balance in*.
+
+The value you pass is used only as a flag — the query filters on the **path** address, not on the
+value. So `?owner_address=ak_ANYTHING` on `/api/accounts/ak_ALICE/tokens` returns Alice's owned
+tokens. Pass the same address as the path to avoid confusion.
+
+```bash
+# Tokens Alice holds
+curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/tokens?order_by=balance&order_direction=DESC&limit=50"
+
+# Tokens Alice created, including any she has sold out of
+curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/tokens?creator_address=ak_YOUR_ADDRESS&limit=50"
+```
 
 ## Portfolio history
 
@@ -130,11 +184,36 @@ paginated envelope.
 
 | Parameter | Default | Notes |
 | --- | --- | --- |
-| `startDate` | — | ISO 8601 |
-| `endDate` | — | ISO 8601 |
-| `interval` | `86400` | Snapshot spacing **in seconds**; 86400 is daily |
-| `convertTo` | `ae` | One of the nine currency codes |
-| `include` | — | Comma-separated. `pnl` adds aggregate `total_pnl`; `pnl-range` uses daily-window PnL instead of cumulative |
+| `startDate` | 90 days ago | ISO 8601. Validated as a date string |
+| `endDate` | now | ISO 8601. Capped at the current time — you cannot ask for the future |
+| `interval` | `86400` | Reconstruction spacing **in seconds**; 86400 is daily. Must be a positive integer |
+| `convertTo` | `ae` | One of the nine currency codes; anything else is a 400 |
+| `include` | — | Comma-separated. `pnl` adds aggregate `total_pnl`; `pnl-range` switches to daily-window PnL instead of cumulative |
+
+### Nothing here is a stored snapshot
+
+`interval` is not a sampling rate over a snapshot table — there is no snapshot table. Each
+timestamp you ask for is **reconstructed from scratch**
+(`superhero-api/src/account/services/portfolio.service.ts`):
+
+1. The requested range is walked in `interval`-second steps, generating a list of timestamps. Any
+   timestamp in the future is dropped, and the loop is bounded at 100,000 iterations.
+2. Each timestamp is resolved to a **block height** in one batch query against the indexed
+   `key_blocks` table. A timestamp the table cannot cover falls back to the nearest already
+   resolved height rather than to genesis.
+3. The account's AE balance is read from the node **at that height**, deduplicated per unique
+   height and cached within the request.
+4. Token holdings and PnL at that height are computed from the `transactions` table in one batched
+   query across every unique height.
+
+So a 3600-second `interval` gives you real hourly reconstructions, not interpolation between daily
+rows — and every extra point costs real work. That is why this is the slowest endpoint in the API
+and why the web app allows it 90 seconds.
+
+The reach backwards is bounded by the indexer, not by a retention policy: history goes back as far
+as the mirrored `key_blocks` and `transactions` tables do, which for the community-token data is
+the factory's deployment height. **The default range is the last 90 days**, plus one day when you
+supply neither `startDate` nor `endDate`.
 
 Each snapshot is a `PortfolioHistorySnapshotDto`:
 
@@ -164,7 +243,33 @@ Unlike the token fields, these are plain numbers already in AE and USD — no 1e
 | `current_value` | `PnlAmountDto` | Current total value |
 | `gain` | `PnlAmountDto` | Total gain or loss |
 
-`PnlAmountDto` is simply `{ ae, usd }`, both numbers.
+`PnlAmountDto` is simply an `ae` and a `usd` number.
+
+### Cost basis is weighted average, and `include` changes what "PnL" means
+
+There is no FIFO or LIFO lot matching anywhere in the PnL code. Cost basis is the **weighted
+average purchase price** across the account's entire history with a token
+(`superhero-api/src/account/services/bcl-pnl.service.ts`), and `create_community` counts as a buy
+alongside `buy`.
+
+The `include` flag selects between two different definitions:
+
+| Mode | `invested` | `gain` |
+| --- | --- | --- |
+| **Cumulative** (default, or `include=pnl`) | everything ever spent on the token | `proceeds_from_all_sells + current_value_of_holdings - total_spent` |
+| **Range** (`include=pnl-range`) | `average_cost_per_token * tokens_sold_in_the_window` | `proceeds_in_window - that_cost_basis` |
+
+Cumulative PnL therefore includes unrealised gains on open positions; range PnL is **realised
+only**, deliberately, so a daily calendar only turns green or red when a position is actually
+closed. The average cost used to price a range sale is the all-time average, not a
+window-restricted one — that is how a token bought last year and sold today gets the right cost
+basis.
+
+`percentage` is `gain_ae / cost_basis_ae * 100`, and is 0 rather than infinite when the cost basis
+is 0.
+
+Holdings at a given block height are computed with a strict inequality —
+`tx.block_height < snapshot_height` — so a trade in the snapshot's own block is not counted yet.
 
 ```bash
 curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/portfolio/history?interval=86400&convertTo=ae&include=pnl"
@@ -217,9 +322,16 @@ Items carry `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
 `sell_count`, `volume_usd`, `created_tokens_count`, `owned_trends_count` and
 `portfolio_value_usd_sparkline` (an array of `[timestamp, value]` pairs).
 
+`mdd_pct` is **maximum drawdown as a positive percentage**: 0 means the portfolio never fell from
+a peak, and a larger number is worse. The computation walks the sparkline, tracks the running
+peak and keeps the largest `(peak - value) / peak`, then multiplies by 100 — it can never be
+negative. That is why `sortDir` defaults to `ASC` for this one metric: ascending puts the
+steadiest portfolios first.
+
 The `meta` here is **not** the standard envelope: it carries `page` (not `currentPage`), `limit`,
 `totalItems`, `totalPages`, `window`, `sortBy`, `sortDir` and a `timeFilter` of
-`{ value, unit, start, end }`.
+`value`, `unit`, `start` and `end`. Snapshot-backed windows are rebuilt by a cron every ten
+minutes.
 
 **Responses are cached for up to 60 seconds**, and `meta.timeFilter.start` / `end` reflect when
 the cache entry was filled rather than the moment of your request.
@@ -237,14 +349,3 @@ curl -s "https://api.superhero.com/api/accounts/leaderboard?window=30d&sortBy=ro
 - [Portfolio](/tokens/portfolio) — what these numbers mean for a trader
 - [Leaderboard on superhero.com](https://superhero.com/trends/leaderboard) — the live view of this endpoint
 
-## Open questions
-
-- **What exactly is in a `/api/accounts` list row?** The endpoint is typed `any` in the generated
-  client and the web app renders only `items`, `meta.currentPage` and `meta.totalPages` plus the
-  counters named in the `order_by` enum. The full row shape is unverified.
-- **Is `mdd_pct` drawdown as a positive or negative percentage?** `sortDir` defaults to `ASC` for
-  `mdd`, which implies smaller is better and therefore a positive magnitude — but the sign is not
-  stated anywhere.
-- **How far back does portfolio history go, and at what granularity is it stored?** `interval` is
-  a request parameter, not a description of the underlying snapshot cadence. Whether a 3600-second
-  interval interpolates or returns real hourly snapshots is not discoverable from the client.

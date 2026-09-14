@@ -90,6 +90,22 @@ Two declarations of the same contract is redundant but harmless: a runtime that 
 neither block still works, because `npm install` in the skill directory resolves the
 `dependencies` field like any Node project.
 
+### Which runtimes read which block
+
+The `metadata` mapping is the standard's escape hatch, and what a runtime does with the keys
+inside it is entirely that runtime's business.
+
+| Runtime | What it reads |
+| --- | --- |
+| OpenClaw / ClawHub | The `metadata.openclaw` block. `requires.env`, `requires.bins`, `primaryEnv` and `envVars` are documented fields of ClawHub's skill format, and its security analysis flags a skill whose code reads an environment variable the frontmatter does not declare |
+| GitHub Copilot | `name`, `description`, `allowed-tools`, and a `metadata` section it uses for its own purposes — a version field, and the provenance `gh skill` writes on install. **No environment declaration at all**, so nothing prompts for `AE_PRIVATE_KEY` |
+| Claude Code | `name` and `description` for discovery. It has its own permission system rather than an env declaration |
+
+The practical rule: **assume nothing prompts you.** Set `AE_PRIVATE_KEY` yourself before the
+first run, on every runtime, and verify with `superhero-wallet.mjs exists` as the first thing
+you ask for. The `package.json` `skill.env` block is the runtime-agnostic place to look for
+the same information if you are adapting the skill somewhere new.
+
 ## The `{baseDir}` placeholder
 
 Every command inside `SKILL.md` and the guides is written with a `{baseDir}` prefix:
@@ -222,10 +238,5 @@ If you need a network other than mainnet, note that only `superhero-governance.m
 - [Calling contracts](/contracts/calling-contracts) — where the ACIs in `contracts/` come from
 - [Agent Skills specification](https://agentskills.io/specification) — the open standard the frontmatter follows
 - [superhero-agent-skill on GitHub](https://github.com/superhero-com/superhero-agent-skill) — read `SKILL.md` and the scripts directly
-
-## Open questions
-
-- The `metadata.openclaw` block is a runtime-specific extension rather than part of the Agent
-  Skills standard. Whether other runtimes read `requires.env` and `primaryEnv` under their own
-  namespace, or ignore `metadata` entirely, is not documented in the skill. Check each
-  runtime's own skills documentation before relying on automatic environment prompting.
+- [ClawHub skill format](https://docs.openclaw.ai/clawhub/skill-format) — the `metadata.openclaw` fields and what the registry does with them
+- [Creating agent skills for Copilot CLI](https://docs.github.com/en/enterprise-cloud@latest/copilot/how-tos/copilot-cli/customize-copilot/create-skills) — the frontmatter fields Copilot recognises

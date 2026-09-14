@@ -33,6 +33,39 @@ When `stake_weighted_results` is `null`, the governance backend could not verify
 that poll. That is not permission to fall back on raw counts — it means you do not have a
 result. Say so rather than reporting a number that is not the outcome.
 
+### Why a poll can have no result at all
+
+The backend will not weight a poll whose code it does not recognise. `pollVotesState` opens with
+
+```js
+if (!(await this.aeternity.verifyPollContract(address))) throw Error("poll not verified")
+```
+
+and `verifyPollContract` fetches the poll's **contract-create transaction bytecode**, SHA-256 hashes
+it, and checks the digest against a table of known-good hashes shipped in the repository
+(`governance-contracts/generated/bytecode_hashes.json`). That table holds one entry per aesophia
+release — `Poll.aes` for 3.2.0 through 4.3.0, `Poll_Iris.aes` for 5.0.0 through 8.0.0, twenty-three
+builds in all.
+
+So a poll gets stake-weighted results if and only if it was deployed from an **unmodified** poll
+source compiled by a **release the table knows about**. A poll with a one-character change, or built
+with a compiler newer than the table, verifies as false and returns `null` — not until someone
+re-indexes, but for as long as the table stays as it is.
+
+Note the subtlety in the comment beside that code: the check cannot use
+`getContractByteCode(pollAddress)`, because the chain strips the `init` function from stored
+bytecode and the result would never match a compile-time hash. It fetches the original **create
+transaction** from the æternity middleware instead, and hashes the `tx.code` field of that.
+
+Two operational consequences follow from *where* it reads. The backend needs a working middleware to
+verify anything at all, and the verification throws-to-`false` on any error — so a middleware
+outage, or a poll the middleware has not indexed yet, reads as "not verified" rather than as an
+error. The result is cached with the long cache TTL, so an unlucky `false` can persist for a while
+after the underlying problem is fixed.
+
+Both Superhero code paths deploy builds that are in the table, so polls created through the app or
+the agent skill are verified. See the comparison below.
+
 ## The data model
 
 ### On the poll contract
@@ -62,6 +95,46 @@ Poll.metadata = { title       : string
 Nothing is editable after deployment. There is no `change_metadata`, no way to add an option,
 and no way to extend or shorten `close_height`. A poll with a typo in it stays that way; the
 only remedy is to create a new poll.
+
+The contract's only validation is on the metadata lengths, in `init`: the title must be at most 50
+characters and the description at most 300, aborting with `TITLE_STRING_TO_LONG` or
+`DESCRIPTION_STRING_TO_LONG`. Nothing validates the link, the `spec_ref`, the option labels, the
+number of options, or that `close_height` is in the future — a poll deployed with a close height
+already in the past is born closed.
+
+### Which `Poll` contract is deployed
+
+The `aepp-governance` repository carries two poll sources, and the distinction is a compiler-era
+one rather than a behavioural one:
+
+| Source | `version()` | Compiles with |
+| --- | --- | --- |
+| `Poll.aes` | 1 | aesophia 3.2.0 through 4.3.0 |
+| `Poll_Iris.aes` | 2 | aesophia 5.0.0 through 8.0.0 |
+
+`Poll_Iris.aes` is the Iris-hardfork port: it adds `@compiler >= 5` and `include "String.aes"`, and
+bumps `version()`. The entrypoints, the state record and the two `require` guards are identical. The
+registry has the same split — `Registry.aes` (version 1) for the old compilers,
+`Registry_Compiler_v6.aes` (version 2, `main contract` and `contract interface` syntax) from
+aesophia 6 onwards.
+
+**Both Superhero code paths deploy `Poll_Iris.aes`.** The brief comparison is:
+
+| Repository | Artifact | Compiler | Bytecode hash |
+| --- | --- | --- | --- |
+| Web app, `src/api/GovernanceBytecodeHashes.json` | `Poll_Iris.aes` | 8.0.0 | `51856aa1…c923d464` |
+| Agent skill, `contracts/PollBytecode.json` | `Poll_Iris.aes` | 7.0.1 | `eb364ab0…650a8540` |
+
+The two `cb_` payloads are **byte-identical except for the trailing compiler-version string** that
+aesophia embeds in the contract's metadata — `7.0.1` in one, `8.0.0` in the other. Every byte of
+FATE code is the same. The hashes differ because the hash covers that metadata.
+
+Both hashes appear verbatim in the governance backend's hash table, at their respective compiler
+versions, so **polls created either way are verified and both get stake-weighted results.** The
+difference between the two artifacts is cosmetic; it changes the digest and nothing else.
+
+The app's hash file also records `Poll.aes: null` and `Registry.aes: null` under 8.0.0, which is the
+compiler refusing to build the pre-Iris sources at all — not a missing entry.
 
 ### On the registry
 
@@ -243,19 +316,6 @@ history rather than live results:
 These are indexed transaction records: counts of votes and revocations, not stake weights. Use
 them for provenance and history, and the governance API for results.
 
-## Open questions
-
-- Whether the governance backend requires a poll's deployed bytecode to match a known
-  `Poll_Iris.aes` build before it will compute stake-weighted results is not stated anywhere we
-  could verify — but `stake_weighted_results` is documented as `null` when the backend "could
-  not verify or compute the poll", which implies a verification step. The two poll bytecode
-  artifacts in the repositories differ (the app ships one compiled for version `8.0.0`, the
-  agent skill one built with compiler `7.0.1`), so a poll created by one path may not be
-  treated identically to one created by the other. Settle it by creating a poll each way and
-  checking whether both get a non-null result.
-- The exact tie-breaking and rounding rules the backend uses for `percentageOfTotal` are not
-  documented in either repository.
-
 ## Read more
 
 - [Voting on Polls](/governance/voting) — casting a vote once you have read the poll.
@@ -265,3 +325,15 @@ them for provenance and history, and the governance API for results.
 - [Community DAOs](/dao) — the other voting system, where stake is locked and results execute.
 - [Browse polls](https://superhero.com/voting) — the live list.
 - [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference implementation and the source of the close-height counting rule.
+
+## Open questions
+
+- **Which build the deployed mainnet backend actually recognises.** The hash table documented above
+  is the one in the checked-out `aepp-governance` repository; the running service could be on an
+  older revision with a shorter table. If a poll you created reports `stake_weighted_results` as
+  `null` despite using an unmodified source, this is the first thing to check — and the only way to
+  check it is to try.
+- **How ties between options are broken.** `stakesForOption` sorts votes within an option but
+  imposes no ordering between options with equal stake, and nothing in the contracts or the backend
+  declares a winner at all. A tied poll has no documented resolution because the system does not
+  pick winners — it reports stake per option and leaves the decision to people.

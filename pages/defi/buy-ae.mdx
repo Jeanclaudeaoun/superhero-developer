@@ -104,13 +104,22 @@ current rules with the provider rather than trusting a summary here.
 
 ## Open questions
 
-- **What are each provider's limits, fees and supported countries?** Not determinable from
-  the Superhero codebase — the app only stores the link. Check each provider directly.
-- **Will the in-app ETH on-ramp return?** The code carries re-enable instructions but no
-  reason for the disablement and no timeline.
-- **Is the "coming soon" label on the X earning card stale, or does it refer to something
-  else?** The X posting rewards are live on `/trends/invite`, which makes the disabled card
-  on the Get AE page look like an oversight rather than an accurate status.
+- **What are each provider's limits, fees and supported countries?** Not determinable from any
+  Superhero repository — the app stores a link and nothing else, and the backend has no on-ramp
+  module at all. Each provider's own terms page is the only source, and they vary by the country
+  you are in, so no figure quoted here would be right for every reader.
+- **Will the in-app ETH on-ramp return?** The code carries re-enable instructions but no reason for
+  the disablement and no timeline, and `superhero-api` has no corresponding endpoint to re-point at.
+  Only a maintainer can say; see [Bridging from Ethereum](/defi/bridge) for the same question about
+  the bridge it shared code with.
+- **Is the "coming soon" label on the X earning card accurate?** More likely than it looked. The
+  backend's X posting reward is built but gated behind several environment switches that ship off:
+  `.env.example` sets `PROFILE_X_POSTING_REWARD_ENABLE_POST_FETCH=false` (which short-circuits every
+  reward evaluation with `post_fetch_disabled`), `PROFILE_X_PERPOST_REWARD_ENABLED=false` and
+  `PROFILE_X_INVITE_MILESTONE_REWARD_AMOUNT_AE=0`
+  (`superhero-api/src/profile/profile.constants.ts`, `.env.example`). Those are example values, not
+  the production configuration, so what remains unknown is which switches `api.superhero.com`
+  actually has set — a question only Superhero can answer.
 
 ## Read more
 

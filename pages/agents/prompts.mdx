@@ -62,7 +62,18 @@ The skill will not trade autonomously without a confirmed strategy. This is the 
 >
 > **User:** Let's go with Moderate. And post every day at 9am.
 
-See [Risk Strategies](/agents/strategies) for what you are actually agreeing to.
+That is quoted from the skill, and the score figures in it are wrong: the trending score the
+API returns is a normalised value between 0 and 1, so no token reaches 20k, let alone 100k.
+Answer the strategy question, then immediately replace the entry filter with something
+satisfiable:
+
+> Use the moderate parameters, but ignore the score thresholds in the skill — the API returns
+> a trending score between 0 and 1. Enter only the top 5 tokens by trending score whose score
+> is higher than when you last checked, and tell me each cycle which tokens passed and what
+> their scores were.
+
+See [Risk Strategies](/agents/strategies) for what you are actually agreeing to, and
+[Fixing the entry threshold](/agents/strategies#fixing-the-entry-threshold) for why.
 
 ---
 

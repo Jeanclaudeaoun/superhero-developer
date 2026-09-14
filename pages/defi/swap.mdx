@@ -52,8 +52,10 @@ What each one does at the contract boundary:
   If the pool has moved past that bound by the time the transaction executes, the router
   reverts and you keep your tokens.
 - **Deadline** becomes an absolute timestamp: the app sends `Date.now()` plus your minutes,
-  **in milliseconds since epoch**. Past it, the router refuses the swap. Note the unit — the
-  router here expects milliseconds, not seconds.
+  **in milliseconds since epoch**. Every router entrypoint opens with
+  `require(deadline >= Chain.timestamp, "AedexV2Router: EXPIRED")`
+  (`dex-contracts-v2/contracts/router/AedexV2Router.aes`), and Sophia's `Chain.timestamp` is unix
+  time in milliseconds, so milliseconds is the correct unit — not seconds.
 
 ## How a route is found
 
@@ -69,6 +71,27 @@ What each one does at the contract boundary:
    the factory for a direct pair via `get_pair`. If there is none, and neither token is WAE,
    it tries a two-hop path through WAE.
 5. **No path, no quote.** If all of that fails the quote errors with "No route found".
+
+**`synchronized` means "this pool has liquidity", not "the indexer is up to date".** The name
+invites the second reading; the code settles it. In
+`superhero-api/src/dex/controllers/swap-routes.controller.ts` the flag is computed per pair as:
+
+```ts
+synchronized: Number(reserve0) > 0 && Number(reserve1) > 0
+```
+
+Nothing about block height, sync state or staleness enters into it. An unsynchronized pair is an
+empty or one-sided pool that cannot be quoted at all, which is why the client filters routes
+containing one — a route through an empty pool is not a worse route, it is an impossible one.
+
+**Two pairs is the hard maximum, on both paths.** The indexer's route finder builds a graph of every
+pair and then returns only direct routes and routes through a single intermediate token
+(`src/dex/utils/paths.ts` — the reducer emits `[direct]` or `[first, second]` and nothing longer),
+and the controller documents itself as returning "every routing route (direct and single-hop)".
+There is no depth parameter and no deeper search to enable. The on-chain fallback has the same
+ceiling by construction: direct, or one hop through WAE. So if two tokens are only reachable through
+three pools, the swap form will tell you there is no route, and you have to make the intermediate
+swap yourself.
 
 ## How the number you see is produced
 
@@ -107,14 +130,60 @@ a trade that will execute at a ruinous price.
 
 ## Fees
 
-The swap fee is **0.3% of the trade**, and it goes to the pool's liquidity providers, not to
-Superhero. æternity's documentation states the exchange has no platform fee beyond the
-liquidity-provider reward, capped at 0.3%. That fee is charged inside the pair contract and
-is already reflected in the router's `get_amounts_out` answer — it is not a separate line
-item you pay.
+The swap fee is **0.3% of the input amount**, it is a constant in the contract source, and it is
+not configurable per pair. It goes to the pool's liquidity providers, not to Superhero.
 
-On top of it you pay the ordinary æternity transaction fee, plus a second transaction fee if
-an allowance approval is needed.
+The number appears in two places, and they have to agree for a swap to succeed.
+
+**The router quotes with it.** `dex-contracts-v2/contracts/lib/router/AedexV2Library.aes`:
+
+```sophia
+private function apply_fee(amount: int): int = amount*997 // the fee is 0.3%
+
+function get_amount_out(amount_in, reserve_in, reserve_out) =
+    let amount_in_with_fee = apply_fee(amount_in)
+    let numerator   = amount_in_with_fee*reserve_out
+    let denominator = reserve_in*1000 + amount_in_with_fee
+    numerator / denominator
+```
+
+So 997 of every 1000 input units buy output; the remaining 3 stay in the pool. `get_amount_in`
+inverts the same ratio and adds one aetto of rounding headroom.
+
+**The pair enforces it.** `dex-contracts-v2/contracts/AedexV2Pair.aes`, inside `swap`:
+
+```sophia
+let balance0_adjusted = balance0*1000 - amount0_in*3
+let balance1_adjusted = balance1*1000 - amount1_in*3
+require(
+    balance0_adjusted*balance1_adjusted >= reserve0*reserve1*1000000,
+    "AedexV2Pair: INSUFFICIENT_BALANCE"
+    )
+```
+
+The pair never trusts the router's arithmetic. It re-checks that the post-trade product of
+reserves, with 0.3% of each input deducted, is at least the pre-trade product. A swap that tried
+to pay less fee than that aborts with `AedexV2Pair: INSUFFICIENT_BALANCE`.
+
+`997`, `1000` and `3` are integer literals. The pair's state record has no fee field, and the
+factory's `create_pair` takes only `min_liquidity` and `debug_time` — there is no per-pair fee to
+set, and no governance entrypoint that changes one. **Every pair on the exchange charges the same
+0.3%.**
+
+A sixth of that fee can be diverted to a protocol-fee collector, if the factory's `fee_to_setter`
+switches it on. That switch is off by default and is described under
+[Where the 0.3% goes](/defi/pools#where-the-03-goes) on the pools page, because the fee is minted
+as LP tokens rather than deducted from your trade.
+
+Note where the figure does *not* come from. Neither the web app nor `superhero-api` contains a 0.3%
+constant, a `997/1000` term, or any AMM output math at all — the app has no `getAmountOut`
+implementation and delegates every quote to the router contract, and the backend only sums and
+prices volumes it has already observed. The fee is entirely a property of the contracts.
+
+Because the fee is inside the invariant, it is already reflected in the router's
+`get_amounts_out` answer — it is not a separate line item you pay. On top of it you pay the
+ordinary æternity transaction fee, plus a second transaction fee if an allowance approval is
+needed.
 
 ## Approvals
 
@@ -140,15 +209,33 @@ or neither, and on whether you fixed the input or the output amount.
 
 | Input | Output | Exact | Entrypoint |
 | --- | --- | --- | --- |
-| Token | Token | in | `swap_exact_tokens_for_tokens(amountIn, amountOutMin, path, to, deadline, referrer)` |
-| Token | Token | out | `swap_tokens_for_exact_tokens(amountOut, amountInMax, path, to, deadline, referrer)` |
-| AE | Token | in | `swap_exact_ae_for_tokens(amountOutMin, path, to, deadline, referrer)` with the AE attached as call value |
-| AE | Token | out | `swap_ae_for_exact_tokens(amountOut, path, to, deadline, referrer)` with the padded maximum attached as call value |
-| Token | AE | in | `swap_exact_tokens_for_ae(amountIn, amountOutMin, path, to, deadline, referrer)` |
-| Token | AE | out | `swap_tokens_for_exact_ae(amountOut, amountInMax, path, to, deadline, referrer)` |
+| Token | Token | in | `swap_exact_tokens_for_tokens(amount_in, amount_out_min, path, to, deadline, callback_opt)` |
+| Token | Token | out | `swap_tokens_for_exact_tokens(amount_out, amount_in_max, path, to, deadline, callback_opt)` |
+| AE | Token | in | `swap_exact_ae_for_tokens(amount_out_min, path, to, deadline, callback_opt)` with the AE attached as call value |
+| AE | Token | out | `swap_ae_for_exact_tokens(amount_out, path, to, deadline, callback_opt)` with the padded maximum attached as call value |
+| Token | AE | in | `swap_exact_tokens_for_ae(amount_in, amount_out_min, path, to, deadline, callback_opt)` |
+| Token | AE | out | `swap_tokens_for_exact_ae(amount_out, amount_in_max, path, to, deadline, callback_opt)` |
 
-`to` is your own address. `referrer` is passed as `null` by the Superhero front-end. An
-AE-to-AE route is rejected outright as invalid.
+Those names and argument orders are exactly as declared in
+`dex-contracts-v2/contracts/router/AedexV2Router.aes`, and match
+`deployment/aci/AedexV2Router.aci.json`, which is the ACI the web app initialises the router
+with. `path` is a list of token contracts, first the input and last the output; `to` is your own
+address. An AE-to-AE route is rejected outright as invalid.
+
+**The last argument is not a referrer.** The Superhero front-end's own type declarations call it
+`referrer: string | null` and always pass `null` (`src/libs/dex.ts`), but in the contract it is
+`callback_opt: option(IAedexV2Callback)` — an optional contract the pair calls back into, via
+`aedex_v2_call(sender, amount0_out, amount1_out)`, after it has optimistically transferred the
+output but before it checks the invariant. That is the flash-swap hook: it lets a contract receive
+the output first and supply the input during the callback. `None` means no callback, which is what
+every Superhero swap sends. The `referrer` name is a client-side misnomer with no on-chain effect.
+
+The AE-side entrypoints do the wrapping for you. `swap_exact_ae_for_tokens` and
+`swap_ae_for_exact_tokens` require the first element of `path` to be the WAE address and call
+`wae.deposit_to(first_pair, value = ...)`; `swap_exact_tokens_for_ae` and
+`swap_tokens_for_exact_ae` require the last element to be WAE, swap into the router itself, then
+`wae.withdraw(amount)` and `Chain.spend(to, amount)`. Both exact-out AE-input forms refund the
+unspent AE to you in the same transaction. See [Wrapped AE](/defi/wrapped-ae).
 
 Router and factory addresses for both networks are in the
 [deployment table](/defi). At startup the app asks the router for its own `factory()` and only
@@ -165,27 +252,41 @@ falls back to the configured factory address if that call fails.
 | Two wallet prompts for one swap | The first is the AEX-9 allowance approval |
 | Insufficient balance error | Checked client-side before submission, against the input token's balance |
 
+When the revert comes from the chain rather than the client, the abort string names the check
+that failed. The ones you will actually see:
+
+| Abort string | What it means |
+| --- | --- |
+| `AedexV2Router: EXPIRED` | Your deadline passed before the transaction was mined |
+| `AedexV2Router: INSUFFICIENT_OUTPUT_AMOUNT` | An exact-in swap would have returned less than `amount_out_min` |
+| `AedexV2Router: EXCESSIVE_INPUT_AMOUNT` | An exact-out swap would have cost more than `amount_in_max` |
+| `AedexV2Library: NO_PAIR_FOUND` | A hop in the path has no pair contract |
+| `AedexV2Library: INSUFFICIENT_LIQUIDITY` | A hop's reserves are zero — the pool is empty or one-sided |
+| `AedexV2Router: INVALID_PATH_FIRST` / `INVALID_PATH_LAST` | An AE entrypoint was called with a path that does not start or end at WAE |
+| `AedexV2Pair: INSUFFICIENT_BALANCE` | The pair's own invariant check failed — the input never arrived, or the fee was short |
+
+The first three are the ordinary ones and mean the market moved. The last is a contract-level
+safety net you should not normally reach through the app.
+
 ## Swapping from an agent or a script
 
 The agent skill's `scripts/superhero-token-swap.mjs` is a **bonding-curve** tool — its `buy`,
 `sell` and `price` commands call the token sale contract, not the router. There is no
 DEX-swap script in the skill. To swap on the AMM programmatically, initialise the router with
-the `AedexV2Router` ACI from `dex-contracts-v2` and call the entrypoints in the table above
-directly.
+the `AedexV2Router` ACI from `dex-contracts-v2` (`deployment/aci/AedexV2Router.aci.json`) and call
+the entrypoints in the table above directly. The router also re-exports the pricing library as
+read-only entrypoints, so you can quote without holding anything:
 
-## Open questions
+| Entrypoint | Use |
+| --- | --- |
+| `get_amounts_out(amount_in, path)` | Exact-in quote across the whole route |
+| `get_amounts_in(amount_out, path)` | Exact-out quote across the whole route |
+| `get_amount_out(amount_in, reserve_in, reserve_out)` | One hop, from reserves you already have |
+| `get_amount_in(amount_out, reserve_in, reserve_out)` | One hop, inverted |
+| `quote(amount_a, reserve_a, reserve_b)` | The fee-free ratio — for liquidity math, not for swaps |
 
-- **What makes a route "synchronized"?** The indexer marks pairs with this flag and the
-  client prefers routes where every pair carries it, but the meaning — presumably that the
-  indexer's cached reserves match the chain at the current height — is defined by the DEX
-  backend, not by the app.
-- **Does the router support routes longer than two hops?** The on-chain fallback only ever
-  builds a direct or a WAE-mediated path, but the indexer can return arbitrary-length routes
-  and the app will use whichever one ends at the right token. How long a path the backend
-  will actually produce is its own policy.
-- **Is the 0.3% fee configurable per pair?** The æternity documentation describes it as
-  capped at 0.3%; whether individual pairs can deploy with a lower fee is a question for the
-  pair contract, not the front-end.
+`quote` is the odd one out: it is `amount_a * reserve_b / reserve_a` with no fee applied, because
+it exists to price the second side of a liquidity deposit. Do not use it to predict a swap.
 
 ## Read more
 

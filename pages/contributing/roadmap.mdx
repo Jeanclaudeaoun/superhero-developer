@@ -1,24 +1,23 @@
 ---
 title: "Documentation Roadmap"
-description: "What to work on next, built from the open questions the pages themselves declare."
+description: "What is left to verify, built from the open questions the pages themselves declare."
 ---
 
 # Documentation Roadmap
 
-Nearly every page on this site is written. What remains is **verification** — the facts that
-could not be confirmed while the pages were being drafted, which each page declares honestly
-under its own `## Open questions` heading.
+Every page on this site is written. What remains is **verification** — facts that could not be
+confirmed from the source available, which each page declares under its own `## Open questions`
+heading.
 
-This roadmap is built from those declarations rather than from a guess at what might be missing.
-At the time of writing: **157 pages, 134 of them carrying open questions, 370 questions in
-total.** Regenerate the raw list at any time:
+This roadmap is generated from those declarations rather than from a guess at what might be
+missing. At the time of writing: **157 pages, 83 of them carrying open questions, 159 questions
+in total**, down from 370 across 135 pages.
+
+Regenerate the list at any time:
 
 ```bash
 # Pages with unresolved questions
 grep -rl "## Open questions" pages/
-
-# Pages still carrying outline scaffolding, i.e. not yet written
-grep -rln '^> \*\*Page brief\*\*' pages/
 
 # Every open question, one per line, prefixed by its page
 python3 - <<'EOF'
@@ -36,113 +35,104 @@ for root, _, files in os.walk('pages'):
 EOF
 ```
 
-The questions cluster into five kinds of work. They are ordered by leverage: the first item
-closes more questions per hour than everything below it combined.
+## What already closed, and how
+
+The previous roadmap's two largest clusters are gone. They closed by **fetching source**, not by
+calling anything:
+
+| Repository | Closed |
+| --- | --- |
+| `superhero-com/bcl-contracts` | All ten BCL Sophia sources. Every "what does this contract actually check" question. |
+| `superhero-com/superhero-api` | The backend. Rate limits, the trending-score formula, DTO units, the AddressLink plugin. |
+| `aeternity/tipping-contract` | `Tipping_v3.aes` — the delegated-posting signing scheme and its absent replay protection. |
+| `aeternity/aepp-governance` | `Poll.aes`, `Registry.aes` — on-chain vote gating and delegation. |
+| `superhero-com/superhero-wallet` | Ledger, AirGap, the connection permission set, key export, seed-backup verification. |
+| `aeternity/dex-contracts-v2` | The 0.3% fee constant, the protocol-fee switch, the real router signatures. |
+
+**The lesson worth carrying forward: reach for the source before reaching for the network.** A
+documented formula is better than an observed value, because it does not go stale. Most questions
+phrased as "call this endpoint and see" were answered better by reading the code that produces
+the response.
 
 ## Priority 1 — One session with network access
 
-Roughly **56 open questions** exist purely because outbound network access was blocked while the
-pages were written. No research is needed to close them, only a machine that can reach a node
-and `api.superhero.com`. This is by far the highest-value pass available.
+**Roughly 33 questions** need a live call and nothing else. Outbound HTTP was blocked throughout
+this work (the proxy returns 403 on CONNECT for every external host), so no address, constant or
+endpoint was confirmed against a running system.
 
 | Call | Closes questions on |
 | --- | --- |
-| `get_k()`, `get_initial_price()`, `get_minimum_count()` on the bonding curve | [Curve parameters](/tokens/curve-parameters), [Bonding curves](/tokens/bonding-curve) |
-| `fee_percentage()` and `fee_precision()` on the factory, then compare `price(n)` against `calculate_buy_price(supply, n)` for the same token | [Curve parameters](/tokens/curve-parameters), [Value flow](/concepts/value-flow), [Fees & slippage](/tokens/fees-and-slippage) |
-| `aex9_extensions()` on a live community token | [AEX-9 contract](/contracts/aex9), [AEX standards](/aeternity/aex-standards) |
-| `GET /api/contracts` and `GET /api/factory` | [Deployed addresses](/contracts/addresses) |
-| `GET /api/tokens?limit=101` — read `meta.itemsPerPage` | [API conventions](/api-reference/conventions) |
-| `GET /v3/status` on both `mdw.wordcraft.fun` and `mainnet.aeternity.io` | [Networks](/aeternity/networks), [Node & middleware](/api-reference/node-and-middleware) |
-| One buy and one sell; read `gasUsed` and `gasPrice` off the transaction | [AE & gas](/aeternity/ae-and-gas) |
-| `minimum_token_threshold()` on a freshly created community | [Moderators](/dao/moderators) |
-| A `generate 0.01 1` invite, to confirm the invitation entrypoints resolve against the bundled ACI | [Agent CLI reference](/agents/cli-reference) |
-| Emit a scoped Socket.IO `message` and see whether the global stream narrows | [WebSocket API](/api-reference/websocket) |
+| `fee_to()` on the mainnet DEX factory | [Pools](/defi/pools) — whether the protocol-fee switch is on |
+| `aex9_extensions()` on a live community token | [AEX standards](/aeternity/aex-standards) |
+| `GET /v3/status` on `mdw.wordcraft.fun` and `mainnet.aeternity.io` | [Networks](/aeternity/networks), [Node & middleware](/api-reference/node-and-middleware) |
+| One buy and one sell — read `gasUsed` off the transaction | [AE & gas](/aeternity/ae-and-gas), and every page quoting a cost |
+| `GET /api/contracts`, `GET /api/factory` | [Deployed addresses](/contracts/addresses) |
+| `GET /api/tokens?limit=101` | [API conventions](/api-reference/conventions) |
+| Resolve `ADDRESS_LINK_CONTRACT_ADDRESS` on mainnet | [AddressLink](/contracts/profile-registry), [Deployed addresses](/contracts/addresses) |
+| Hash the deployed governance bytecode against the registry's index | [Sophia & FATE](/aeternity/sophia-and-fate) |
+| Request from the faucet | [Testnet](/getting-started/testnet) — grant amount and graylist duration |
 
-Record what you ran, not just what you concluded. A verified number with no reproduction command
-becomes unverifiable again the moment the chain state moves.
+Record the command, not just the conclusion. A verified number with no reproduction step becomes
+unverifiable the moment chain state moves.
 
-## Priority 2 — Get the Sophia sources
+## Priority 2 — Questions only Superhero can answer
 
-**27 open questions across 25 pages** say some version of "settle it from the `.aes` source".
-The repositories vendor **ACIs**, which give signatures, `stateful` and `payable` flags — but not
-bodies. Every question about *what a contract actually checks* is therefore unanswerable from
-what is here.
-
-| Contract source wanted | What it would settle |
-| --- | --- |
-| `DAO.aes` | Whether `vote` can top up an existing stake; whether `revoke_vote` and `withdraw` are height-gated on chain or only in clients; whether `record_sale_transaction` is permissioned; whether a `ChangeDAO` migration transfers `CommunityManagement` ownership; whether `add_vote` validates a payout against the treasury balance — [DAO](/contracts/dao), [Voting](/dao/voting), [Treasury](/dao/treasury), [Proposals](/dao/proposals), [Replaceable DAO](/dao/replaceable-dao) |
-| `AffiliationBondingCurveTokenSale.aes` | Whether `price(count)` already includes the affiliation fee, and how the unaffiliated share is burned — [Token sale](/contracts/token-sale), [Value flow](/concepts/value-flow) |
-| `AffiliationTreasury.aes` | What a payout period is measured in and what advances it; whether a revoked invite returns its redemption-fee cover — [Affiliation](/rewards/affiliation), [Claiming](/rewards/claiming), [Invite links](/rewards/invite-links) |
-| `CommunityFactory.aes` | What `is_private` actually restricts; the default `minimum_token_threshold` — [Moderators](/dao/moderators), [Moderation](/social/moderation), [Collections & naming](/tokens/collections-and-naming) |
-| `DAOVote.aes` | The exact quorum and supermajority comparisons behind the whitepaper's 10% and 55% — [Contract security](/contracts/security), [Quorum & thresholds](/dao/quorum-and-thresholds) |
-| `Tipping.aes` | Whether the deployed contract adds replay protection the whitepaper omits — [Delegated posting](/social/delegated-posting), [Tipping contract](/contracts/tipping) |
-| `ProfileRegistry.aes` | Everything on [ProfileRegistry](/contracts/profile-registry) — no source *and* no ACI is vendored |
-| `Poll.aes` and the governance `Registry` | Whether `vote` is rejected after `close_height` on chain; whether `add_poll` is permissioned; the snapshot height used for weighting — [Governance contracts](/contracts/governance-contracts), [Create a poll](/governance/create-a-poll) |
-
-**The single highest-value action here is vendoring `ProfileRegistry`** — its source, its ACI and
-its deployed address are all missing, which blocks four pages at once:
-[ProfileRegistry contract](/contracts/profile-registry),
-[ProfileRegistry identity](/identity/profile-registry), [SuperheroID](/identity/superhero-id) and
-[Deployed addresses](/contracts/addresses). Its apparent successor, an `AddressLink` contract,
-has an ACI committed in `superhero-com/superhero-api` but its address comes from an uncommitted
-deployment-time environment variable.
-
-## Priority 3 — Questions only Superhero can answer
-
-These cannot be closed by reading code or calling an endpoint. Someone has to ask, or a policy
-has to be published. Listed most consequential first.
+**Roughly 22 questions.** No amount of code reading closes these; someone has to decide or
+publish. Listed most consequential first.
 
 | Question | Page |
 | --- | --- |
-| **Where should a security vulnerability be reported?** No disclosure policy exists anywhere. A project holding user funds should publish a security contact. | [Contract security](/contracts/security) |
-| Where is `ProfileRegistry` deployed, and is it still in use, or has `AddressLink` replaced it? | [ProfileRegistry](/contracts/profile-registry), [Deployed addresses](/contracts/addresses) |
-| Is there a published OpenAPI document for `api.superhero.com`? A generated client exists in the app, so a spec exists somewhere. | [API overview](/api-reference), [API conventions](/api-reference/conventions), [FAQ](/concepts/faq) |
-| Are there rate limits on read endpoints, and are the `/api/affiliations/*` writes authenticated? | [API conventions](/api-reference/conventions), [Invitations & affiliations](/api-reference/invitations-and-affiliations) |
-| Who operates `mdw.wordcraft.fun`, with what uptime and rate limits? And is `mainnet.aeternity.io`'s absence from the CSP allowlist deliberate? | [Networks](/aeternity/networks), [Node & middleware](/api-reference/node-and-middleware) |
-| Why is the AE–ETH bridge disabled, is it coming back, and is `ae-bridge.com` the supported replacement? | [Bridge](/defi/bridge) |
-| Where are the rewards programme's terms published, and which countries are excluded? | [Legal](/resources/legal), [Rewards programme](/rewards/rewards-program) |
-| Which support channels are the official ones? The FAQ says "listed in the app" without naming them. | [Support](/resources/support), [Troubleshooting](/wallets/troubleshooting) |
-| Do the terms of service cover bonding-curve token sales and DAOs? The published document describes only donations, comments and the swap contracts. | [Legal](/resources/legal) |
+| **Where should a security vulnerability be reported?** There is still no dedicated address, `SECURITY.md`, or bounty in any of the seven repositories read. The wallet's README clause and `CONTACT_EMAIL` are the closest thing that exists. A project holding user funds should publish a contact. | [Contract security](/contracts/security), [Wallet security](/wallets/security) |
+| **Have the contracts been audited since the "NOT SECURITY AUDITED" headers were written?** Every one of the ten `.aes` files still carries the banner. | [Contract security](/contracts/security), [Risks](/tokens/risks) |
+| Which support and community channels are official? `@superhero_chain` is the only one traceable to a first-party source, and it is an X account, not support. | [Support](/resources/support), [Links](/resources/links) |
+| Which countries are excluded from the rewards programme? No geo check exists anywhere in the backend, so it is an edge or manual rule. | [Legal](/resources/legal), [Rewards programme](/rewards/rewards-program) |
+| Do the terms cover bonding-curve token sales and DAOs? The published text describes donations, comments and the swap contracts. | [Legal](/resources/legal) |
+| Is there a brand licence, and are there logo clear-space and misuse rules? | [Brand](/resources/brand) |
+| Why is the AE–ETH bridge disabled, and is `ae-bridge.com` the supported replacement? Its config carries identical contract addresses. | [Bridge](/defi/bridge) |
+| Will the DEX `tvl` sort key be fixed to use liquidity rather than all-time volume? | [Explore](/defi/explore) |
+| What criteria drive the operator-only `listed` flag? | [Explore](/defi/explore) |
+| Is a UV-gated seed-phrase reveal planned for the built-in wallet? | [Built-in wallet](/wallets/built-in-wallet) |
+| Is `testnet.api.dev.tokensale.org` a permanent endpoint, and what availability does `mdw.wordcraft.fun` carry? | [Links](/resources/links), [Networks](/aeternity/networks) |
 
-## Priority 4 — Screenshots
+## Priority 3 — Screenshots
 
-Four pages explicitly ask for them, and no image exists anywhere in the repository. Each needs a
-session with the live app and an annotation pass.
+Three pages ask for them and no image exists in the repository. Each needs a session with the
+live app and an annotation pass. Establish where images live and how they are referenced before
+capturing the first one; the site has no convention for this yet.
 
 - [Navigating the app](/getting-started/navigating-the-app) — one per major section
-- [Your first post](/getting-started/first-post) — the composer, with each control labelled
+- [Your first post](/getting-started/first-post) — the composer, each control labelled
 - [Your first trade](/getting-started/first-trade) — the trade card, every field labelled
-- [Superhero Wallet mobile](/wallets/superhero-wallet-mobile) — native onboarding
 
-Establish where images live and how they are referenced before capturing the first one; the site
-has no convention for this yet.
+## Priority 4 — Defects found while writing
 
-## Priority 5 — Repository hygiene
+These are not documentation gaps. They are bugs in the products the docs describe, found by
+reading the source, and each is documented in place so a reader is not misled. They are listed
+here so they are not lost.
 
-- **`pages/index.mdx`, the site's front door, is the last page still carrying outline
-  scaffolding.** Confirm with the scaffolding grep above.
-- **There is no CI.** `.github/` is empty, so nothing prevents a page with broken MDX from
-  merging. A workflow running `python3 scripts/lint-mdx.py` and `pnpm build` on pull requests
-  would close that gap, and is maybe twenty lines.
-- **`README.md` still describes the retired outline convention** — page briefs, `status` markers,
-  "Sources to mine" — and points readers at a workflow that no longer exists. It needs rewriting
-  to match [How to Contribute](/contributing/how-to-contribute). That file is outside the
-  `pages/` tree, so whoever owns the repository root should make the change.
-- **No `CODEOWNERS` and no review process.** See the open question on
-  [How to Contribute](/contributing/how-to-contribute).
+| Defect | Where |
+| --- | --- |
+| The agent skill's entry thresholds (`> 100000`, `> 50000`, `> 20000`) can never fire — `trending_score` is bounded to `[0,1]`. | [Strategies](/agents/strategies) |
+| `AffiliationTreasury.record_sale_transaction` is unpermissioned and accepts a caller-chosen value that advances the anti-sybil counter. | [AffiliationTreasury](/contracts/affiliation-treasury) |
+| `get_sell_return_precision()` returns the percentage constant, so an off-chain caller deriving the ratio gets 1.0 instead of 0.995. | [Bonding curve contract](/contracts/bonding-curve) |
+| The in-app bonding-curve graph plots an offset 1000× the deployed constant, and its explainer describes a quadratic curve. | [Bonding curves](/tokens/bonding-curve) |
+| The DAO vote-type selector is not wired to the submitted subject — every proposal opens as a payout. | [Proposals](/dao/proposals) |
+| `token-created` and `token-transaction` are listened for but never emitted. | [WebSocket](/api-reference/websocket) |
+| The DEX `tvl` key sorts by all-time volume; `valueUsd` is never assigned, so Pool's Total Value always reads 0. | [Explore](/defi/explore), [Pools](/defi/pools) |
+| The WebAuthn PRF challenge is not bound to the payload hash, contrary to what `inline-signer.ts` requires of itself. | [Built-in wallet](/wallets/built-in-wallet) |
+| Superhero maps `ok_` to an æScan route that does not exist. | [Explorers](/aeternity/explorers) |
+| Governance `revoke_vote` is ungated, so a closed poll's result can still shrink. | [Voting](/governance/voting) |
+| The agent skill's governance guide computes close heights at 3s per key-block; they are ~3 minutes. | [Create a poll](/governance/create-a-poll) |
+| `superhero-invite.mjs` initialises the treasury with the factory ACI, so `register_invitation_code` is not on the object. | [CLI reference](/agents/cli-reference) |
 
-## Keeping this page honest
+## Priority 5 — Keeping it true
 
-This roadmap is derived data. When you close an open question, delete it from the page it lives
-on — that is the source of truth — and then update the affected row here. When you open a new
-one, add it to its page first.
+The docs now assert a great many specific things about code that will change. Worth doing
+periodically:
 
-If the two disagree, the pages win. Rebuild this list from them rather than patching it.
-
-## Read more
-
-- [How to Contribute](/contributing/how-to-contribute) — the procedure for actually doing any of the above.
-- [Page Template](/contributing/page-template) — including when an `## Open questions` entry is warranted.
-- [Contributing overview](/contributing) — the three rules that matter.
-- [Deployed addresses](/contracts/addresses) — the page that most needs Priority 1 and Priority 3 both.
-- [superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) — where the vendored ACIs live, and where missing ones would go.
+- Re-run `python3 scripts/lint-mdx.py` — it gates frontmatter, MDX hazards, internal links and
+  `_meta.json` drift, and exits non-zero on any finding.
+- Re-check the twelve whitepaper-versus-code divergences on [Whitepaper](/resources/whitepaper).
+  If the whitepaper is revised, that table is the first thing to update.
+- Re-read `src/configs/constants.ts` in `superhero-api` when a ranking or scoring page looks
+  stale. The backend's own `docs/` markdown has already drifted from it twice.

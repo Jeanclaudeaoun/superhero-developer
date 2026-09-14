@@ -52,9 +52,8 @@ Superhero is create aeETH from ETH, or redeem it back to Ethereum.
 
 ## What the disabled code describes
 
-Treat everything in this section as a description of code that does not run today. The
-addresses and parameters are what the feature was configured with when it was disabled, not
-verified live deployments.
+Treat this section as a description of code that does not run in Superhero today. The addresses,
+though, are not stale — see below.
 
 ### Bridge contracts
 
@@ -64,6 +63,14 @@ verified live deployments.
 | æternity bridge contract | `ct_2Xdym95f2i998W9Zoh1NgAB7pVuQ34ztEsema7u4XwSoq5VKUJ` | `ct_2C5nHYyzUMiqU9HE32XNLN47pFEDL2bNpVTAsG5XmZNigvM4Fv` |
 | Ethereum bridge contract | `0xd099E3Ab65d6294d1d2D1Ad92897Cc29286F8cA5` | `0xa2E1f5E1f2721Ae935ac7b0799BC108963276dBA` |
 | Explorers | `etherscan.io` and `aescan.io` | `sepolia.etherscan.io` and `testnet.aescan.io` |
+
+**These are the same addresses æternity's own bridge application uses.** `src/chainConfig.ts` in
+[aeternity/aepp-bridge](https://github.com/aeternity/aepp-bridge), at a `master` last changed in
+April 2025, carries an identical `ae_bridge_address` and `eth_bridge_address` for both networks,
+and the same aeETH contract. So Superhero's disabled configuration is not pointing at an abandoned
+deployment — it is pointing at the bridge that is still being maintained elsewhere. What that does
+not tell you is whether those contracts currently hold funds or are accepting transfers, which
+only a query against each chain can.
 
 ### Operating parameters
 
@@ -113,12 +120,18 @@ That means:
 
 ## If you need to bridge today
 
-Superhero cannot do it for you. æternity operates a separate bridge outside the Superhero
-app, documented on the æternity documentation hub and hosted at `ae-bridge.com`; the
-foundation's announcement describes it as built with Acurast using secure enclaves to observe
-state changes between the two chains. That is the path to investigate — but verify it
-independently before sending funds, because this documentation cannot confirm its current
-operational status either.
+Superhero cannot do it for you. æternity operates a separate bridge outside the Superhero app,
+documented on the æternity documentation hub. Its source is
+[aeternity/aepp-bridge](https://github.com/aeternity/aepp-bridge), and that repository names its
+own deployment: `https://ae-bridge.com` appears in the app's terms-and-conditions page and as the
+`url` in its wallet-connection metadata (`src/context/AppKitProvider.tsx`). So the domain is the
+æternity bridge app's own, not a third party's. The foundation's announcement describes the bridge
+as built with Acurast, using secure enclaves to observe state changes between the two chains.
+
+Two caveats before you use it. **No Superhero repository links it** — not the web app, not
+`superhero-api` — so it is æternity's bridge, not a Superhero-endorsed route. And a repository
+naming a domain says nothing about whether the service behind it is running or solvent today;
+verify independently before sending funds.
 
 For simply acquiring AE without bridging, see [Buying AE](/defi/buy-ae), which lists the
 third-party routes the app itself points at — including two ETH-to-AE swap aggregators that
@@ -126,17 +139,31 @@ sidestep bridging entirely.
 
 ## Open questions
 
-- **Why was the bridge disabled, and will it return?** The code carries re-enable
-  instructions but no reason and no date. Nothing in the repository says whether this is
-  temporary maintenance, a security response, or an abandonment.
-- **Are the configured bridge contracts still live?** The addresses above are what the
-  disabled code points at. Whether those contracts are deployed, funded and operating right
-  now is not something the app can tell you.
-- **Is `ae-bridge.com` the officially supported replacement?** It appears in æternity's own
-  documentation and announcements, but nothing in the Superhero codebase points to it.
-- **What were the fees and settlement times?** The disabled code documents a 12-hour cooldown
-  on æternity-originated transfers and balance thresholds, but no fee schedule and no
-  expected settlement window in either direction.
+The *status* is settled — the feature is commented out at the route table and nothing imports it.
+What remains open is intent and live state, and neither is in any repository. The backend confirms
+the shape of the gap: `superhero-api` has no bridge module, no bridge plugin and no bridge
+endpoint. Its only reference to the asset is the aeETH token address in
+`src/dex/config/dex-contracts.config.ts`, which exists so the DEX can price the pair — exactly the
+"aeETH still trades, bridging does not" position described above.
+
+- **Why was the bridge disabled, and will it return?** The code carries re-enable instructions but
+  no reason and no date. Only a maintainer can say whether this was maintenance, a security
+  response, or an abandonment — ask on
+  [the app's issue tracker](https://github.com/superhero-com/superhero/issues).
+- **Are the bridge contracts holding funds and accepting transfers today?** Their *identity* is
+  settled: æternity's own bridge front-end points at the same four addresses Superhero's disabled
+  code does. What is not settled is their operational state. Closing this means querying
+  `ct_2Xdym95f2i998W9Zoh1NgAB7pVuQ34ztEsema7u4XwSoq5VKUJ` on æternity and
+  `0xd099E3Ab65d6294d1d2D1Ad92897Cc29286F8cA5` on Ethereum for their balances and recent activity;
+  neither call could be made from this environment, where outbound HTTP is blocked.
+- **Would Superhero endorse `ae-bridge.com`?** That the domain is æternity's own bridge
+  deployment is settled from `aeternity/aepp-bridge`. What no source answers is whether Superhero
+  considers it the supported replacement for the feature it switched off — nothing in the app or
+  the backend links it, and a docs page should not manufacture an endorsement. Superhero would have
+  to say so, or link it.
+- **What were the fees and settlement times?** The disabled code documents a 12-hour cooldown on
+  æternity-originated transfers and balance thresholds, but no fee schedule and no expected
+  settlement window in either direction. The operating bridge's own interface is the only source.
 
 ## Read more
 

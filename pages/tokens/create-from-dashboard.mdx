@@ -128,6 +128,11 @@ The attached amount is estimated by the `bctsl-sdk` helper `estimateInitialBuyPr
 fee percentage read from the factory's own `fee_percentage()` and `fee_precision()` entrypoints
 rather than a hardcoded constant.
 
+An over-estimate costs you nothing. `create_community` requires `Call.value >= price(initial_buy_count)`
+and refunds the difference with `Chain.spend(Call.caller, overpaid_refund)` before it forwards the
+buy, so any surplus is returned in the same transaction. An under-estimate aborts with
+`VALUE_HAS_TO_BE_GREATER_THAN_BUY_PRICE` and the whole creation fails — nothing is half-created.
+
 The form submits with `waitMined: false`: it gets a transaction hash back immediately and navigates
 you to `/trends/tokens/YOURNAME?created=true&txHash=...` while the transaction is still being mined.
 Expect **2–5 minutes** before the token page populates. That is normal — the page will fill in as
@@ -144,7 +149,15 @@ metadata can be changed afterwards by DAO vote through `CommunityManagement.chan
 | Gas for `create_community` | Small; about 0.001 AE per the agent-skill guide |
 | Initial buy | Whatever you chose, or zero |
 | Affiliation fee on the initial buy | 0.5% of the curve value, included in the attached amount |
+| Creation fee | **None.** `create_community` charges nothing beyond the buy |
 | Ongoing | Nothing. There is no listing fee or rent |
+
+Creating a token inside an existing collection is free. Creating a **collection** is not — that is
+`create_collection`, which requires exactly 555 AE and burns it. See
+[Collections & Naming Rules](/tokens/collections-and-naming).
+
+An initial buy also mints you ProtocolDAO tokens at 1,000× the AE you actually spent, minted
+directly by the factory rather than by the sale.
 
 Creating with a zero initial buy is free apart from gas, and leaves the token at supply zero with a
 spot price of `0.0000001 AE`. Anyone, including you, can buy first afterwards.
@@ -183,5 +196,4 @@ Your token is live and tradeable immediately. Good next steps:
 
 ## Open questions
 
-- The exact gas cost of `create_community` on mainnet is not documented anywhere in the repositories; the 0.001 AE figure comes from the agent skill's token-creation guide and is described there as approximate. A single mined creation transaction on aeScan would give the real number.
-- Whether any AE attached beyond the actual buy price is refunded to the caller or retained by the sale contract is not determinable from the ACI. This matters for both the dashboard's estimate and the CLI's 5% buffer.
+- The exact gas cost of `create_community` on mainnet is not documented anywhere in the repositories; the 0.001 AE figure comes from the agent skill's token-creation guide and is described there as approximate. It is likely to be an understatement, because one `create_community` call deploys four contracts — the AEX-9 token, the sale, the DAO and community management — and performs an initial buy. A single mined creation transaction on aeScan would give the real number.

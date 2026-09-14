@@ -106,43 +106,71 @@ Notes on behaviour worth knowing before you run any of them:
 ## Expiry and extension
 
 An AENS name has a finite time-to-live measured in key-blocks, exposed as an expiry height. The
-`extend` command issues an extend-TTL transaction; the app surfaces the expiry through the
-profile aggregate's `chain_expires_at` and the claim status response's `expires_at`.
+`extend` command issues an extend-TTL transaction; the app surfaces the expiry through the claim
+status response's `expires_at`.
 
-If a name expires, it stops resolving and becomes available again. Because a chain name is the
-top of the [name precedence ladder](/identity/names), letting one lapse changes what the world
-sees as your handle — and frees the name for anyone else to take and register in the
-`ProfileRegistry`.
+The ceiling is protocol configuration, not Superhero configuration: an `expire_by` may be at
+most **180,000 key generations** into the future — roughly 375 days — a limit raised from the
+earlier 50,000 generations. The exact figures live in the
+[AENS protocol specification](https://github.com/aeternity/protocol/blob/master/AENS.md); take
+them from there rather than from any Superhero source, which records none of them.
+
+If a name expires, it stops resolving and becomes available again. Two things then happen on
+Superhero, on different timescales:
+
+- The cached `accounts.chain_name` is refreshed from the middleware on an hourly sweep, and on
+  any stale read of `GET /api/accounts/{address}`. So a lapsed name disappears from profiles
+  within about an hour without anyone doing anything.
+- A `prefaens` address link naming it does **not** self-clear. The link is contract state and
+  stays until you unlink it. The API still reports it as `prefered_aens_name`, and because that
+  sits at the top of the [name resolution ladder](/identity/names), a lapsed linked name can go
+  on being displayed as your public name after it has stopped resolving. Unlink it yourself.
+
+Do not use the profile aggregate's `chain_expires_at` to decide whether a name is live — it is
+a frozen `profile_cache` column whose writer, the ProfileRegistry indexer, was removed.
 
 ## Linking a name to your SuperheroID
 
 Owning an AENS name and using it as your Superhero identity are two steps. After the name
 resolves to your address, link it as your preferred name through the SuperheroID editor, which
-runs a signed address-link claim (`/api/address-links/prefered-aens-name/claim`, then
-`/submit`). The linked value is what the profile header prefers over everything else. The
-registry's own `set_chain_name` entrypoint is the on-chain counterpart, storing the name with
-its expiration timestamp.
+runs a signed address-link claim at `/api/address-links/prefered-aens-name/claim` and then
+`/submit`.
+
+The on-chain counterpart is `AddressLink.link_principal`, with the on-chain provider id
+`prefaens`, and it is stronger than the registry entrypoint it replaced. The signed message puts
+the **name** in the subject slot rather than your address:
+
+```text
+link:hero.chain:prefaens:hero.chain:0
+```
+
+and the contract verifies ownership itself with `AENSv2.lookup` before accepting it —
+`PRINCIPAL_NOT_FOUND` if the name is not registered, `PRINCIPAL_MISMATCH` if you do not own it.
+The old `set_chain_name` simply stored an expiration timestamp the caller supplied. See
+[The AddressLink contract](/identity/profile-registry).
 
 ## Open questions
 
-- **Auction mechanics on Superhero.** The protocol runs auctions for names of 12 characters or
-  fewer, with a 5% minimum bid increment, but neither the app nor the agent-skill script
-  implements bidding. Where a Superhero user is expected to bid — and what the timeout is at
-  current protocol settings — is not stated in either repository.
-- **Exact expiry heights.** The number of key-blocks a claim or an extension buys is protocol
-  configuration; it is not recorded in the Superhero repositories. Take it from the æternity
-  protocol specification rather than from here.
+- **Where does a Superhero user bid on a short name?** Names of 12 characters or fewer go to a
+  first-price auction whose duration and starting bid scale with name length, with each bid at
+  least 5% above the last. Neither the web app nor `superhero-name.mjs` implements bidding — the
+  script refuses the name outright. Use a wallet or CLI that supports `NameClaimTx` bidding;
+  whether Superhero intends to add it is a question for them.
+- **What are the current per-length auction durations?** They are protocol parameters that have
+  changed across hardforks and are recorded in no Superhero source. Read them from the
+  [AENS protocol specification](https://github.com/aeternity/protocol/blob/master/AENS.md) for
+  the protocol version the network is running.
 - **Pointing a name at a contract.** AENS pointers are a key-value map and support more than
   `account_pubkey`, but the Superhero CLI only ever sets that one key, and no Superhero surface
-  documents contract pointers.
+  reads any other. A `ct_…` pointer would be invisible to every surface documented here.
 
 ## Read more
 
 - [Names: Custom, Chain and X](/identity/names) — why a chain name outranks every other handle.
 - [Claim a name](/getting-started/claim-name) — the walkthrough for your first sponsored claim.
 - [AENS](/aeternity/aens) — the protocol-level view of the naming system.
-- [The ProfileRegistry contract](/identity/profile-registry) — where `set_chain_name` records
-  the name and its expiry.
+- [The AddressLink contract](/identity/profile-registry) — where `link_principal` records the
+  name after verifying you own it.
 - [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) —
   the official documentation for preclaim, claim, auctions and pointers.
 - [AENS protocol specification](https://github.com/aeternity/protocol/blob/master/AENS.md) —

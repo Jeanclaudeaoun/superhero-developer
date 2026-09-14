@@ -14,7 +14,9 @@ every setting on it changes only through a DAO vote — except muting, which mod
 directly.
 
 Resolve it with `factory.get_community_management(token_sale)`. The ACI lives inside
-`superhero-agent-skill/contracts/CommunityFactory.aci.json`.
+`superhero-agent-skill/contracts/CommunityFactory.aci.json`; the source is
+`bcl-contracts/contracts/CommunityManagement.aes` — 105 lines, and everything below is read
+from it.
 
 ## Entrypoints
 
@@ -119,6 +121,22 @@ new metadata has to re-read `meta_info()` when it sees this event.
 | `set_owner` | the owner — this is how a `ChangeDAO` migration hands over control |
 | `mute_user_id`, `unmute_user_id` | a moderator, directly |
 
+There are exactly two guard functions behind that table, and no others in the contract:
+
+```sophia
+function require_owner() =
+  require(Call.caller == state.owner, "ONLY_OWNER_CAN_CHANGE")
+
+function require_moderator() =
+  require(Set.member(Call.caller, state.moderator_accounts), "ONLY_MODERATOR_CAN_CHANGE")
+```
+
+Two things follow. **Moderators are not owners** — a moderator cannot add another moderator,
+change the threshold, or touch the metadata. And **the owner is not automatically a
+moderator** — the DAO cannot mute anyone without first voting itself onto the moderator set.
+The initial moderator is the community creator, set once in `init`; the owner becomes the DAO
+immediately afterwards.
+
 Muting is the one action that does not need a vote. That is the design: governance sets the
 policy and appoints the people, and those people act in real time.
 
@@ -142,41 +160,71 @@ Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityMan
 The factory's own test suite asserts these values, including
 `minimum_token_threshold: 10n ** 18n` and `owner` being the DAO address rewritten to `ak_`.
 
-So by default, holding one token of a community is enough for write access, and the creator is
-the first moderator. Both can be changed by vote afterwards.
+So the default threshold is **exactly one whole token**, `10 ^ 18` base units. It is set from a
+literal in `CommunityFactory.create_community` — `Chain.create(Call.caller, 10 ^ decimals(),
+...)` with `decimals() = 18` — not from a parameter, so every community starts there regardless
+of what the creator asks for. Only a `ChangeMinimumTokenThreshold` vote moves it.
+
+## What `minimum_token_threshold` actually gates
+
+Two distinct things, one on chain and one off.
+
+**On chain, it gates proposal creation.** `DAO.add_vote` calls
+`community_management.minimum_token_threshold()` and requires the proposer's balance to meet
+it, aborting with `ADD_VOTE_TOKEN_HOLDER_MISSMATCH` otherwise. That is the only on-chain reader
+in the entire contract suite — nothing else in `bcl-contracts` consults it.
+
+**Off chain, it gates the community's chat room.** The Superhero backend mirrors the on-chain
+state into its `community_room` table and uses the threshold as the membership predicate for
+the community's token-gated NIP-29 room
+(`superhero-api/src/token-gated-rooms/services/eligibility.service.ts`):
+
+```javascript
+// eligible iff raw balance >= raw threshold AND not muted
+if (muted && muted.includes(memberAddress)) return false;
+return balance.gte(threshold);
+```
+
+Note that the comparison is raw-to-raw base units with no decimal shifting, and that muting is
+applied as an override on top — a muted holder is ineligible however many tokens they hold.
 
 ## What a `user_id` is
 
-`mute_user_id` and `unmute_user_id` take a `string`, not an `address`. The contract itself
-places no constraint on the format — `muted_user_ids` is a `Set.set(string)` and any string
-can go in it.
+`mute_user_id` and `unmute_user_id` take a `string`, not an `address`, and the contract places
+no constraint on the format: `muted_user_ids` is a `Set.set(string)` and any string goes in.
 
-This is deliberately more general than an address: a "user" in the social layer may be
-identified by something other than a bare æternity account. But the exact identifier format
-the Superhero app writes was not verified — see Open questions. If you are building a client
-that reads the mute list, do not assume `ak_...`; compare against whatever the app writes.
+The consumer, however, does constrain it in practice. The Superhero backend compares entries
+from `muted_user_ids` directly against **æternity account addresses** — in
+`eligibility.service.ts` the check is `muted.includes(memberAddress)`, and in
+`membership-sync.service.ts` it is `room.muted.includes(row.member_address)`. An entry that is
+not an `ak_...` address simply never matches anyone and mutes nobody.
 
-## How `is_private` is enforced
+So: the contract will store anything; write `ak_...` addresses if you want the mute to have an
+effect in Superhero's own stack. A client reading the list should still handle unexpected
+strings rather than assuming the prefix.
 
-`is_private` is a stored boolean that the contract exposes through `get_state()`. It is a
-**signal, not an access control**. Sophia contract state is public: anyone can read
-`get_state()` on any contract on the chain, and the middleware indexes it regardless. Nothing
-in `CommunityManagement.aes` gates a read on `is_private`.
+## What `is_private` restricts
 
-Enforcement is therefore at the application layer — the Superhero app and API decide what to
-show based on the flag. Treat a private community's on-chain data as public, because it is.
+**On chain: nothing at all.** This is worth stating flatly. `is_private` is set once in `init`
+and then never read again anywhere in `CommunityManagement.aes`. There is no entrypoint that
+changes it, no vote subject that targets it, and — notably — no dedicated getter for it either;
+the only way to read it is the whole-state dump `get_state()`. No entrypoint on this or any
+other BCL contract branches on its value.
 
-## Open questions
+It could not gate a read even if it wanted to. Sophia contract state is public: anyone can call
+`get_state()` on any contract, and the middleware indexes it regardless. A private community's
+moderators, mutes, threshold and metadata are all readable by anyone.
 
-- **What string format `mute_user_id` is called with in production.** The contract accepts any
-  string. Whether the Superhero app writes an `ak_...` address, a profile id, or a chain name
-  was not determined from the app source. Read `muted_user_ids()` on a live community with
-  mutes to settle it.
-- **Exactly how the app enforces `is_private`.** The flag is stored on chain and read by the
-  app, but which reads or routes it gates was not traced.
-- **Whether `minimum_token_threshold` is checked at post time or only at vote time.** It is
-  read by `DAO.add_vote` to gate proposal creation; the whitepaper also describes it as the
-  write-access threshold for the community, which would be an application-layer check.
+**Off chain: it sets one flag on the community's chat room.** The backend copies it into
+`community_room.is_private` and uses it to choose the visibility tag on the NIP-29 `9002`
+edit-metadata event — `public` or `private`
+(`superhero-api/src/token-gated-rooms/services/room-backfill.service.ts`). The web client reads
+that back and, for a private room, reports access as `auth-required` rather than rendering the
+room openly (`superhero/src/features/chat/hooks/useGatedRoom.ts`). A token with no
+`community_room` row defaults to public.
+
+That is the whole of it. Treat `is_private` as a chat-room visibility preference that happens
+to be stored on chain, not as a confidentiality guarantee.
 
 ## Read more
 

@@ -48,7 +48,10 @@ can have at most one outgoing delegation and any number of incoming ones. See
 [Delegation](/governance/delegation).
 
 `seq_id` is the counter behind poll ids: `add_poll` assigns the next one, so ids are dense,
-sequential and permanent. `created_height` records when the registry itself was deployed.
+sequential and permanent. `created_height` records when the registry itself was deployed — and it is
+not decoration. The governance backend calls `created_height()` to know where to start scanning for
+`Delegation` and `RevokeDelegation` events when it reconstructs a historic delegation graph without
+a middleware.
 
 ## Entrypoints
 
@@ -66,13 +69,37 @@ sequential and permanent. `created_height` records when the registry itself was 
 | `created_height` | `() : int` | Deployment height |
 | `version` | `() : int` | Contract version |
 
-There is no way to remove a poll, change its `is_listed` flag, or edit its cached title. There
-is no owner, no admin and no pause. `add_poll` is open to any caller — anyone can register any
-deployed `Poll` contract, including one they did not deploy.
+**There is no way to remove a poll, change its `is_listed` flag, or edit its cached title.** Those
+are not undocumented entrypoints — they do not exist. `Registry.aes` is 103 lines and the complete
+list of state-changing entrypoints is `add_poll`, `delegate` and `revoke_delegation`. There is no
+owner field, no admin, no pause, no migration hook and no `init` parameter.
+
+`add_poll` has no access control whatsoever: no caller check, no deposit, no author check, and no
+verification that the argument is really a poll beyond the fact that the call would revert if it
+could not answer `title()` and `close_height()`. Anyone can register any deployed contract of the
+right shape, including one they did not deploy, and choose `is_listed` themselves while doing it.
+Nothing prevents registering the same poll twice under two ids.
+
+That combination has one consequence worth planning around: **an abusive or mistaken registry entry
+is permanent.** Moderation, if any, happens in clients deciding what to render.
 
 `polls()` returns everything, unlisted included, because `is_listed` is a display hint rather
 than an access control. Clients filter it; the contract does not. See
 [Polls](/governance/polls).
+
+### The two registry sources
+
+Like the poll contract, the registry has a pre- and post-Iris source in the repository:
+
+| Source | `version()` | Notes |
+| --- | --- | --- |
+| `Registry.aes` | 1 | No `@compiler` pragma. Last builds with aesophia 5.0.0 |
+| `Registry_Compiler_v6.aes` | 2 | `@compiler >= 6`; `contract interface Poll` and `main contract Registry` syntax. Builds 6.0.0 through 8.0.0 |
+
+The bodies are otherwise identical — same state, same entrypoints, same events. The web app ships
+the `Registry_Compiler_v6.aes` bytecode and records `Registry.aes` as unbuildable under aesophia
+8.0.0. Read `version()` on the address you are calling if you need to know which one a given network
+is running; the ACI is the same either way.
 
 ## Events
 
@@ -150,16 +177,6 @@ Superhero's own backend additionally indexes governance transactions at
 `/api/governance/votes` and `/api/governance/delegations` — useful for history rather than for
 live results. See [Polls](/governance/polls).
 
-## Open questions
-
-- The `version()` value each deployed registry reports is not recorded in either repository, so
-  we cannot state which contract version the mainnet and testnet addresses are running. Call
-  `version()` against each to find out.
-- The Superhero app's testnet configuration points at `https://testnet.aeternity.io` while its
-  mainnet configuration uses a third-party node host. Whether the mainnet registry is reachable
-  through the public `https://mainnet.aeternity.io` node — which is what the agent skill's CLI
-  defaults to — is not something we verified against a live chain.
-
 ## Read more
 
 - [Polls](/governance/polls) — what `poll_data` summarises, and how the backend turns votes into results.
@@ -168,3 +185,8 @@ live results. See [Polls](/governance/polls).
 - [Registry and Poll contract reference](/contracts/governance-contracts) — the full signature tables.
 - [Contract addresses](/contracts/addresses) — every deployed address across both networks in one place.
 - [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference contracts, aepp and backend.
+
+## Open questions
+
+- **Which registry version each deployed address is running.** Both sources are in the repository and their ACIs are identical, so the only way to tell is to call `version()` against the mainnet and testnet addresses — `1` for `Registry.aes`, `2` for `Registry_Compiler_v6.aes`. It changes nothing about how you call them; it matters only if you are reproducing a deployment.
+- **Whether the mainnet registry is reachable through the public `https://mainnet.aeternity.io` node.** The app's mainnet configuration uses a third-party node host while the agent skill's CLI defaults to the public one, and no live chain was reachable from the authoring environment to confirm the public node answers. If the CLI times out against mainnet, this is the thing to check first.

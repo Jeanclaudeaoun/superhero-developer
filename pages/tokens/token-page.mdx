@@ -46,6 +46,31 @@ you are querying it yourself: `sell_price` (the spot sell price, 0.5% under `pri
 `trending_score_update_at`, `unlisted`, and a `performance` object with `past_24h`, `past_7d`,
 `past_30d` and `all_time` sub-objects. See [Tokens API](/api-reference/tokens).
 
+`rank` is not computed live. It is a stored market-cap rank over listed tokens, refreshed by a cron
+every 5 minutes, and a token that has never been ranked sorts last rather than first — so a
+brand-new token does not briefly outrank everything.
+
+`tx_count` is a plain `COUNT(*)` of indexed transaction rows for that sale address — **all-time, and
+including the `create_community` row**. It is recomputed and written back every time a new
+transaction for the token is persisted, so it tracks the feed closely rather than on a schedule. It
+counts trades, not traders: compare it against `holders_count` to see whether a busy token is busy
+with many people or with one.
+
+### `total_supply` versus `circulating_supply`
+
+They come from different places and can legitimately disagree:
+
+| Field | Source |
+| --- | --- |
+| `total_supply` | `total_supply()` on the AEX-9 contract, read directly |
+| `circulating_supply` | æternity middleware's AEX-9 `event_supply`, tracked from the token's `Mint` / `Burn` / `Transfer` event log |
+
+`circulating_supply` is nullable because it is only present once the middleware has indexed the
+token's events; on a new token, or when the middleware is behind, it is `null`. The two should
+converge, and a persistent gap between them means the middleware's event log and the contract's own
+state have diverged — which is a middleware indexing problem, not a property of the token. Use
+`total_supply` for anything that has to be right, including the 10% DAO participation quorum.
+
 **DAO balance is the most under-read number on the page.** It is cumulative spread, so it is a direct
 measure of how much value has actually traded through this token since launch — much harder to fake
 than a price, and not resettable by a single large buy.
@@ -53,9 +78,23 @@ than a price, and not resettable by a single large buy.
 ## Market cap, precisely
 
 Market cap for a bonding-curve token is **not** the amount of money in the token, and it is **not**
-what holders would receive if they all sold. Taking the conventional definition — spot price times
-total supply, which is consistent with the `price` and `total_supply` fields served beside it — it
-is a rectangle, while the AE actually in the reserve is the area under the curve:
+what holders would receive if they all sold. The Superhero backend computes it as
+
+```text
+market_cap = total_supply × price
+```
+
+in `superhero-api/src/tokens/tokens.service.ts`, where `price` is the sale contract's quote for one
+whole token and `total_supply` is read from the AEX-9 contract. The same product is stored on every
+transaction row, there taken from the `PriceChange` event's `next_price` — the unit price the trade
+left behind.
+
+Two wrinkles in that definition, neither of which changes the argument below:
+
+- **The unit price includes the 0.5% affiliation fee.** `TokenSale.price(count)` is the curve integral plus the fee, so `market_cap` is 0.5% above a pure curve valuation.
+- **It is a marginal price, priced for one token.** It is the cost of the *next* token, applied to every token already minted.
+
+So it is a rectangle, while the AE actually in the reserve is the area under the curve:
 
 ```text
 market cap    =  buy(S) × S                     ← a rectangle: today's price, every token
@@ -96,6 +135,27 @@ refetch.
 A caution specific to this market: on a thin token, a 5-minute candle chart is mostly noise. Two buys
 an hour apart produce a chart that looks like a trend. Widen the interval to D or W before drawing
 conclusions from shape.
+
+### The `performance` object
+
+`past_24h`, `past_7d` and `past_30d` are computed by a materialised view
+(`token_performance_view`) refreshed every 5 minutes. Each is built from **trades inside a rolling
+window ending now** — not from a calendar boundary and not from a synthetic price:
+
+| Key | What it is |
+| --- | --- |
+| `current` | `buy_price` of the **last** trade in the window |
+| `current_date` | When that trade happened |
+| `current_change` | `current − first`, where `first` is the `buy_price` of the **earliest** trade in the window |
+| `current_change_percent` | `(current − first) / first × 100` |
+| `trend` | `up`, `down` or flat, from the same comparison |
+| `high` / `low` and their dates | Highest and lowest `buy_price` in the window |
+
+Three consequences worth internalising before you read a change badge:
+
+- **The baseline is a trade, not a timestamp.** A "7-day change" on a token whose only two trades in the last week were four days ago spans four days, not seven. It is the change between the first and last trades *within* the window.
+- **A token that has not traded in the window has no object at all** — the fields are `null`, not zero.
+- **The prices are buy-side unit prices** taken from the transaction rows, so they carry the 0.5% affiliation fee on both ends. The percentage is unaffected; the absolute values are 0.5% high.
 
 ## Reading the Holders tab
 
@@ -144,9 +204,3 @@ Before buying, in the order the page makes them available:
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list these pages hang off
 - [Trading leaderboard](https://superhero.com/trends/leaderboard) — who is actually making money, by realised PnL
 - [aeScan](https://aescan.io) — verify any address or transaction hash on this page independently
-
-## Open questions
-
-- **The exact formula behind the `market_cap` field is unverified.** It is computed by the Superhero backend, which is not in the repositories consulted here; the arithmetic above assumes the conventional spot-price-times-supply definition, which is consistent with the sibling `price` and `total_supply` fields but not proven. Whichever definition is used, the gap between a marginal-price valuation and the redeemable reserve is real — only its exact size would change.
-- `circulating_supply` is served alongside `total_supply` and can be null. What distinguishes the two for a token whose entire supply is minted on demand is not documented.
-- The `performance` object's `current_change_percent` is used by the app for a 7-day change badge, but the window boundaries and the reference price it compares against are not described in the API inventory.

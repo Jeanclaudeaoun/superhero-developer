@@ -46,6 +46,31 @@ DAOVote.vote_accounts = map(address, (DAOVote.amount, DAOVote.vote_option, bool)
 
 — the amount you staked, which way you voted, and whether you have withdrawn.
 
+### One vote per address, and you cannot top it up
+
+`vote` rejects a second call outright:
+
+```sophia
+stateful entrypoint vote(option : vote_option, amount : amount) =
+  require(!is_closed(), "VOTE_ALREADY_CLOSED")
+  require(!Map.member(Call.caller, state.vote_accounts), "VOTER_ALREADY_VOTED")
+  state.token.transfer_allowance(Call.caller, Contract.address, amount)
+  ...
+```
+
+`VOTER_ALREADY_VOTED` fires whether you are trying to add stake, reduce it, or change sides. There
+is no `increase_vote`, no `change_vote`, and calling `vote` again does not replace your entry.
+
+**To change anything about your vote you must `revoke_vote()` first, then vote again.** That returns
+your tokens, removes your stake from the tally, and clears your entry — after which a fresh `vote`
+succeeds. Both steps are transactions, and the revoke leaves your weight out of the tally in between.
+
+This is the opposite of an [æternity governance poll](/governance/voting), where calling `vote`
+again simply overwrites your choice. Do not carry the habit across.
+
+Note also that `amount` is not checked against your balance directly — the `transfer_allowance` call
+is what fails if you staked more than you hold or more than you have approved.
+
 ## The allowance step
 
 The vote contract has to pull your tokens, and an AEX-9 contract only lets a third party move
@@ -127,7 +152,8 @@ and then the vote.
 One behaviour worth knowing before you click: **the web app votes with your entire token
 balance.** It passes your full balance as the `amount`, so there is no partial-stake option in
 the UI. If you want to vote with part of your holdings, call `vote(option, amount)` yourself
-with the amount you intend.
+with the amount you intend — and get it right the first time, because the contract will not let you
+adjust it afterwards without revoking.
 
 ## Locking
 
@@ -146,11 +172,24 @@ These are the two ways to get your tokens back, and they are not interchangeable
 | | `revoke_vote()` | `withdraw()` |
 | --- | --- | --- |
 | When | While the vote is still open | After the closing height |
+| Enforced by | `require(!is_closed(), "VOTE_ALREADY_CLOSED")` | `require(is_closed(), "VOTE_NOT_CLOSED")` |
 | Effect on the tally | Removes your stake from the total | None — the result is already fixed |
-| Effect on your record | You count as not having voted | Your vote stands, marked as withdrawn |
+| Effect on your record | Your entry is deleted; you count as not having voted | Your vote stands, marked as withdrawn |
 | Can you vote again | Yes, while the vote is open | No, the vote is closed |
 | Tokens | Returned | Returned |
+| Repeatable | Yes — revoke, vote, revoke again | No: `AMOUNT_ALREADY_WITHDRAWN` on the second call |
 | Event emitted | `RevokeVote(address, option, amount)` | `Withdraw(address, amount)` |
+
+**Both windows are enforced on chain, not just in the client.** `is_closed()` is
+`Chain.block_height >= state.close_height`, and the two entrypoints assert opposite sides of it, so
+the two windows are exact complements: there is no moment when both work and no moment when neither
+does. The app's `canRevokeVote` and `canWithdraw` helpers only mirror a rule the contract already
+guarantees — a client that skipped them would get `VOTE_ALREADY_CLOSED` or `VOTE_NOT_CLOSED` from
+the chain.
+
+One consequence worth planning around: at the closing height your route changes without warning. A
+revoke transaction signed just before `close_height` and mined just after it reverts, and you must
+call `withdraw()` instead. Do not leave a revoke to the last few blocks.
 
 **Revoking is a governance action.** It pulls your weight back out of the tally, so a
 proposal that was passing can stop passing. Use it when you change your mind — revoke, then
@@ -208,16 +247,6 @@ contract state. See [Contract events](/contracts/events).
   to move that many tokens. It is scoped to one vote contract, which limits the exposure, but
   it is still live approval.
 - **Nothing reminds you to withdraw.** Closed votes do not return tokens automatically.
-
-## Open questions
-
-- Whether `vote` can be called a second time to increase an existing stake, or whether it
-  requires `revoke_vote` first, is not determinable from the ACI. `vote_accounts` stores one
-  entry per address, which suggests a second call replaces or is rejected rather than adding,
-  but the `DAO.aes` source would settle it.
-- Whether `revoke_vote` is blocked after the closing height, and `withdraw` before it, is
-  enforced by the contract or only by the app's `canRevokeVote` and `canWithdraw` helpers, is
-  not visible in the ACI.
 
 ## Read more
 

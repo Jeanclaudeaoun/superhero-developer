@@ -68,16 +68,24 @@ paid       = total call, attached to register_invitation_code
 plus       = the æternity transaction fee for the call itself
 ```
 
-`redemption_fee_cover` is **0.001 AE** (`10n ** 15n` aettos) in both the web app and the CLI.
-It funds the throwaway account so the recipient can pay for their own redemption transaction
-without already holding AE. The reason it is needed at all is explained under
+`redemption_fee_cover` is **0.001 AE** (`10n ** 15n` aettos) in both the web app and the CLI,
+and that is also the contract's own minimum — `register_invitation_code` aborts with
+`MINIMUM_REDEMPTION_AND_FEE_NOT_MEET` below `10 ^ 15` aettos
+(`bcl-contracts/contracts/AffiliationTreasury.aes`). It funds the throwaway account so the
+recipient can pay for their own redemption transaction without already holding AE. The reason
+it is needed at all is explained under
 [`redemption_fee_cover`](/rewards/affiliation) on the affiliation page: redemption is signed
 by the invite's key, not by the recipient's wallet.
 
 So ten links of 1 AE each cost 10.01 AE plus gas.
 
-Note that the app's balance check only validates amount × count and ignores the fee cover, so
-a wallet funded to the exact AE amount can still fail the transaction.
+Two arithmetic traps:
+
+- The contract checks `Call.value == (redemption_fee_cover + invitation_amount) × count`
+  with **exact equality**. Attaching more does not leave you a credit; it aborts with
+  `INVITATION_AMOUNT_AND_FEE_NOT_MATCHING`.
+- The app's balance check only validates amount × count and ignores the fee cover, so a
+  wallet funded to the exact AE amount can still fail the transaction.
 
 ## Claiming — the recipient's side
 
@@ -107,8 +115,31 @@ All three call `revoke_invitation_code(invitation_address)` with your wallet. Th
 the public address of the one-time account, not the secret — it is safe to handle and it is
 what the invitation list shows you.
 
-Two errors are handled specially by the UI: `INVITATION_NOT_REGISTERED` removes the stale
-local entry, and `ALREADY_REDEEMED` triggers a refresh so the row flips to claimed.
+**Revoking returns the gift, not the fee cover.** The contract spends exactly
+`invitation_amount` back to you:
+
+```sophia
+Chain.spend(Call.caller, invitation_amount)
+Chain.event(InvitationRevoked(invitation_address, inviter_address))
+put(state{ invitation_codes = Map.delete(invitation_address, state.invitation_codes) })
+```
+
+The 0.001 AE `redemption_fee_cover` left the treasury at registration time, in a `Chain.spend`
+to the one-time invite address, and nothing sweeps it back. Revoking ten unclaimed 1 AE links
+returns 10 AE, not 10.01 AE, and costs another transaction fee on top. Treat the fee cover as
+sunk the moment you press Generate.
+
+There is also **no expiry**. An `invitation_codes` entry is the tuple
+`(inviter, invitation_amount, is_redeemed)` — it carries no timestamp and no height, no
+entrypoint prunes the map, and nothing in the contract references a deadline. An unclaimed
+link stays claimable indefinitely, which is exactly why revoking a leaked one matters: time
+will not close the hole for you.
+
+Three errors you can hit, all from the contract: `INVITATION_NOT_REGISTERED` if the code was
+already revoked or never existed (the UI uses this to drop a stale local entry),
+`ALREADY_REDEEMED` if somebody claimed it first (the UI refreshes so the row flips to
+claimed), and `CALLER_NOT_INVITER` if the connected wallet is not the address that registered
+the code.
 
 ## Tracking your invitations
 
@@ -130,13 +161,26 @@ The list is assembled from two sources:
   <middleware>/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ&caller_id=<your address>
   ```
 
-  This is the part of the list that survives a page reload.
+  This is the part of the list that survives a page reload. That contract address is a bare
+  constant in the client with no network branch, and it is the **mainnet** treasury —
+  `superhero-api/src/configs/contracts.ts` lists it as `BCL_FACTORY[mainnet]
+  .affiliation_address`, against `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK` for
+  testnet. So on testnet this half of the list is empty, and you need the API below or a
+  middleware query against the testnet address.
 - **Superhero's API** — `GET /api/invitations` with an `inviter` filter, paginated, which
   returns claim status per invitation so the app does not need one middleware lookup per
   invitee. The relevant response fields are `receiver_address` (the one-time invite address),
   `claimed`, `claimer_address`, `claimed_at` and `claim_tx_hash`. It also accepts
   `order_by` of `amount` or `created_at`, `order_direction` of `ASC` or `DESC`, plus `limit`
   and `page`.
+
+  `limit` is validated to 1–100 and defaults to 100; `page` must be 1 or more; anything else
+  in `order_by` or `order_direction` is a 400. The backend indexes the treasury per network
+  (`src/plugins/bcl-affiliation/bcl-affiliation.plugin.ts` resolves
+  `affiliation_address` from the network id), so unlike the middleware query above this
+  endpoint works on testnet as well as mainnet. The underlying row carries `status` as one of
+  `pending`, `claimed` or `revoked`, plus `tx_hash`, `block_height`, `amount`,
+  `sender_address`, `invitee_address`, `revoke_tx_hash` and `status_updated_at`.
 
 Because the secret keys are never persisted, links you generated in an earlier session appear
 in the list with their status and amount but **without a copyable link**. The AE is still
@@ -182,15 +226,11 @@ per-invitee bar toward 10 AE for everyone still accumulating, and the live
 `get_accumulated_rewards` balance. Once the bar reads 4/4 and the balance is above zero,
 **Collect rewards** calls `withdraw()`. See [Claiming Rewards](/rewards/claiming).
 
-## Open questions
-
-- **What happens to the gift when a link is revoked?** The CLI describes revoke as "reclaim
-  funds", and the UI offers it as the way to get unclaimed AE back, but neither the ACI nor
-  the client confirms that the `redemption_fee_cover` returns along with the gift.
-- **Is `INVITATIONS_CONTRACT` network-aware?** The address the app uses for middleware
-  filtering is a bare constant with no mainnet/testnet branch, while the treasury itself is
-  resolved from the factory. On testnet the invitation list may therefore come back empty.
-- **Do unclaimed links expire?** Nothing in the client sets a deadline.
+Only **direct** invitees count toward the four. Someone your invitee invites earns you
+0.125% at level 2 but does nothing for your qualification, so a wide first ring gets you paid
+sooner than a deep chain. And because credited rewards only stay claimable for the current
+30-day payout period plus the one before it, rewards earned long before you reach 4/4 expire
+unclaimed — the arithmetic is on [The Affiliation System](/rewards/affiliation).
 
 ## Read more
 

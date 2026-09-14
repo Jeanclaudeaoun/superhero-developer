@@ -28,30 +28,72 @@ curl -s "https://api.superhero.com/api/profile/ak_2ruXgsLy9jMwEqsgyQgEsxw8chYDfv
 
 | Method & path | Query | Returns |
 | --- | --- | --- |
-| `GET /api/profile/{address}` | `includeOnChain` | One `ProfileAggregate` |
-| `GET /api/profile` | `addresses`, `includeOnChain` | Array of `ProfileAggregate`, batched |
+| `GET /api/profile/{address}` | — | One profile aggregate |
+| `GET /api/profile` | `addresses` | A **bare array** of profile aggregates |
+| `GET /api/profile/feed` | `limit`, `offset` | A page of cached profiles with its own envelope |
 
-`ProfileAggregate`:
+Each aggregate is three top-level keys — `address`, `profile` and `public_name` — built by
+`ProfileReadService.mergeProfile` in
+`superhero-api/src/profile/services/profile-read.service.ts`:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `address` | string | The `ak_...` |
-| `public_name` | string or null | Resolved display name |
-| `profile.fullname` | string | Display name |
-| `profile.bio` | string | Bio text |
-| `profile.avatarurl` | string | Avatar URL |
-| `profile.username` | string or null | Custom username |
-| `profile.x_username` | string or null | Linked X handle |
-| `profile.chain_name` | string or null | Linked `.chain` name |
-| `profile.display_source` | string or null | Which source the display name comes from: `custom`, `chain` or `x` |
+| `public_name` | string | Resolved display name. **Never null** — it falls back to the address |
+| `profile.fullname` | string | Display name from the profile cache. `""` when unset, not null |
+| `profile.bio` | string | The verified `links.bio` if present, else the cached bio, else `""` |
+| `profile.site` | string or null | The verified `links.site` |
+| `profile.avatarurl` | string | `""` when unset |
+| `profile.username` | string or null | Legacy custom username |
+| `profile.prefered_aens_name` | string or null | The verified `links.prefaens` — note the one-`r` spelling |
+| `profile.x_username` | string or null | The verified `links.x` |
+| `profile.chain_name` | string or null | `accounts.chain_name` first, then the cached copy |
 | `profile.chain_expires_at` | string or null | When the `.chain` name expires |
+| `profile.followers_count` / `following_count` | number | **Single-profile read only**, and only when the social-graph feature is enabled |
 
-`display_source` mirrors the on-chain resolution order in the profile registry contract, where
-chain names outrank X names, which outrank self-declared custom names. See
-[Profile registry](/identity/profile-registry).
+There is no `display_source` field. The resolution order is in the code instead, and it is
+shorter than you might expect:
 
-The batch form takes a comma-separated `addresses` list. It has no caller in the web app, so its
-exact envelope is untested — see [Open questions](#open-questions).
+```text
+public_name = prefered_aens_name || chain_name || username || address
+```
+
+An X handle **never** becomes the display name. A user-set preferred AENS name outranks the
+middleware-derived `chain_name`; below those, only the legacy `username` is consulted.
+
+One caveat the source flags explicitly: the `profile_cache` copy of `fullname`, `avatarurl`,
+`username` and `chain_name` has had **no writer since the ProfileRegistry indexer was removed**,
+so those fields are frozen at whatever they were. `accounts.chain_name` is refreshed hourly and
+is the live one — which is why `chain_name` reads the account first. Treat `fullname` and
+`avatarurl` as historical.
+
+### `includeOnChain` is deprecated and ignored
+
+Both read endpoints still accept it, and it does nothing. It is not even bound to a handler
+parameter — the controller declares it only so the Swagger document can carry the notice:
+*"Deprecated; profiles are served from indexed backend data."* Passing `includeOnChain=true` will
+not make the server resolve anything against the chain.
+
+### The batch form returns a bare array
+
+`GET /api/profile?addresses=ak_a,ak_b` returns a **plain JSON array**, with no `items` and no
+`data` wrapper. One element per **unique** address, in the order you supplied them, after
+trimming and de-duplication. Addresses with no cached profile still get an element, with the
+empty-string defaults above.
+
+| Rule | Behaviour |
+| --- | --- |
+| More than **100** addresses | `400 addresses must contain at most 100 entries` |
+| Any malformed address | `400 addresses contains invalid account address ak_...` — the whole call fails, it is not skipped |
+| Empty or missing `addresses` | `[]` |
+
+```bash
+curl -s "https://api.superhero.com/api/profile?addresses=ak_ONE,ak_TWO"
+```
+
+`GET /api/profile/feed` is the one profile read with an envelope: `{ items, pagination }`, where
+`pagination` carries `limit`, `offset` and `count` — not the usual `meta`. `limit` defaults to 20
+and `offset` to 0.
 
 ## The write pattern
 
@@ -103,14 +145,44 @@ curl -s -X POST "https://api.superhero.com/api/address-links/bio/claim" \
   -d '{"address":"ak_YOUR_ADDRESS","value":"Building things on aeternity."}'
 ```
 
-Response — `AddressLinkClaimResponse`:
+Response:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `message` | string | The exact text the wallet must sign |
-| `nonce` | number | Single-use nonce, echoed back on submit |
+| `nonce` | **number** | The address's current on-chain nonce, echoed back on submit |
 | `value` | string | The normalised value the server will record |
-| `verification_token` | string | Server-side proof that this claim was issued |
+| `verification_token` | string | Server-side proof that this claim was issued. **X only** |
+
+### The nonce is a number
+
+Settled: `AddressLinksService.claimLink` calls `ContractService.getNonce(address)`, which reads
+the `AddressLink` contract's `get_nonce` entrypoint and coerces the result with `Number(...)`. The
+submit DTOs validate it with `@IsNumber()`, so sending `"42"` as a string is a 400 rather than a
+coercion. Every address-link claim and unclaim, for all five providers, uses the same numeric
+nonce.
+
+That makes it different in kind from the string `nonce` in the chain-name and X-reward challenge
+flows, which are server-issued random challenges. This one is a **chain nonce** — an integer
+counter on the contract, which is why it is a number and why it advances after a successful
+submit rather than on issue.
+
+### The message the wallet signs
+
+The server builds it, but it is a short deterministic string, so you can check what you are
+signing:
+
+```text
+link:<address>:<provider>:<value>:<nonce>
+unlink:<address>:<provider>:<nonce>
+```
+
+`<provider>` is `x`, `bio`, `site`, `prefered-aens-name` or `nostr`. Signing anything that does
+not match that construction will fail contract-side verification, not just server-side.
+
+`verification_token` appears only on the **X** claim, where it carries the server's proof that the
+OAuth exchange actually happened; the other four providers omit it, and their submit bodies do
+not take it.
 
 ### Submit
 
@@ -149,8 +221,26 @@ an OAuth round trip. Two accepted claim bodies:
 The second is the PKCE form the web app uses: the browser redirects to X, X redirects back to
 `/profile/x/callback` with a code, and the app posts the code, the PKCE verifier and the redirect
 URI. The backend exchanges the code for a token itself, so the access token never has to be
-handled client-side. From there the flow is identical — claim returns a `message`, the wallet
-signs it, `submit` returns a `txHash`.
+handled client-side. From there the flow is identical — claim returns a `message` plus the
+`verification_token`, the wallet signs the message, `submit` returns a `txHash`.
+
+The four X routes, exactly as the server declares them
+(`superhero-api/src/plugins/address-links/x-link.controller.ts`):
+
+```text
+POST /api/address-links/x/claim            { address, x_access_token | x_code + x_code_verifier + x_redirect_uri }
+POST /api/address-links/x/submit           { address, value, nonce, signature, verification_token }
+POST /api/address-links/x/unclaim          { address }
+POST /api/address-links/x/unclaim/submit   { address, nonce, signature }
+```
+
+`value` on submit is capped at 200 characters, `signature` is a hex-encoded wallet signature, and
+`address` is validated as an `ak_` account address on every one of them.
+
+**There is no `POST /api/profile/x/attestation`.** The string `attestation` does not appear
+anywhere in the backend source. An older endpoint inventory in the web-app repository documents
+such a path, with a response of `signer`, `address`, `x_username`, `nonce`, `expiry`, `message`,
+`signature_hex` and `signature_base64`. That inventory is stale; the routes above replaced it.
 
 Reading the result back: `GET /api/accounts/{address}` and read `links.x`, falling back to
 `profile.x_username` and then the legacy top-level `x_username`.
@@ -198,7 +288,9 @@ curl -s "https://api.superhero.com/api/profile/chain-name/sponsorship/mylongenou
 
 ## X posting reward
 
-The one place in the API with an explicit rate limit.
+All four of these routes carry the per-IP rate-limit guard — 10 requests per minute per route,
+returning a `429` with a `retryAfter` field. That is on top of the recheck's own 24-hour cap. See
+[Conventions](/api-reference/conventions#rate-limits).
 
 | Method & path | Purpose |
 | --- | --- |
@@ -252,19 +344,8 @@ address-link endpoints above.
 
 ## Open questions
 
-- **Where did `POST /api/profile/x/attestation` go?** The repository's own endpoint inventory
-  documents it, with a response of `signer`, `address`, `x_username`, `nonce`, `expiry`,
-  `message`, `signature_hex`, `signature_base64`. No such path exists in the current
-  `backend.ts` or the generated client, which use `/api/address-links/x/claim` instead. Either the
-  inventory is stale or the endpoint still exists and is unused — confirm before building against
-  either.
-- **What does `includeOnChain` change?** It is passed straight through as a boolean by both
-  profile read endpoints, and no source states what it adds. Likely: resolving the `.chain` name
-  against the chain rather than the index.
-- **What is the batch envelope of `GET /api/profile?addresses=...`?** Typed as
-  `ProfileAggregate[]` in `backend.ts`, but with no caller the shape is unverified, and the
-  repository's endpoint inventory suggests it may return `items` or `data` instead of a bare
-  array.
-- **Is the `nonce` on an address-link claim a number or a string?** `AddressLinkClaimResponse`
-  types it as a number and the submit body echoes it as a number, while every other challenge
-  flow in the API uses a string `nonce`. Echo back exactly what you received.
+- **Where is the `AddressLink` contract deployed?** Every write on this page ends in a call to it,
+  but its address comes from the `ADDRESS_LINK_CONTRACT_ADDRESS` environment variable with no
+  default in the source — an unset variable disables the whole plugin. The deployed value is in a
+  running deployment's environment, or in its first log line; it is not in any repository. See
+  [Profile registry](/contracts/profile-registry).

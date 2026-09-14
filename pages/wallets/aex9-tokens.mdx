@@ -79,6 +79,26 @@ answer before you add liquidity.
 You need a **connected wallet** for it to have an account to scan. The address it works with is the
 AEX-9 **token address**, not the sale address.
 
+**There is no manual-entry field on superhero.com.** `src/views/AddTokens.tsx` discovers balances; it
+does not accept an arbitrary contract address. So a token the middleware has not indexed and the DEX
+has never seen has no route into superhero.com's own UI.
+
+### Superhero Wallet does take a pasted contract address
+
+The standalone wallet is the workaround. Its asset selector treats the search box as an address field
+when what you type *is* one: `getAssetSelectorSearchMode` in
+`superhero-wallet/src/popup/components/Modals/assetSelectorSearch.ts` runs the term through the SDK's
+`isAddressValid(…, Encoding.ContractAddress)`, and an exact `ct_` match switches the selector into
+`exact-contract` mode. That calls `loadSingleToken`, which fetches the token's metadata directly from
+the middleware (`GET /v3/aex9/<contract_id>`) and adds it to the available list — no pool, no
+indexed balance and no DEX listing required.
+
+Two conditions, both in the same function: the search term must be a **valid contract address**, and
+the selected protocol must be **æternity**. Anything else falls back to a name-prefix search.
+
+So: to see a token superhero.com will not show you, open it in Superhero Wallet by pasting its
+`ct_...` **token address** (not the sale address).
+
 ## Allowances
 
 An allowance grants a specific contract permission to move up to a stated number of *your* tokens.
@@ -105,12 +125,36 @@ double-spent across two concurrent votes. Revoking your vote releases the lock.
 
 This is why a vote can ask you to sign twice: once to grant or adjust the allowance, once to cast.
 
+### There is no allowance review or revocation screen
+
+Superhero grants allowances but never takes them back. In the whole web app, `create_allowance` and
+`change_allowance` are called from exactly one place — `src/libs/dex.ts`, just-in-time before a swap
+or an add-liquidity — and **`reset_allowance` is never called at all**. The only other occurrences
+of any allowance entrypoint are the wallet's transaction-summary decoder, which labels them when you
+are asked to approve one, and the disabled Ethereum bridge. There is no list of granted allowances
+anywhere in the app, no per-token revoke button, and no bulk revocation.
+
+So allowance hygiene is entirely manual, per token, through a direct contract call:
+
+```text
+reset_allowance(for_account)   on the AEX-9 token contract
+```
+
+where `for_account` is the grantee in `ak_` form — for the DEX that is the router's contract address
+with `ct_` swapped for `ak_`, as described above. Use the agent skill's SDK setup, `aepp-cli`, or any
+tool that can call a contract entrypoint.
+
+The exposure this leaves is bounded but real: every allowance Superhero grants is sized to the
+specific trade rather than unlimited, so a stale allowance is capped at whatever was left over from
+the operation that created it — usually zero, because a swap spends exactly what it was granted.
+Check before you assume, and revoke anything left standing on a token you hold in size.
+
 ### Hygiene
 
 - **Read the amount** in the signing prompt. Superhero's built-in wallet names these calls in plain
   language rather than showing raw calldata.
-- **Reset what you no longer need.** `reset_allowance` revokes one entirely. Do it after you finish
-  voting, or when you stop using a pool.
+- **Reset what you no longer need**, by the manual route above. Do it after you finish voting, or
+  when you stop using a pool.
 - **Remember base units.** An allowance figure with 18 zeros after it is not a bug, but neither is it
   a small number — check the digit count against the token's decimals.
 
@@ -121,12 +165,5 @@ This is why a vote can ask you to sign twice: once to grant or adjust the allowa
 - [AEX Standards](/aeternity/aex-standards) — what AEX-9 specifies at the protocol level.
 - [AEX-9 Contracts](/contracts/aex9) — the contract-side reference for these entrypoints.
 - [Tokens API](/api-reference/tokens) — the token object carrying both `address` and `sale_address`.
+- [Web Wallet](/wallets/web-wallet) — the surface where pasting a contract address works, with no install.
 - [Token Standards on the æternity docs hub](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — the upstream specification.
-
-## Open questions
-
-- Is there an in-app way to add a token by pasting a contract address that the middleware has not
-  indexed and the DEX has never listed? The add-tokens screen discovers balances rather than
-  accepting an arbitrary address, and no manual-entry field was found in `src/views/AddTokens.tsx`.
-- Does Superhero surface existing allowances anywhere for review or bulk revocation, or must they be
-  reset per token through a contract call? No allowance-management screen was found in the web app.

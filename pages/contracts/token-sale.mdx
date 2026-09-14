@@ -13,7 +13,12 @@ affiliation treasury, and triggers the ProtocolDAO token mint.
 There is no fixed address — resolve it per token with
 `factory.get_token_sale(collection_name, name)`, or from `GET /api/tokens/<name>`.
 
-The ACI is `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`.
+The ACI is `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci.json`; the
+source is `bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`.
+
+Two fixed values you do not need to call for: `sale_type()` returns
+`"AFFILIATION_BONDING_CURVE"` and `version()` returns `1`. Both are literals in the source with
+no setter.
 
 ## Entrypoints
 
@@ -38,6 +43,35 @@ The ACI is `superhero-agent-skill/contracts/AffiliationBondingCurveTokenSale.aci
 The quote entrypoints are `price` and `sell_return`. There is **no** `buy_price` entrypoint on
 the sale contract — `buy_price` exists on the bonding curve, and takes a supply rather than a
 count. Getting these two confused is the most common integration mistake.
+
+### `price` includes the affiliation fee; `sell_return` does not
+
+This asymmetry is the second most common mistake, and both entrypoints are two lines long, so
+there is no need to guess:
+
+```sophia
+entrypoint price(count : int) : int =
+  require(count > 0, "COUNT_NOT_POSITIVE")
+  let bonding_curve_price = state.bonding_curve.calculate_buy_price(
+                              state.token_contract.total_supply(), count)
+  bonding_curve_price + affiliation_amount(bonding_curve_price)   // + 0.5%
+
+entrypoint sell_return(count : int) : int =
+  require(count > 0, "COUNT_NOT_POSITIVE")
+  state.bonding_curve.calculate_sell_return(
+    state.token_contract.total_supply(), count)                   // no fee added or removed
+```
+
+So `price(count)` is the **full amount to send** — curve price plus the 0.5% affiliation fee,
+computed as `bonding_curve_price * fee_percentage / fee_precision` read live from the treasury.
+It is exactly the number `buy` compares `Call.value` against. You do not add anything to it
+except a slippage buffer.
+
+`sell_return(count)` is the curve's own figure, already reduced by the curve's 0.995 sell
+factor. No affiliation fee is taken on a sell.
+
+That is where the 1% round-trip spread comes from: 0.5% added on the way in by this contract,
+0.5% withheld on the way out by the curve.
 
 ## Types
 
@@ -69,16 +103,25 @@ there: the token count. The source says explicitly that `count` is readable from
 arguments, so an indexer that wants the traded amount must decode the transaction's arguments
 or read the accompanying `Mint` / `Burn` event from the token contract.
 
+**The `total_supply` in `Buy` and `Sell` is the supply before the trade, not after.** Both
+entrypoints capture it into a local at the top, ahead of the mint or burn, and emit that local
+at the end. An indexer that treats it as the post-trade supply will be off by `count` on every
+row.
+
+`PriceChange` carries unit prices — `calculate_unit_price()` is `price(10 ^ 18)`, the cost of
+one whole token *including* the affiliation fee — sampled before and after the trade.
+
 A single `buy` therefore emits four events across three contracts:
 
 | Event | Emitted by | Carries |
 | --- | --- | --- |
-| `Buy` | the sale | total price paid, affiliation amount, new total supply |
 | `Mint` | the community AEX-9 token | buyer, tokens minted |
 | `Mint` | the ProtocolDAO AEX-9 token | buyer, ProtocolDAO tokens minted |
-| `PriceChange` | the sale | previous price, next price |
+| `PriceChange` | the sale | previous unit price, next unit price |
+| `Buy` | the sale | total price paid, affiliation amount, pre-buy total supply |
 
-Distinguish the two `Mint` events by the emitting contract address, not by order.
+Distinguish the two `Mint` events by the emitting contract address, not by order. On the sale
+contract itself `PriceChange` is emitted **before** `Buy` and before `Sell`.
 
 ## Units: what `count` means
 
@@ -110,31 +153,92 @@ const amount = new BigNumber(priceAettos.toString())
 const result = await sale.buy(count, { amount, omitUnknown: true });
 ```
 
-The contract requires `Call.value >= total_price` and aborts with
-`AE_AMOUNT_NOT_SUFFICIENT` otherwise. Overpayment is refunded — the source computes an
-`overpaid_refund` and mints ProtocolDAO tokens on `Call.value - overpaid_refund`, so the
-slippage buffer costs you nothing beyond gas if the price did not move.
+The contract requires `Call.value >= total_price` and aborts with `AE_AMOUNT_NOT_SUFFICIENT`
+otherwise.
 
 Sending the exact quoted price with no buffer is how buys fail: another buy landing in the
 same micro block raises the supply, raises the price, and your call reverts.
 
+### Overpayment is refunded in full, unconditionally
+
+There is no threshold, no dust floor and no retention. The refund is a single line:
+
+```sophia
+let overpaid_refund = Call.value - total_price
+if (overpaid_refund > 0) Chain.spend(Call.caller, overpaid_refund) else ()
+```
+
+Everything downstream then works from `Call.value - overpaid_refund`, which is exactly
+`total_price`. So your slippage buffer costs you nothing beyond gas if the price did not move —
+including the ProtocolDAO mint, which is computed on the net amount, not the gross.
+
+### Where the AE goes
+
+In source order, for a buy of `count` tokens:
+
+| Slice | Destination | Amount |
+| --- | --- | --- |
+| Affiliation fee | `AffiliationTreasury.record_sale_transaction` | `bonding_curve_price * 0.5%` |
+| Refund | back to the caller | `Call.value - total_price` |
+| Reserve | stays in this contract | `calculate_sell_return(new_supply, count)` |
+| Spread | `DAO.record_sale_transaction` | whatever is left |
+
+The reserve line is the solvency mechanism: the contract retains exactly what it would owe if
+that same `count` were sold straight back, and only the remainder reaches the DAO. Note it is
+computed against the supply **after** the mint.
+
+Both outbound contract calls are made with `protected = true`, so a DAO or treasury that aborts
+cannot block a buy — the AE simply stays in the sale contract.
+
 ## `buy` versus `buy_with_affiliation`
 
-The two entrypoints differ only in where the 0.5% affiliation half of the spread goes.
+These are not two ways to do the same thing, and the difference is not what the names suggest.
+**`buy_with_affiliation` is not callable by you:**
 
-| | `buy(count)` | `buy_with_affiliation(count, affiliation_rewardee)` |
+```sophia
+payable stateful entrypoint buy(count : int) : unit =
+  buy_with_affiliation_inner(count, Call.caller)
+
+payable stateful entrypoint buy_with_affiliation(count : int, affiliation_rewardee: address) =
+  require(Call.caller == state.factory.address, "ONLY_FACTORY_CAN_CALL")
+  buy_with_affiliation_inner(count, affiliation_rewardee)
+```
+
+| | `buy(count)` | `buy_with_affiliation(count, rewardee)` |
 | --- | --- | --- |
-| Affiliation fee | still 0.5% of the transaction | still 0.5% of the transaction |
-| Recipient | no referral chain is credited; the fee is burned | the referral chain above `affiliation_rewardee` is credited, up to four levels |
+| Who may call | anyone | only the `CommunityFactory` — `ONLY_FACTORY_CAN_CALL` |
+| Affiliation rewardee | `Call.caller`, always | the address the factory passes |
+| When it is used | every ordinary buy | the creator's initial buy inside `create_community` |
 
-The choice is made by the caller, not the contract. The Superhero app calls the plain `buy`
-path for an ordinary purchase and supplies an affiliation rewardee when the buyer arrived
-through an invite whose inviter is recorded in the affiliation tree. Unreferred fees are
-burned rather than accumulated, which is deliberate: it removes any pot of unclaimed AE that
-someone could later argue over.
+So **an ordinary `buy` already credits your own referral chain.** There is no opt-in, no second
+entrypoint to reach for, and no way to nominate someone else as the rewardee. The rewardee is
+your address, the treasury looks *up* from it, and levels one to four of your inviter chain are
+paid. `buy_with_affiliation` exists solely because during `create_community` the sale's
+`Call.caller` is the factory, not the creator, so the real buyer has to be passed explicitly.
+
+Nothing validates the rewardee, in either path. The treasury simply calls
+`get_direct_inviter(rewardee)`; an address with no inviter matches nothing, credits nobody, and
+the attached 0.5% stays stranded in the treasury. That is the "burn" for an unreferred buy —
+see [AffiliationTreasury](/contracts/affiliation-treasury). The fee is charged and sent either
+way; whether anyone can claim it depends entirely on whether the buyer is in the tree.
 
 The four-level split is `[300, 125, 50, 25]` against a precision of `10 ** 5`, giving 0.3%,
-0.125%, 0.05% and 0.025%. See [AffiliationTreasury](/contracts/affiliation-treasury).
+0.125%, 0.05% and 0.025%.
+
+### ProtocolDAO tokens
+
+`buy` also mints ProtocolDAO tokens to the buyer, at 1,000 times the net AE paid:
+
+```sophia
+if (Call.caller != state.factory.address)
+  state.factory.mint_protocol_dao_token(Call.value - overpaid_refund, Call.caller)
+else ()
+```
+
+The `else ()` branch is a reentrancy guard for the initial buy — the source comments it as
+"check to avoid reentrancy in initial buy" — and in that case `create_community` mints the
+tokens itself instead. The base for the multiplier is the full net payment including the
+affiliation fee, not the curve price.
 
 ## Selling
 
@@ -161,9 +265,14 @@ console.log('AE received:', result.decodedResult.toString());
 
 | Condition | Result |
 | --- | --- |
+| `count` below the curve's `minimum_count` of `10 ** 12` | the curve aborts with `MINIMUM_TOKENS_REQUIRED` |
 | Computed return is below `minimal_return_required` | aborts with `MINIMAL_RETURN_NOT_MEET` |
 | No allowance, or an allowance smaller than `count` | the inner `transfer_allowance` aborts |
 | Balance smaller than `count` | the inner transfer aborts |
+
+Note that `sell` has no `require(count > 0)` of its own, unlike `price` and `sell_return`. A
+zero or negative count reaches the curve and fails there with `MINIMUM_TOKENS_REQUIRED` rather
+than `COUNT_NOT_POSITIVE`, so do not pattern-match on the abort string to tell the two apart.
 
 The check is the first thing the entrypoint does after computing the return:
 
@@ -183,18 +292,19 @@ supply. That is the solvency property the curve is designed around.
 ## Ownership and beneficiary
 
 `owner` and `beneficiary` are both the community's DAO after deployment. `set_owner` and
-`set_beneficiary` exist so that a `ChangeDAO` vote can hand control to a replacement DAO —
-they are not user-callable in normal operation.
+`set_beneficiary` are gated by `require(Call.caller == state.owner, "UNAUTHORIZED")`, so in
+practice only a `ChangeDAO` vote reaches them — they are not user-callable in normal operation.
 
-## Open questions
+`set_beneficiary` additionally runs `verify_dao`, which casts the address to `ReplaceableDAO`
+and probes `record_sale_transaction` with `value = 0`. The source is candid that this is a weak
+check: a zero-value call does not actually prove the entrypoint is payable, and Sophia offers no
+way to test that, which the comment links to
+[aesophia issue 508](https://github.com/aeternity/aesophia/issues/508). A non-payable
+replacement would pass construction and then break every subsequent buy's DAO payout — though
+`protected = true` on that call keeps buys themselves working.
 
-- **The live value of `sale_type()` and `version()`.** Present in the ACI, values not read
-  from a deployed contract.
-- **Whether `buy_with_affiliation` validates `affiliation_rewardee`.** The treasury's
-  `record_sale_transaction` walks the affiliation tree from the buyer; what happens when the
-  supplied rewardee is not in that tree was not verified from source.
-- **The exact overpayment refund path.** The source computes `overpaid_refund`, but the
-  condition under which AE is returned to the caller versus retained was not read in full.
+`init` also refuses a mismatched curve: `require(decimals == bonding_curve.supported_decimals(),
+"BONDING_CURVE_SUPPORTED_DECIMALS_MISSMATCH")`.
 
 ## Read more
 

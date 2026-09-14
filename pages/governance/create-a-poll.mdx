@@ -34,10 +34,26 @@ split, confusing record. Get the text and the options right before you sign.
 | Close height | A future key-block height, or `0` for a poll that never closes. |
 | Listing | Listed by default; unlisted keeps it out of the public listing. |
 
+Two of those limits are enforced on chain, in `Poll.aes` / `Poll_Iris.aes`:
+
+```sophia
+require(String.length(metadata.title) =< 50, "TITLE_STRING_TO_LONG")
+require(String.length(metadata.description) =< 300, "DESCRIPTION_STRING_TO_LONG")
+```
+
+Nothing else is. The link is never inspected, `spec_ref` is never inspected, the option map is never
+inspected — **a poll with zero options, or one option, deploys perfectly happily** and is then
+unvotable, because `vote` requires the option to exist in the map. The "at least 2 options" rule is
+the clients'. So is the `http`/`https` prefix rule.
+
 One inconsistency worth knowing: the CLI enforces the 300-character description limit and
 rejects anything longer, while the web form only requires the description to be non-empty and
-does not check its length. Stay within 300 characters either way — it is the documented limit,
-and exceeding it means the same poll cannot be reproduced through the CLI.
+does not check its length. The chain will reject an over-long description either way, with
+`DESCRIPTION_STRING_TO_LONG` — so the web form's omission costs you a failed deploy rather than a
+bad poll.
+
+The lengths are counted in **characters, not bytes**: Sophia's string functions operate on unicode
+code points under FATE, so 300 characters is 300 characters whatever alphabet they are in.
 
 The `link` is stored on-chain as an unvalidated string. Nothing checks that it resolves, and
 the `http`/`https` prefix rule is enforced by the clients rather than by the contract. Clients
@@ -178,6 +194,34 @@ Deploy the poll from the **account that should be its author**: `Poll.state.auth
 deployment and `is_author` checks against it. The author has no special power over the poll
 afterwards — they cannot close it, edit it or delete it — but the attribution is permanent.
 
+### Registration is open, and permanent
+
+`Registry.add_poll` has **no access control at all** — no owner, no allowlist, no deposit, not even
+a check that the argument is really a poll:
+
+```sophia
+stateful entrypoint add_poll(poll : Poll, is_listed : bool) : int =
+  let poll_seq_id = state.seq_id
+  let poll_data = { poll = poll, is_listed = is_listed, title = poll.title(), close_height = poll.close_height() }
+  put(state{ polls[state.seq_id] = poll_data, seq_id = state.seq_id + 1 })
+  Chain.event(AddPoll(poll, poll_seq_id))
+  poll_seq_id
+```
+
+Anyone can register any deployed poll, including one they did not author, and set `is_listed`
+themselves while doing it. The only implicit validation is that the target must answer `title()` and
+`close_height()`, or the call reverts.
+
+**Nothing can be undone.** The registry has no `remove_poll`, no `set_listed` and no update
+entrypoint of any kind, so once a poll is registered its id, its cached title and its `is_listed`
+flag are fixed forever. There is no moderation path: an abusive or mistaken poll stays in
+`polls()` permanently, and listing filtering is something clients do, not something the registry
+offers. The same poll can also be registered twice under two different ids, since nothing checks for
+duplicates.
+
+If you get `is_listed` wrong, the only remedy is to register the poll again with the other value —
+which leaves both entries in place — or to deploy a fresh poll.
+
 ## Costs
 
 | Action | Transactions | Approximate cost |
@@ -186,17 +230,17 @@ afterwards — they cannot close it, edit it or delete it — but the attributio
 | Vote | 1 | about 0.0001 AE |
 | Revoke a vote | 1 | about 0.0001 AE |
 
-## Open questions
+## Deploy a recognised build
 
-- Whether the governance backend will compute stake-weighted results for a poll deployed from
-  arbitrary bytecode, or only for a recognised `Poll_Iris.aes` build, is not documented. The
-  two poll bytecode artifacts in the repositories differ — the web app ships one labelled
-  version `8.0.0`, the agent skill one built with compiler `7.0.1`. If a poll you created
-  reports `stake_weighted_results` as `null`, this is the first thing to check.
-- There is no way to cancel or close a poll early, and none of the repositories mention a
-  moderation path for removing an abusive poll from listings. Whether the `is_listed` flag can
-  be changed after registration is not exposed by the `Registry` ACI, which has `add_poll` but
-  no update entrypoint.
+The governance backend will only compute stake-weighted results for a poll whose contract-create
+bytecode hashes to one of the builds it knows. **Deploy the poll bytecode as shipped — do not
+recompile a modified source.** Both Superhero paths already do: the web app deploys the
+`Poll_Iris.aes` build compiled with aesophia 8.0.0, the agent skill the same source compiled with
+7.0.1, and both digests are in the backend's table.
+
+If you deploy your own build, the poll will work — people can vote on it and the votes are on
+chain — but `stake_weighted_results` will be `null` permanently and there is no official result.
+See [Polls](/governance/polls) for how that check works.
 
 ## Read more
 

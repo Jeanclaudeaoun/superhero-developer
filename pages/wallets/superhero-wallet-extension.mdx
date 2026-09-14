@@ -20,8 +20,80 @@ instead of your extension.
 The Chrome extension ID is `mnhmmkepfddpifjkamaligfeemcbhdne`. superhero.com links exactly these two
 listings from its own connect dialog, and shows you the one matching your browser.
 
+Two builds, one codebase: the extension is built from
+[superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet), whose build
+targets both Chrome and Firefox from the same source. **Brave and Opera are Chromium browsers
+installing the Chrome Web Store build** — they are not separate builds, which is why the app links
+only two listings even though the wallet is commonly described as supporting four browsers.
+
+At the time of writing the Chrome Web Store listing showed **version 2.10.1**. Do not treat that as
+current: extension versions move independently of these docs, the store listing is the only
+authoritative figure, and the Firefox listing can lag the Chrome one because the two stores review
+separately. Check the listing rather than this page.
+
+There is no Safari extension. On Apple platforms the wallet ships as the native iOS app instead — the
+wallet repository's only Safari-shaped artefact is `apple-itunes-app` metadata pointing at App Store
+id `1502786641`.
+
 After installing, pin the extension so its icon is visible — a wallet you cannot see is a wallet you
-will forget to unlock, and an unlocked wallet is what the detection step below needs.
+will forget to unlock, and an unlocked wallet is what the detection step below needs. On Chromium you
+can also dock it in the **side panel**, and on Firefox in the **sidebar** — `src/manifest.json`
+declares both.
+
+## How the two browser builds are produced
+
+Worth knowing because it tells you what can and cannot drift between them.
+
+`npm run build:extension` runs `scripts/build-extension.mjs` once per browser. A single Rollup pass
+can only emit one output format, so each browser gets several `vite build` passes into the same
+output directory:
+
+| Pass | Emits | Chrome | Firefox |
+| --- | --- | --- | --- |
+| `html` | the popup, `offscreen.html`, the camera-permission page | Yes | Yes |
+| `sw` | `js/background.js`, the MV3 service worker | Yes | **Skipped** |
+| `inject` | `js/inject.js`, the content script that proxies AEX-2 | Yes | Yes |
+| `inpage` | `js/inpage.js`, the in-page EVM provider | Yes | Yes |
+
+Firefox skips the service-worker pass because Firefox's MV3 has none; `build/manifest-plugin.ts`
+rewrites the manifest to use the offscreen page as a classic background page instead. The same plugin
+makes the only other differences between the two manifests:
+
+- **Firefox** gains `browser_specific_settings.gecko.id`, and loses `side_panel` plus the `sidePanel`
+  permission (Chromium-only, and a warning in review otherwise). It keeps `sidebar_action`.
+- **Chrome** gains the `offscreen` permission and loses `sidebar_action`.
+
+Everything else — the Manifest V3 permission set (`storage`, `scripting`, `unlimitedStorage`,
+`activeTab`, `tabs`, `declarativeNetRequestWithHostAccess`, optional `clipboardWrite`), the
+`http`/`https`/`file` host permissions, and the `document_start` content script that runs in all
+frames — is shared, and **the version number comes from `package.json`**. One tag therefore produces
+one version number for both stores.
+
+### Publishing
+
+CI (`.github/workflows/main.yml`) builds the Android app, the web build and both extensions in a
+single job, then `npm run build-zip` produces three archives named from that same `package.json`
+version:
+
+```text
+superhero-wallet-extension-v<version>.zip
+superhero-wallet-web-v<version>.zip
+superhero-wallet-source-with-provenance-v<version>.zip
+```
+
+On a tag push these are attached to a GitHub Release. The third one exists for add-on review:
+`scripts/build-review.js` records the commit SHA, the lockfile, a dependency tree and a
+deterministic file listing alongside the source, so a reviewer can rebuild the minified bundle and
+compare. **Submission to the Chrome Web Store and to addons.mozilla.org is not automated in the
+repository** — the workflow stops at the release assets, which is the structural reason the two store
+listings can sit at different versions for a while.
+
+### Checking which build you actually have
+
+Open **More → About** in the extension. It shows the software version and the commit hash — linked to
+`github.com/aeternity/superhero-wallet/commit/…` — plus the SDK version and the node and middleware
+versions of the network you are on. Comparing that screen in Chrome and in Firefox answers "do my two
+installs match" definitively, and without relying on what either store listing currently says.
 
 ## First run
 
@@ -37,7 +109,17 @@ hold. Superhero's built-in wallet, the Superhero mobile app and this extension a
 from the same path, so the same phrase gives you the same addresses in all of them.
 
 Either way, set a wallet password when asked. That password unlocks the extension on this machine;
-it is not a backup and it does not restore anything elsewhere.
+it is not a backup and it does not restore anything elsewhere. Unlike Superhero's built-in wallet,
+**this password can be changed later** — Settings → Secure Login has a change-password form, an
+auto-lock interval (immediately, 1, 5, 15 or 30 minutes of inactivity) and a switch to turn password
+protection off entirely. Changing it re-derives the key and re-encrypts the stored mnemonic
+(`updatePassword` in `src/composables/auth.ts`); the account and its addresses are untouched.
+
+**Hardware accounts.** Add account → "Add Ledger accounts" imports æternity accounts from a Ledger
+over WebUSB, either by discovering accounts with existing activity or by deriving one at an index you
+type. This button is hidden on Firefox, which does not implement WebUSB — use a Chromium browser or
+the hosted web wallet. "Import AirGap accounts" has no such restriction. Both are covered in
+[Choosing a Wallet](/wallets/choosing-a-wallet).
 
 ## Connect it to superhero.com
 
@@ -83,7 +165,8 @@ extension. See [Using Testnet](/getting-started/testnet) for the testnet build.
 | The web wallet opened instead | Detection timed out and the deep-link fallback fired | Same as above; use the web wallet as-is if you prefer |
 | Address shows but signing does nothing | Read-only static account, no RPC session | Press Connect to re-establish the session |
 | App says disconnected while the extension is open | The five-second health check found no accounts on the SDK | Reconnect |
-| Wrong network | The build is pinned; the wallet is not | Switch networks in the extension |
+| Wrong network | The build is pinned; the wallet is not, and an æpp cannot make it switch | Switch networks in the extension, under Settings → Network |
+| No "Add Ledger accounts" button | You are on Firefox, or the selected account is not æternity | Use a Chromium browser or the hosted web wallet, and select an æternity account |
 
 More symptoms, including the ones specific to the built-in wallet, are in
 [Troubleshooting](/wallets/troubleshooting).
@@ -95,13 +178,16 @@ More symptoms, including the ones specific to the built-in wallet, are in
 - [Backup & Recovery](/wallets/backup-and-recovery) — what to do with the phrase it showed you.
 - [Managing AEX-9 Tokens](/wallets/aex9-tokens) — how community tokens appear once you are connected.
 - [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the wallet's own documentation.
+- [Web Wallet](/wallets/web-wallet) — the same codebase served as a page, and what it cannot do that this can.
 - [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — the source.
+- [Releases](https://github.com/superhero-com/superhero-wallet/releases) — the tagged zips CI attaches, which are what the stores are fed.
 
 ## Open questions
 
-- What is the current published extension version, and does the Firefox build track the Chrome one?
-  Store listings were confirmed to exist but version numbers were not read, and a docs page that
-  pins a version goes stale immediately — check the listing.
-- Are Brave and Opera officially supported, or merely Chromium-compatible? Search results describe
-  the wallet as available for Chrome, Brave, Opera and Firefox, but the app itself only links the
-  Chrome Web Store and Firefox Add-ons listings.
+- **Is a given Chrome listing and Firefox listing at the same version right now?** Structurally they
+  should be: both come from one CI job and take their version from `package.json`, so one tag is one
+  version number. But store review happens in two separate queues and nothing in the repository
+  automates submission, so they can sit apart for days. This is not answerable from a docs page —
+  it would be stale on publication. Compare **More → About** in your two installs, or the two store
+  listings, against the latest tag in
+  [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet/releases).

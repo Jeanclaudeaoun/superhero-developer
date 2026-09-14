@@ -14,15 +14,30 @@ funded, how to read it, and what the 555 AE vote deposit does.
 
 | Source | Amount | Path into the DAO |
 | --- | --- | --- |
-| Buys on the bonding curve | 0.5% of every buy | `record_sale_transaction(buyer, buy_price)` |
+| Buys on the bonding curve | 0.5% of the curve value of every buy | `record_sale_transaction(buyer, buy_price)` |
 | Opening a proposal | 555 AE per vote opened | `add_vote(metadata)`, which is payable |
+| Unsolicited donations | Anything | `record_sale_transaction`, which is unpermissioned — see below |
+| A `ChangeDAO` migration into this DAO | The whole balance of the old DAO | `Chain.spend` from the old DAO |
 
 Nothing else pays the treasury. Sells do not, because the 1% spread is charged on the buy
 side; tips and posts do not, because they settle through `Tipping_v3`, not the token sale.
 
-The 1% buy spread is split evenly: half to the community DAO, half to the affiliation system.
-The affiliation half is burned when the buyer has no referrer. See
-[Value flow](/concepts/value-flow) and [Affiliation rewards](/rewards/affiliation).
+The DAO's half is not computed as a percentage. The sale sets the redemption reserve aside first and
+forwards what is left:
+
+```sophia
+let reserve = state.bonding_curve.calculate_sell_return(state.token_contract.total_supply(), count)
+state.dao_contract.record_sale_transaction(
+  value = Call.value - overpaid_refund - affiliation_amount - reserve, protected = true, ...)
+```
+
+Since `total_supply()` has already been incremented by the mint, `reserve` is exactly `0.995 ×` the
+curve price — so the DAO receives the residual `0.5%`. Setting the payout obligation aside before
+the treasury is paid is the mechanism behind "the reserve is always solvent".
+
+The call is `protected = true`, so a DAO that aborts does not block the trade — the AE simply stays
+in the sale contract and that slice of treasury income is lost. See
+[Value flow](/concepts/value-flow) and [Fees & Slippage](/tokens/fees-and-slippage).
 
 ## Proceeds arrive with metadata, not as a bare spend
 
@@ -35,12 +50,41 @@ stateful payable entrypoint record_sale_transaction(buyer: address, buy_price: i
 The AE rides along with the call, and the buyer's address and the buy price arrive as
 arguments. Two things follow from that design:
 
-- A DAO can react to income, not just accumulate it. The default `DAO.aes` records the
-  transfer; a replacement DAO could split it, forward part of it, or account for it per
-  buyer.
+- A DAO can react to income, not just accumulate it. A replacement DAO could split it, forward part
+  of it, or account for it per buyer.
 - `record_sale_transaction` is part of the `ReplaceableDAO` interface, so every DAO that is
   eligible for a `ChangeDAO` migration must implement it. See
   [Replaceable DAOs](/dao/replaceable-dao).
+
+### The stock implementation records nothing, and anyone can call it
+
+In `bcl-contracts/contracts/DAO.aes` the body is empty:
+
+```sophia
+payable stateful entrypoint record_sale_transaction(buyer : address, buy_price : int) = ()
+```
+
+Two consequences worth being precise about.
+
+**Nothing is stored.** Despite the name, the stock DAO does not record the buyer or the price
+anywhere — `DAO.state` has no field for them. The AE is kept because the contract is declared
+`payable`; the arguments are discarded. Reconstructing which buys funded a treasury means reading
+the `Buy` events on the sale contract, not the DAO. The entrypoint exists to give a *replacement*
+DAO somewhere to put that logic.
+
+**It is unpermissioned.** There is no `require` at all — no check that the caller is the linked token
+sale, no owner check, no minimum value. Any account can call it with any value and any arguments.
+That is deliberate rather than an oversight: the sale calls it with `protected = true` precisely so
+that a misbehaving DAO cannot block a trade, and permissioning it would create a way for a
+replacement DAO to break its own sale contract. The exposure is limited to two things:
+
+- **Anyone can donate to any DAO's treasury** by calling it with AE attached. There is no path back out except a payout vote, so a donation is a gift to that community's token holders.
+- **The arguments are attacker-controlled**, so a replacement DAO that *does* act on `buyer` and `buy_price` must not trust them. If your DAO credits a buyer per the `buy_price` it is handed, verify `Call.caller` is the token sale — the stock contract does not, because it does nothing with them.
+
+The same signature is also used as a probe. `AffiliationBondingCurveTokenSale.verify_dao` calls
+`record_sale_transaction(value = 0, ak_1111…, 0)` on a candidate beneficiary at deployment and again
+on every `set_beneficiary`, purely to check the entrypoint exists. A DAO that rejected zero-value
+calls could not be a beneficiary at all.
 
 ## Is the 555 AE refundable?
 
@@ -96,6 +140,14 @@ Everything else about the DAO is read through its entrypoints:
 `dao_balance` is in aettos — divide by `10^18` to get AE. The app does exactly that before
 displaying it. See [Tokens API](/api-reference/tokens) for the rest of the DTO.
 
+There is no entrypoint on the DAO that returns its own balance, so `dao_balance` is the backend
+calling `getBalance` on the sale's `beneficiary` address while it refreshes the token's live price.
+It is therefore as fresh as the last price refresh, and no fresher. **If you need a balance
+consistent with a specific block, read the account balance at that height yourself** rather than
+trusting the API field — for example when evaluating whether a `VotePayoutAmount` proposal is
+affordable, where a stale figure is the difference between a vote that executes and one that
+aborts.
+
 ## The treasury in the app
 
 | View | Route | What it shows |
@@ -122,17 +174,6 @@ community that wants to split a grant between three contributors runs three prop
 pays one address that then distributes off-protocol. A `ChangeDAO` vote also moves the whole
 balance, but as part of a migration rather than a payout — see
 [Replaceable DAOs](/dao/replaceable-dao).
-
-## Open questions
-
-- Whether `record_sale_transaction` is callable by anyone or restricted to the linked token
-  sale is not visible in the ACI. The signature is `stateful payable` with no access
-  qualifier exposed; settle it from the `DAO.aes` source before assuming a DAO can be funded
-  by arbitrary callers.
-- The ACI does not expose an entrypoint that returns the treasury balance, so the app reads it
-  from the chain and the indexer reads it into `dao_balance`. If you need a balance that is
-  consistent with a specific block, read the account balance at that height rather than the
-  API field, whose freshness depends on indexer sync.
 
 ## Read more
 

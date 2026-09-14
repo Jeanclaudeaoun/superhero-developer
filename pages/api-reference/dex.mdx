@@ -27,6 +27,13 @@ Point at `https://api.superhero.com/api/dex/*`. The responses are paginated and 
 old service returned flat arrays, which is why the web app's adapter walks every page and
 flattens the result before handing it to the UI.
 
+The backend confirms the migration from the other side. `SwapRoutesController` is documented in
+its own source as *"Replicates the legacy DEX backend's `/swap-routes/:from/:to` endpoint that the
+swap UI uses to quote a trade"*, and `SwapRoutePairDto` says it matches *"the legacy dex-backend
+`PairWithLiquidityAndTokenAddresses` contract"* — address-form tokens, reserves under
+`liquidityInfo`, and a `synchronized` flag. So the shapes you get here were deliberately built to
+be drop-in replacements for that service's, and the word the source uses for it is **legacy**.
+
 ## Endpoints
 
 ### Tokens
@@ -135,7 +142,7 @@ One row per swap or liquidity event.
 | `account_address` | string or null | Who submitted it |
 | `block_height` | number | Inclusion height |
 | `pair` | `PairDto` | The pair, inlined |
-| `tx_type` | string | `swap`, `add_liquidity`, `remove_liquidity` and similar |
+| `tx_type` | string | The router entrypoint that was called — see below |
 | `reserve0` / `reserve1` | string | Reserves **after** the transaction |
 | `ratio0` | string | Price of `token0` quoted in `token1` — `reserve0 / reserve1` |
 | `ratio1` | string | Price of `token1` quoted in `token0` |
@@ -149,12 +156,42 @@ One row per swap or liquidity event.
 
 `LiquidityInfoDto` is `type` (`PairMint` or `PairBurn`) plus `amount0` and `amount1`.
 
+### `tx_type` on DEX transactions
+
+`tx_type` is **the name of the router entrypoint that was called**, stored verbatim from
+`transaction.tx.function` by `DexSyncService.saveDexPairTransaction`. The DTO's `swap`,
+`add_liquidity`, `remove_liquidity` are illustrative prose in a Swagger description, not values
+the column ever holds. The real set is the DEX half of `TX_FUNCTIONS` in
+`superhero-api/src/configs/constants.ts`, and it is the complete list of functions the sync layer
+indexes at all:
+
+```text
+swap_exact_tokens_for_tokens     add_liquidity
+swap_tokens_for_exact_tokens     add_liquidity_ae
+swap_exact_tokens_for_ae         remove_liquidity
+swap_tokens_for_exact_ae         remove_liquidity_ae
+swap_exact_ae_for_tokens
+swap_ae_for_exact_tokens
+```
+
+The `tx_type` query parameter is an exact-match filter (`tx_type = :txType`), so
+`?tx_type=swap` matches **nothing**. To select all swaps you need six requests, or you filter
+client-side on the `swap_` prefix — the backend's own volume queries do exactly that, with an
+`IN (...)` list of the six.
+
+`PairMint` and `PairBurn` are a different vocabulary entirely: they are the **event names** the
+pair contract emits, and they appear only inside `pair_mint_info.type`. They are never `tx_type`
+values. The mapping is straightforward — an `add_liquidity*` transaction carries a `PairMint`
+event, a `remove_liquidity*` transaction a `PairBurn`.
+
 Note that the date filters on this endpoint are `from_date` and `to_date` — a third spelling,
 distinct from both the snake_case `start_date` and the camelCase `startDate` used elsewhere. Both
-are ISO 8601 and both bounds are inclusive.
+are ISO 8601 and both bounds are inclusive. `order_by` accepts only `created_at` (the default) or
+`tx_type`; anything else is a 400.
 
 ```bash
-curl -s "https://api.superhero.com/api/dex/transactions?tx_type=swap&limit=20&order_by=created_at&order_direction=DESC"
+# Every "exact tokens in" swap, newest first
+curl -s "https://api.superhero.com/api/dex/transactions?tx_type=swap_exact_tokens_for_tokens&limit=20&order_direction=DESC"
 ```
 
 Fetch a single one by hash as a **path segment** here — `GET /api/dex/transactions/{txHash}` —
@@ -193,7 +230,7 @@ WAE pool exists, the deepest available pool is used instead.
 
 | Parameter | Notes |
 | --- | --- |
-| `interval` | Candle width in seconds. Default 3600, minimum 60, maximum 86400 |
+| `interval` | Candle width in seconds. Default 3600, minimum 60, maximum 86400. Outside that range is a 400 |
 | `convertTo` | Default `ae`. Fiat conversion uses the AE-to-currency rate as of each candle's own timestamp |
 | `limit`, `page` | Standard pagination |
 
@@ -205,19 +242,75 @@ takes `token0` or `token1` to choose the quoting direction.
 
 ## Deeper price analysis
 
-`GET /api/dex/tokens/{address}/price` returns a token together with its current price and price
-metadata. `GET /api/dex/tokens/{address}/price/analysis` goes further: liquidity-weighted
-pricing, confidence metrics and every possible path, with `base_token` defaulting to WAE and
-`debug=true` adding the per-path breakdown. Both are typed as untyped records in the generated
-client, so the exact keys are unverified.
+Both of these run the same path-finding; they differ in how much of it they show you.
+
+### `GET /api/dex/tokens/{address}/price`
+
+```json
+{ "price": "0.0431", "token": {} }
+```
+
+`token` is the full `DexTokenDto`; `price` is the best price found, **quoted in WAE**, as a
+decimal string. It is `null` — not an error, and not a fabricated `1` — when the token has no
+liquid path to WAE. The value is taken from the deepest-liquidity path, deliberately **not** the
+median, because the median is dragged around by dust pools and multi-hop outliers. A 404 means
+the token itself is unknown to the DEX index, not that it has no price.
+
+### `GET /api/dex/tokens/{address}/price/analysis`
+
+The same computation with its working shown
+(`DexTokenService.getTokenPriceWithLiquidityAnalysis`):
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `price` | string or null | The best price — the same value the `/price` route returns |
+| `confidence` | number | 0 to 1 |
+| `bestPath` | array of pairs | The route the price came from |
+| `allPaths` | array | Every path considered, each with `path`, `price`, `liquidity` and `confidence` |
+| `liquidityWeightedPrice` | string or null | Weighted across all paths |
+| `medianPrice` | string or null | Median across all paths — exposed for comparison, not used as the answer |
+
+`base_token` defaults to WAE; `debug=true` widens the per-path breakdown. Asking for the base
+token's price against itself short-circuits to `"1"`. A token with no path at all is a 404
+(`No price paths found for token ...`), not a null `price`.
+
+Comparing `price` against `medianPrice` and `liquidityWeightedPrice` is a cheap manipulation
+check: a wide spread between them means the quote rests on one shallow pool.
 
 ## The admin endpoint
 
 `PATCH /api/dex/tokens/{address}/listed` flips the `listed` flag. Body is
-`{ "listed": true }` or `{ "listed": false }`, and it is the **only endpoint in the entire API
-that declares a shared-secret credential**: "Requires an API key (x-api-key header or Bearer
-token)." The key is not in any public repository. Everything else that writes uses a wallet
-signature; see [Conventions](/api-reference/conventions#authentication).
+`{ "listed": true }` or `{ "listed": false }`; it returns the updated `DexTokenDto`, or 404 for an
+unknown token.
+
+It is one of **two** endpoints in the API that take a shared secret, and — this is the part worth
+knowing — the two share a guard and therefore a key. The import is literally
+`import { ApiKeyGuard } from '@/trending-tags/guards/api-key.guard'`, so the value checked here is
+the same `TRENDING_TAGS_API_KEY` that gates `POST /api/trending-tags`. Send it as either
+`x-api-key: YOUR_KEY` or `Authorization: Bearer YOUR_KEY`; a missing, wrong, or server-side-unset
+key is a `401`.
+
+The key is not in any public repository. Everything else that writes uses a wallet signature; see
+[Conventions](/api-reference/conventions#authentication).
+
+## Pagination on `/api/dex/*` differs from the rest of the API
+
+Every DEX list runs its options through `clampPaginationOptions`
+(`superhero-api/src/utils/pagination.ts`) instead of validating them:
+
+```ts
+export const DEFAULT_PAGE_LIMIT = 100;
+export const MAX_PAGE_LIMIT = 100;
+```
+
+So **100 is both the default and the ceiling** — the web app adapter's comment that the API "caps
+each response (default 100)" is right on both counts. The difference from the rest of the API is
+what happens when you exceed it: `limit=500` here is silently **clamped to 100**, and `page=0` is
+clamped to 1, where `/api/tokens` and friends would return a 400. A non-numeric `limit` falls back
+to 100 rather than erroring.
+
+Read `meta.itemsPerPage` rather than assuming your `limit` was honoured, and never infer "no more
+results" from getting fewer rows than you asked for.
 
 ## Read more
 
@@ -231,16 +324,8 @@ signature; see [Conventions](/api-reference/conventions#authentication).
 
 ## Open questions
 
-- **Is the standalone dex-backend still running?** `DEX_BACKEND_URL` is still in `src/config.ts`
-  for both networks and is still on the server's CSP `connect-src` allowlist, but nothing calls
-  it. Whether it is a live fallback or leftover configuration is not stated.
-- **What is the default page size on `/api/dex/*` lists?** The web app's adapter comments that the
-  API "caps each response (default 100)" and pages with `pageSize = 100`. Whether 100 is the
-  default or only the ceiling is unverified.
-- **What are the exact keys of the price-analysis payloads?** Both
-  `/api/dex/tokens/{address}/price` and `/price/analysis` are typed as untyped records with no
-  caller in the web app.
-- **What is the full `tx_type` enum on `/api/dex/transactions`?** The DTO gives `swap`,
-  `add_liquidity` and `remove_liquidity` as examples, and `LiquidityInfoDto.type` uses the
-  different spellings `PairMint` and `PairBurn`. Which vocabulary the `tx_type` filter expects is
-  not stated.
+- **Is `dex-backend-mainnet.prd.service.aepps.com` still running?** The Superhero side of the
+  question is settled — nothing calls it, and the API replicates its two contracts under
+  `/api/dex/*`, with the source calling it "legacy". Whether the host itself is still serving is a
+  question for its operators at æternity, not something either repository records. A single
+  request to it would answer it; outbound HTTP was unavailable when this page was written.

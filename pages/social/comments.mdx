@@ -30,15 +30,44 @@ Because the parent is just a string in the post body, a comment is as permanent 
 unremovable as any other post. Deleting a parent is impossible, so a thread can never be
 orphaned.
 
-## How the client reads it
+## How it is read: the indexer and the client disagree
 
-The parser is deliberately forgiving. It scans the `media` array first and then walks
-`tx_args` recursively, looking for the pattern `comment:` or `comment/` followed by a run of
-non-whitespace characters, and normalizes whatever it finds to the `_v3` suffix form. So a
-parent recorded as `3903`, `3903_v3` or `comment/3903` all resolve to `3903_v3`.
+Two parsers see the same bytes and they are not equally forgiving. Emit `comment:` plus the id
+and both agree; anything else and they diverge.
 
-Practical consequence for writers: emit `comment:` plus the id with the `_v3` suffix and you
-match both the app and the CLI. Readers should not assume that is the only form on chain.
+**The indexer** (`superhero-api/src/social/services/post.service.ts`, `detectPostType`) reads
+the call's second argument — the media list — and looks for an entry whose text contains the
+literal `comment:`. It splits on that exact string and takes everything after it as the parent
+id, trims it, and appends `_v3` if it is not there already. It does **not** recognise
+`comment/`. An entry with `comment:` and nothing after it is logged as an invalid comment
+format and the post is stored as a top-level post.
+
+**The client** is looser. It scans the `media` array first and then walks `tx_args`
+recursively, matching `comment:` *or* `comment/` followed by a run of non-whitespace
+characters, and normalizes whatever it finds to the `_v3` form. So `comment/3903` renders as a
+reply in the app while the API has it filed as a top-level post — the two views of the same
+post disagree.
+
+Practical consequence for writers: emit `comment:` plus the id with the `_v3` suffix. That is
+what the app and the CLI write, and the only form the indexer honours.
+
+## What happens when the parent does not exist
+
+The indexer does not take the parent on trust. On ingest it looks the parent up, retrying three
+times with exponential backoff from 100 ms, because backward sync does not guarantee that a
+parent is processed before its child. If the parent is still missing after the retries, the
+comment is **converted to a standalone top-level post** — `post_id` is set to null and it is
+stored and ranked like any other post.
+
+A second sweep catches the race the other way round. About ten seconds after boot,
+`fixOrphanedComments` runs once: a single `UPDATE` detaches every comment older than one hour
+whose parent still does not exist, and a second `UPDATE` recomputes `total_comments` for every
+parent whose count is stale — which also fixes parents that arrived after their children, whose
+comment-count increments were no-ops at the time. The one-hour grace period exists so a comment
+whose parent is merely running behind in the sync is not permanently detached.
+
+So a comment naming a parent that never existed is not dropped and not orphaned: it becomes an
+ordinary post. Nothing reverses that later.
 
 ## Threading and depth
 
@@ -111,17 +140,31 @@ The agent skill quotes roughly 0.00001 AE in gas for a comment, the same as a po
 ## Limits
 
 The web composer applies the same 280-character limit to replies as to posts, and offers the
-same emoji, GIF and image attachments. The contract applies no limit of its own.
+same emoji, GIF and image attachments. The contract applies no limit of its own, and the
+indexer applies the same 5,000-character truncation and five-media-entry cap it applies to
+posts — see [Posting](/social/posting).
+
+One consequence specific to comments: the `comment:` marker is not a URL, so the indexer's
+media filter drops it from the stored `media` array. A comment's API `media` field therefore
+contains only its own attachments, while `tx_args` still carries the marker. Do not look for
+the parent id in `media` on an API response.
+
+## How comments feed ranking
+
+A comment is never ranked as a standalone popular item — the candidate query requires
+`post_id IS NULL`. Instead the whole reply tree rolls up into the parent's score, counted with
+a recursive query to a depth cap of 50, with replies written by the root post's own author
+excluded so an author cannot inflate their own ranking, and hidden comments pruning their
+entire subtree. Comments carry the heaviest default weight of any signal, 2.5. See
+[The Feed](/social/feed).
 
 ## Open questions
 
-- **Does anything validate the parent id?** The contract stores the `media` list verbatim, so
-  a comment can name a parent that does not exist. How the indexer treats such a post — a
-  top-level post, an orphan comment, or dropped — is not documented.
-- **Is `comment/` as a separator ever written, or only tolerated?** The client's parser accepts
-  it, which suggests it exists on chain, but no writer in either repository emits it.
-- **Are media attachments after the marker rendered on comments?** The web composer allows
-  them and the contract stores them; whether every comment surface renders them is not stated.
+- **Is `comment/` as a separator ever actually on chain?** The client's parser accepts it and
+  the indexer does not, so a post using it would render as a reply in the app and as a
+  top-level post in the API. No writer in any of the four repositories emits it. Scanning
+  `post_without_tip` call arguments on the mainnet contract for the literal `comment/` would
+  settle whether the client's tolerance is defensive or historical.
 
 ## Read more
 

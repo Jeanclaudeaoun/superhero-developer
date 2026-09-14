@@ -18,10 +18,11 @@ coins: your AE stays in your wallet, spendable, the entire time.
 | Cardinality | **One delegation out** per account; any number in. |
 | Duration | Until you change or revoke it. Nothing expires it. |
 | Override | Voting on a poll yourself overrides your delegation **for that poll only**. |
-| Transitivity | Chains resolve. A delegatee who has themselves delegated passes the weight along. |
+| Transitivity | Chains resolve, to any depth. A delegatee who has themselves delegated passes the weight along. |
 | Custody | None. No coins move, nothing is locked, no allowance is needed. |
-| Counting | Delegations and balances are read at the poll's close height. |
-| Self-delegation | Rejected. You cannot delegate to your own address. |
+| Counting | Delegations and balances are read at the poll's close height — or live, if the poll has not closed. |
+| Self-delegation | Rejected on chain: `CALLER_IS_DELEGATEE_DISALLOWED`. |
+| Cycles | Not prevented on chain. Broken off-chain at tally time, so each balance counts at most once. |
 
 ## The entrypoints
 
@@ -102,6 +103,45 @@ also reaches them. The app's account screen counts delegators from the flattened
 tree returned by the governance API, which is why that number can exceed the direct count from
 the contract.
 
+## Cycles, and how they are resolved
+
+The registry cannot prevent a cycle. `delegate` rejects only self-delegation:
+
+```sophia
+stateful entrypoint delegate(delegatee : address) =
+  require(Call.caller != delegatee, "CALLER_IS_DELEGATEE_DISALLOWED")
+  put(state{ delegations[Call.caller] = delegatee })
+```
+
+Each call sees one edge, so A→B followed by B→A is two perfectly valid transactions, and the
+delegation map ends up holding a two-cycle. Longer rings are equally possible.
+
+Cycles are broken **off-chain, at tally time**, by the governance backend. `delegationTree` in
+`governance-server/src/logic.js` walks the graph inward — from a voter, to the accounts delegating
+to them, and outward from there — and refuses to follow an edge into any of three sets:
+
+| Skipped | Why |
+| --- | --- |
+| The address the walk started from | Closes a ring back to the voter |
+| Any address already visited on this walk (`checkedAddresses`) | Closes a ring anywhere else |
+| Any address in `ignoreAccounts` | These are the poll's own voters; an account that voted speaks for itself |
+
+The result: **each balance is counted at most once per poll**, the cycle is cut at the edge that
+would have revisited a node, and nothing throws or loops forever. No balance is double-counted and
+no balance is dropped for being in a ring — it still counts for whoever it reaches first along the
+walk.
+
+The third row is the mechanism behind "voting yourself overrides your delegation": the voter list is
+passed in as `ignoreAccounts`, so the walk stops at anyone who cast their own vote rather than
+passing their weight further along.
+
+**There is no depth cap.** A chain of any length resolves, bounded only by the visited-set check.
+There is also no cap on how much delegated weight one account can accumulate.
+
+The practical advice does not change: a cycle is not an error condition, but it is an accident. If
+you and someone else delegate to each other, neither of you has delegated anything useful — the
+walk will cut one of the two edges and the outcome depends on which of you votes.
+
 ## Voting yourself overrides delegation
 
 If you vote on a poll, your own vote counts for your balance on that poll and your delegatee's
@@ -144,17 +184,6 @@ Each record carries the delegator, the delegatee, the transaction hash and block
 if it was later revoked — `revoked`, `revoked_hash`, `revoked_block_height` and `revoked_at`.
 Use this when you need to know what the delegation graph looked like at some past height; the
 contract only holds the present state.
-
-## Open questions
-
-- How the backend handles a **delegation cycle** — A delegates to B and B delegates back to A —
-  is not documented in either repository. The contract cannot prevent one, since each
-  `delegate` call sees only its own edge. The weighting is computed off-chain over the
-  delegation tree, so some cycle handling must exist, but whether it drops the cycle, breaks it
-  at an arbitrary edge, or counts the balances once is not determinable from the sources here.
-  The `aepp-governance` backend source would settle it.
-- Whether a delegatee's weight is capped, or whether there is any limit on chain depth, is not
-  stated anywhere we could verify.
 
 ## Read more
 

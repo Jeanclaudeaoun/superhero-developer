@@ -56,6 +56,22 @@ The 280-character limit you see in the composer is a client default
 (`src/features/social/components/PostForm.tsx`), not a contract rule. The contract accepts any
 string; you pay gas proportional to its size.
 
+**Superhero does not host media — there is no upload at all.** This surprises people who expect an
+image host behind an immutable post registry, so state it plainly: the composer has no file input,
+no `FormData` and no multipart request, and `superhero-api` exposes no upload endpoint. The two
+attachment buttons are both *pickers over third-party catalogues*, and what they put in `mediaUrls`
+is someone else's URL:
+
+| Control | Source | What is stored on chain |
+| --- | --- | --- |
+| Image | [Openverse](https://api.openverse.org/v1/images/), queried directly by the browser and filtered to `license_type=commercial,modification`, `extension=jpg,png`, `mature=false` | The Openverse image URL |
+| GIF | Giphy, proxied through the backend at `GET /api/giphy/search` (`superhero-api/src/social/controllers/giphy.controller.ts`) | A `media.giphy.com` URL |
+
+The consequence is the important part. The post is permanent; **the media is not**. If Openverse or
+Giphy removes an asset, or changes a URL, the post keeps a string that resolves to nothing and no
+one — not you, not Superhero — can repair it, because the post cannot be edited. Treat attached
+media as a decoration that may disappear, and put anything load-bearing in the text.
+
 Post IDs as the API and the URLs use them carry a version suffix: the web app forms
 `TIP_ID` plus `_v3` after a successful post, so a post's public identity is tied to the contract
 version it was written to.
@@ -147,15 +163,37 @@ events so clients can react. Muting marks content for clients to hide within tha
 post itself is untouched and still readable from contract state, from an explorer, or from any
 client that chooses not to honour the list.
 
+The muted set is `Set.set(string)`, and the contract is **deliberately agnostic about what that
+string is**. It stores, inserts and deletes the value without ever comparing it to an address,
+parsing it or validating a format:
+
+```sophia
+stateful entrypoint mute_user_id(user_id : string) =
+  require_moderator()
+  Chain.event(MuteUserId(user_id))
+  put(state{ muted_user_ids = Set.insert(user_id, state.muted_user_ids) })
+```
+
+So the key convention belongs to whatever client writes it — and no Superhero client writes it yet.
+Neither the web app nor `superhero-api` calls `mute_user_id`; the only occurrences outside the
+contract are the vendored ACIs. If you build a client that honours these lists, you are choosing the
+convention, not following one, so read the existing set before assuming `ak_` addresses.
+
 **Write thresholds.** The same contract holds a `minimum_token_threshold` — the minimum balance of
 the community's token required for write access in that community. It raises the cost of spamming a
 community without granting anyone the power to erase what is already there.
 
-Both levers are governed rather than administered. Moderators are appointed and removed by DAO vote
-(`AddModerator`, `DeleteModerator`) and the threshold is changed by DAO vote
-(`ChangeMinimumTokenThreshold`). Each of those votes carries the full DAO cost and quorum: 555 AE to
+Both levers are governed rather than administered, and the split of authority is exact. Muting
+requires `require_moderator()` — membership of `moderator_accounts`. Everything else in the contract
+requires `require_owner()`, and the owner is the community's DAO, set by the factory at deployment.
+So moderators are appointed and removed by DAO vote (`AddModerator`, `DeleteModerator`) and the
+threshold is changed by DAO vote (`ChangeMinimumTokenThreshold`); a moderator cannot appoint another
+moderator or move the threshold. Each of those votes carries the full DAO cost and quorum: 555 AE to
 open, two weeks in key-blocks, 55% approval, 10% participation. Moderation is deliberately slow and
 expensive.
+
+One flag has no lever at all: `is_private` is fixed by `init` at community creation and no entrypoint
+changes it, and it is not among the vote subjects. A community's private/public setting is permanent.
 
 The honest summary: Superhero offers **community-level visibility control, not protocol-level
 removal.** If you need content taken down from the internet, an immutable contract is the wrong
@@ -175,11 +213,7 @@ place to have put it.
 ## Open questions
 
 - **What is the real gas cost of a post?** The 0.00001 AE figure comes from the agent skill's
-  guides, not from a measurement or a fee schedule. A concrete answer needs observed transaction
-  fees for posts of several lengths on mainnet — visible on any post's transaction in an explorer.
-- **Where are uploaded media hosted?** The contract stores only URLs, and the web composer builds a
-  `mediaUrls` list, but neither repository shows the upload target for a file chosen in the
-  composer. Whether that is a Superhero-operated host, a third party, or user-supplied links only is
-  not determinable from these sources.
-- **Does the muted-user set key on addresses or on profile names?** `mute_user_id` takes a `string`
-  rather than an `address`, and the repositories do not show what a client puts in it.
+  guides, not from a measurement or a fee schedule, and no contract determines it — the cost depends
+  on the deployed bytecode and the gas price at execution. Closing this means publishing posts of
+  several lengths on mainnet and reading `gasUsed` and `gasPrice` off each transaction in an
+  explorer.

@@ -99,7 +99,53 @@ stays on topic by construction.
 
 ## The trending index
 
-Trending tags are a separate, ranked index:
+Trending tags are a separate, ranked index — and the single most misunderstood thing about
+them is that **Superhero does not compute the score**. There is no engagement formula, no decay
+and no window. The `trending_tags` table is a mirror of what an external provider pushes in.
+
+### Where the score comes from
+
+`superhero-api/src/trending-tags/` has exactly one writer:
+
+```text
+POST /api/trending-tags
+x-api-key: <TRENDING_TAGS_API_KEY>
+
+{ "provider": "x",
+  "items": [ { "tag": "blockchain", "score": "95.5" } ] }
+```
+
+The handler takes `score` verbatim — `parseFloat(item.score)` — and stores `provider` as the
+row's `source`. Nothing derives it from posts, tips or reads. A second code path,
+`saveAllTrendingTags()` behind the `PULL_TRENDING_TAGS_ENABLED` flag, is an empty function body
+with a `// TODO` in it, so there is no internal pull either.
+
+Three properties of that write are worth knowing before you consume the index:
+
+- **A push replaces the whole table.** If `items` is non-empty the service calls
+  `trendingTagRepository.clear()` before inserting, so a tag absent from the latest push
+  disappears rather than ageing out. The index is a snapshot of one provider's last delivery.
+- **Authorisation is a single shared API key**, compared in constant time against
+  `TRENDING_TAGS_API_KEY` from the environment. The guard rejects every request when that
+  variable is unset or shorter than 16 characters, so a misconfigured deployment fails closed
+  rather than open. The key is accepted as an `x-api-key` header or as
+  `Authorization: Bearer …`. There is no per-caller key and no scope — whoever holds it can
+  replace the entire index.
+- **Tags are normalised on write and on read.** `normalizeTagName` splits camelCase to
+  kebab-case, uppercases, strips anything that is not a letter, a number or a hyphen in any
+  script, collapses runs of hyphens and trims them from the ends. `GET /api/trending-tags/{tag}`
+  applies the same function before looking up, so the lookup is case- and
+  punctuation-insensitive.
+
+### `source` is the originating platform
+
+`source` is the `provider` string from the push — the platform the trend came from. The entity
+annotates the column `// platform (x, facebook, github)` and the DTO's example value is `x`. So
+`order_by=source` groups the index by upstream platform, and the client's willingness to read
+either `source` or `platform` is just tolerance for two names for the same field. Trends
+ingested this way did not originate in Superhero posts; that is the whole point of the field.
+
+### Reading it
 
 ```text
 GET /api/trending-tags?order_by=score&order_direction=DESC&limit=100&page=1&search=
@@ -107,19 +153,41 @@ GET /api/trending-tags?order_by=score&order_direction=DESC&limit=100&page=1&sear
 
 | Parameter | Values |
 | --- | --- |
-| `order_by` | `score`, `source` or `created_at` |
+| `order_by` | `score`, `source` or `created_at` — anything else is a 400 |
 | `order_direction` | `ASC` or `DESC` |
-| `limit`, `page` | Pagination |
-| `search` | Filter by substring |
+| `limit`, `page` | 1 to 100, default 100 |
+| `search` | Case-insensitive substring on `tag`, at most 100 characters |
 
-Items carry a `tag` and a `score`. The client is defensive about field naming — it accepts
-`tag` or `name`, `score` or `value`, and `source` or `platform` — which suggests the shape has
-moved over time. A single tag can be read at `GET /api/trending-tags/{tag}`.
+Each row carries `id`, `tag`, `score`, `source`, `description` (nullable, never written by the
+create path) and `created_at`, plus a left-joined `token` matched on `token.name = trending_tag.tag`
+— so a trending tag that already has a community token arrives with it attached. A single tag
+is at `GET /api/trending-tags/{tag}`, 404 when unknown.
 
 This index drives the trending rail beside the feed, the trending pill carousel, the
 repositories list, and the trend cloud visualisation at `/trends/visx`, which renders tags
-sized by score. Trending also feeds the popular feed's `trendingBoost` weighting — see
-[The Feed](/social/feed).
+sized by score. It also supplies the popular feed's `trendingBoost` term, which normalises it
+as `min(1, highestTagScoreAmongThePostsTopics / 100)` — see [The Feed](/social/feed). A score
+above 100 therefore adds nothing extra.
+
+## Topics and trending tags are different things
+
+They are two tables with two independent writers, joined only by name.
+
+| | Topic | Trending tag |
+| --- | --- | --- |
+| Written by | The post indexer, from `#tag` in post content | An external provider, via `POST /api/trending-tags` |
+| Endpoint | `GET /api/topics…` | `GET /api/trending-tags…` |
+| Has posts behind it | Always — a topic exists because a post mentioned it | Not necessarily |
+| Lifetime | Permanent, like the posts | Until the next full push replaces the table |
+
+So **not every topic gets a trending row**, and **a trending tag can exist with no posts behind
+it at all** — that is the normal case for a trend ingested from X. The two only meet when their
+normalized names match, which is why `normalizeTopic` in `content-parser.util.ts` and
+`normalizeTagName` in `tag-name.util.ts` apply the same camelCase-splitting and uppercasing
+rule and carry comments telling you to keep them in step. Diverge them and a tag would never
+match its topic, and `trendingBoost` would silently become zero.
+
+The indexer caps a post at **10 topics**, each at most 50 characters after normalization.
 
 ## From topic to token
 
@@ -164,18 +232,11 @@ at the end is on chain in a different one; everything in between is the indexer.
 
 ## Open questions
 
-- **What feeds the trending score, and over what window?** The endpoint exposes a `score` and
-  can order by it, but neither the score's inputs, its decay, nor its window is documented in
-  the app repository.
-- **What is `source` / `platform`?** `order_by=source` is accepted and the client reads a
-  `source` or `platform` field, which implies tags can originate somewhere other than Superhero
-  posts. Whether off-platform trends are ingested, and from where, is not stated anywhere
-  available.
-- **How do topics and trending tags relate?** They are separate endpoints with separate shapes.
-  Whether every topic gets a trending-tag row, and whether a trending tag can exist with no
-  posts behind it, is unconfirmed.
-- **Who may call `POST /api/trending-tags`?** The generated client exposes a create method for
-  trending tags with no callers in the app and no documented authorisation.
+- **Which provider actually pushes the trending index on mainnet?** The ingest endpoint stores
+  whatever `provider` string the caller sends, and the entity's own comment lists `x`,
+  `facebook` and `github` as examples. Which of those is live, on what cadence, and how that
+  provider derives its scores, is outside both repositories — ask Superhero, or read the
+  `source` values on a live `GET /api/trending-tags` response.
 
 ## Read more
 

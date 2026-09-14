@@ -231,14 +231,55 @@ positional and undocumented in the script's own help text.
 ```json
 // tokens — a bare array, projected down to seven fields
 [ { "name": "SUPERHERO", "symbol": "SUPERHERO", "sale_address": "ct_...",
-    "price_ae": "0.0123", "market_cap": "...", "trending_score": 51234, "holders_count": 87 } ]
+    "price_ae": "0.0123", "market_cap": "...", "trending_score": 0.184213, "holders_count": 87 } ]
 ```
+
+`trending_score` is a normalised value between **0 and 1**, rounded to six decimal places —
+not a raw activity count. The skill's own strategy prose quotes entry thresholds of 100,000,
+50,000 and 20,000, which no token can ever reach; see
+[Agent Trading](/agents/trading#what-the-trending-score-actually-is).
 
 `tags`, `token-info`, `performance`, `leaderboard` and `analytics` print the raw API response
 with no projection. Field names for those come from the backend — see
 [Trending API](/api-reference/trending), [Tokens API](/api-reference/tokens) and [Analytics API](/api-reference/analytics).
 `leaderboard` items carry `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
 `buy_count`, `sell_count`, `created_tokens_count` and `owned_trends_count`.
+
+`analytics` returns a **bare array of daily rows**, one per day, sourced from the backend's
+cached `analytics` table (`superhero-api/src/analytics/entities/analytic.entity.ts`):
+
+```json
+[ { "id": 1,
+    "date": "2026-09-13",
+    "total_market_cap_sum": "1234567.89",
+    "total_volume_sum": "45678.90",
+    "total_tokens": 812,
+    "total_transactions": 1943,
+    "total_created_tokens": 7,
+    "total_active_accounts": 268 } ]
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `date` | date-only string | The day the row covers |
+| `total_market_cap_sum` | numeric string | Sum of the latest market cap of every token as of end of that day, **in AE** |
+| `total_volume_sum` | numeric string | Sum of transaction amounts for that day, **in AE** |
+| `total_tokens` | integer | Tokens in existence as of end of that day, cumulative |
+| `total_transactions` | integer | Transactions that day |
+| `total_created_tokens` | integer | `create_community` calls that day |
+| `total_active_accounts` | integer | Distinct caller addresses that day |
+
+The two sums are `numeric` columns carried as strings, so parse them as decimals rather than
+floats. Both are denominated in AE — the backend reads the `ae` member of the stored amount,
+not aettos and not USD.
+
+The script sends no query parameters, so you get the server default range: `start_date` ten
+days ago, `end_date` tomorrow. Calling the endpoint yourself, four parameters are accepted —
+`start_date`, `end_date`, `force_pull` (recompute the range before returning it) and
+`address` (per-account figures, computed live rather than from the cache). The cache itself
+is refreshed hourly, re-pulling the last seven days each time. Two sibling routes exist that
+the script does not use: `GET /api/analytics/summary` for a range-aggregated total with a
+true distinct account count, and `GET /api/analytics/past-24-hours`.
 
 ---
 
@@ -500,9 +541,55 @@ Each invite is a freshly generated keypair registered with the AffiliationTreasu
 Cost is `(amount_ae + 0.001) * count`, plus gas. The extra 0.001 AE per invite is a fixed
 redemption-fee cover so the recipient can pay for their own redemption transaction.
 
+Revoking returns the `amount_ae` only — the 0.001 AE fee cover was spent to the invite address
+at registration and does not come back. See
+[Invite links](/rewards/invite-links) for the contract detail.
+
 **Never log, print or commit the output of `generate`.** The `links` array contains bearer
-secrets. `SKILL.md` calls this out explicitly in its security table. See
-[Invite links](/rewards/invite-links).
+secrets. `SKILL.md` calls this out explicitly in its security table.
+
+### A likely defect in how the treasury is initialised
+
+`getTreasury()` in `superhero-invite.mjs` loads `contracts/CommunityFactory.aci.json`, uses it
+to initialise the factory, reads `affiliation_treasury()` from it — and then **reuses the same
+ACI** to initialise the treasury address:
+
+```js
+const factoryAci = JSON.parse(fs.readFileSync('./contracts/CommunityFactory.aci.json', 'utf8'));
+const factory  = await Contract.initialize({ aci: factoryAci, address: FACTORY_ADDRESS, ... });
+const treasuryAddress = await factory.affiliation_treasury().then(r => r.decodedResult);
+return await Contract.initialize({ aci: factoryAci, address: treasuryAddress, ... });
+```
+
+An æternity ACI file is an array in dependency order whose **last contract entry is the
+compiled contract**, and that is the entry an SDK builds its method surface from. Every ACI
+in the skill follows that convention and is named for its last entry:
+
+| File | Contract entries | Last entry |
+| --- | --- | --- |
+| `CommunityFactory.aci.json` | 21, including `AffiliationTreasury` at index 16 | `CommunityFactory` |
+| `AffiliationBondingCurveTokenSale.aci.json` | 15, including `AffiliationTreasury` at index 12 | `AffiliationBondingCurveTokenSale` |
+| `FungibleTokenFull.aci.json` | 4 | `FungibleTokenFull` |
+| `BondingCurveExponential.aci.json` | 6 | `BondingCurveExponential` |
+
+The convention is confirmed by the scripts that work: `superhero-token-swap.mjs` initialises
+a sale address with `AffiliationBondingCurveTokenSale.aci.json` and calls `buy`, `sell` and
+`price`, which exist only on that bundle's last entry — even though `AffiliationTreasury` also
+sits inside the same file. The backend takes the same line, shipping a separate
+`AffiliationTreasury.aci.json` in `superhero-api/src/plugins/bcl/contract/aci/` whose last
+entry is `AffiliationTreasury`.
+
+So the object `getTreasury()` returns is a **`CommunityFactory`** interface pointed at the
+treasury's address. `register_invitation_code` and `revoke_invitation_code` are not among
+`CommunityFactory`'s twenty entrypoints, so they are not on the object — this is a local
+resolution failure, not a chain error, and no transaction is broadcast.
+
+The fix is a one-line change: reinitialise the treasury against an ACI whose last contract
+entry is `AffiliationTreasury`. Compile it from
+`bcl-contracts/contracts/AffiliationTreasury.aes`, or copy the backend's file into the skill's
+`contracts/` directory, and load that instead. Until then, use the web app at
+[superhero.com/trends/invite](https://superhero.com/trends/invite) rather than the CLI, and
+if you do try the CLI, try it with `generate 0.01 1` first.
 
 ---
 
@@ -648,13 +735,10 @@ For agents that want to enumerate the surface without parsing this page:
 
 ## Open questions
 
-- `superhero-invite.mjs` initialises the AffiliationTreasury contract using
-  `contracts/CommunityFactory.aci.json`. That file is a bundle of 21 ACI entries and
-  `CommunityFactory` is the last of them, which is normally the entry an SDK treats as the
-  main contract. Whether `register_invitation_code` and `revoke_invitation_code` resolve
-  against the bundled `AffiliationTreasury` entry could not be verified without executing a
-  funded transaction on mainnet. Test with a small `generate 0.01 1` before relying on it.
-- `GET /api/analytics`, which `superhero-trending.mjs analytics` calls, is listed in the app's
-  endpoint inventory as having no callers in the web app, so its response shape is not traced
-  anywhere in the repositories. Call it once and inspect the output rather than assuming
-  fields.
+- The `superhero-invite.mjs` ACI defect above is established from the file layout and from
+  how every other script in the skill loads its ACI, but the exact runtime symptom — which
+  error the SDK raises when the method is absent — was not observed, because reaching a node
+  requires network access this documentation pass did not have. Run
+  `node scripts/superhero-invite.mjs generate 0.01 1` against a funded wallet to see it, and
+  report the wording to the
+  [skill repository](https://github.com/superhero-com/superhero-agent-skill).

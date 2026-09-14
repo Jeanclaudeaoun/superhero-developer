@@ -110,11 +110,42 @@ only factor that survives a passkey rekey.
 ## Creating in Superhero Wallet
 
 Install the [extension](/wallets/superhero-wallet-extension) or the
-[mobile app](/wallets/superhero-wallet-mobile), open it, choose to create a wallet, write down the
-seed phrase it shows you, and set a wallet password. Then return to superhero.com and press Connect.
+[mobile app](/wallets/superhero-wallet-mobile) — or just open
+[wallet.superhero.com](https://wallet.superhero.com/), which is the same wallet with nothing to
+install. Choose **Create new wallet**, pick which blockchain to create your first account on, and you
+land on the dashboard. Then return to superhero.com and press Connect.
 
 This is the right choice if you want one wallet across æternity, Bitcoin, Ethereum and the rest, or
 if you will use other æternity æpps.
+
+### It does not show you the seed phrase, and backup is not enforced
+
+This is the single most important difference from the in-app flow above, and it cuts the other way
+from what people expect. `createWallet` in `superhero-wallet/src/popup/pages/Index.vue` generates a
+mnemonic, creates your first account and routes straight to the dashboard. **There is no
+seed-phrase screen in onboarding at all**, and no verification gate.
+
+What you get instead is a notification — "Welcome to Superhero Wallet! Please backup your seed
+phrase!" with a **Back up now** button (`verifyBackedUpSeed` in `src/popup/App.vue`) — that keeps
+reappearing until the phrase is marked backed up.
+
+So do this on day one, before funding anything:
+
+1. **Settings → Seed phrase → Show seed phrase.** Revealing it requires re-authentication: biometrics
+   on the mobile app, your password on the extension and web, or an explicit "make sure no one is
+   watching your screen" confirmation if you have no password set.
+2. **Write the words down.** Two copies, offline.
+3. **Verify seed phrase.** You are shown your own words shuffled and tap them back into the correct
+   order. Get it right and the nag disappears.
+
+Step 3 is skippable — the same screen has an *I have verified seed phrase before* button that just
+sets the flag. Superhero's own built-in wallet does the opposite: the create-from-phrase path there
+makes you re-enter the words before a vault exists at all. Whichever wallet you use, the phrase is
+the only portable backup; the difference is only in who makes you prove you have it.
+
+Also worth setting on the same day: **Settings → Secure Login**, which turns on password protection
+if you skipped it, sets the auto-lock interval, and — unlike the built-in wallet — lets you change
+the password later.
 
 ## Creating an account for an agent
 
@@ -173,9 +204,18 @@ Your account exists but holds nothing. Put a little AE in it, then post or trade
 
 ## Open questions
 
-- Can a passkey-created wallet's recovery phrase be revealed anywhere, for a user who later wants a
-  written backup? The code comments name a user-verification-gated reveal as the intended fix but
-  describe it as not yet shipped.
-- Where in Superhero Wallet's own onboarding does the seed-phrase backup verification happen, and is
-  it mandatory there as it is in the built-in wallet? The wallet's FAQ copy describes backing up the
-  phrase but was not verified against the wallet's own repository.
+Three things that were open are now settled, and all three are worth knowing before you choose a
+path. **A passkey-created wallet's phrase cannot be revealed anywhere** — three modules in
+`src/features/wallet/` say so in comments and no component implements a reveal, so if you create
+with a passkey, that passkey is your only backup and it must sync. **The built-in wallet's
+passphrase cannot be changed later** — there is no `addPassphraseFactor` and nothing calls
+`removeFactor`, so changing it means recreating the vault from the phrase. And **the standalone
+Superhero Wallet's backup step is optional and comes after onboarding**, documented above. See
+[The Built-In Wallet](/wallets/built-in-wallet) and
+[Backup & Recovery](/wallets/backup-and-recovery).
+
+- **Is a phrase reveal actually planned?** The code names a user-verification-gated reveal as "the
+  fix", and the standalone Superhero Wallet already ships exactly that shape of screen — a
+  re-authentication gate in front of the phrase — so the design is not the obstacle. What is missing
+  is any statement of intent: no repository carries a roadmap, an issue reference or a design note
+  beyond those source comments. Only Superhero can say whether it is scheduled.

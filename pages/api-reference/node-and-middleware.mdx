@@ -31,14 +31,31 @@ something — posting, creating a token, swapping, generating invites, voting �
 
 ## Which host?
 
-The two repositories point at different mainnet hosts, and both are correct for their context.
+Three sources point at two different mainnet hosts, and each is correct for its context.
 
 | Source | Mainnet node | Mainnet middleware |
 | --- | --- | --- |
 | Web app (`src/config.ts`) | `https://mdw.wordcraft.fun` | `https://mdw.wordcraft.fun/mdw` |
 | Agent skill (`scripts/*.mjs`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw/v3` |
+| **The API server** (`superhero-api/src/configs/network.ts`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw` |
 
-Testnet is not in dispute — both would use `https://testnet.aeternity.io` and
+The third row settles something the first two left open: **`api.superhero.com` itself indexes from
+the public æternity host**, not from `mdw.wordcraft.fun`. Its `NETWORK_MAINNET` record is
+
+```text
+url:          https://mainnet.aeternity.io
+middlewareUrl: https://mainnet.aeternity.io/mdw
+websocketUrl:  wss://mainnet.aeternity.io/mdw/v2/websocket
+explorerUrl:   https://aescan.io
+compilerUrl:   https://v7.compiler.aepps.com
+```
+
+and testnet is the same with `testnet.` substituted. Every server-side chain read on this
+site — the token price sync, the AEX-9 `eventSupply` lookup behind `circulating_supply`, the live
+indexer's WebSocket subscription — goes to that host. So the data in the Superhero API is derived
+from the public middleware, whatever a browser page is configured to call directly.
+
+Testnet is not in dispute — all three use `https://testnet.aeternity.io` and
 `https://testnet.aeternity.io/mdw`.
 
 ### Resolving the discrepancy
@@ -57,12 +74,14 @@ Which one is canonical depends on who is asking:
   `connect-src` allowlist in `server/lib/csp.cjs` contains `https://mdw.wordcraft.fun` and
   `https://testnet.aeternity.io` — and **not** `https://mainnet.aeternity.io`. A browser page
   served by Superhero cannot reach the public host; the request is blocked before it leaves.
-- **In a script there is no CSP,** so the agent skill uses the public host, which is the sensible
-  default for code that runs outside Superhero's own deployment.
+- **In a script there is no CSP,** so the agent skill uses the public host.
+- **On the server, the public host is the configured default** and `mdw.wordcraft.fun` does not
+  appear in the backend at all. `AE_NETWORK_ID` selects mainnet or testnet; the URLs themselves are
+  constants, not environment variables, so pointing a self-hosted deployment at a different node
+  means editing `network.ts`.
 
 Both serve the same chain, so a transaction submitted to one is visible from the other. The
-practical differences are operational — uptime, rate limiting and middleware sync lag — and
-neither repository states any guarantee about either host.
+practical differences are operational — uptime, rate limiting and middleware sync lag.
 
 **Make it configurable.** `superhero-governance.mjs` already does:
 
@@ -178,15 +197,70 @@ its own paths, which is useful when a CSP or a firewall makes the middleware hos
 
 These take an `includes` parameter for nested relations — `keyBlock`, `keyBlock.txs`,
 `microBlocks`, `txs.keyBlock` and similar, comma-separated — which the upstream middleware does
-not offer.
+not offer. An array relation is truncated to **50** items per parent regardless of what you ask
+for.
+
+This mirror is Superhero's own re-indexing, not a passthrough, so its response shapes are the
+`Tx`, `KeyBlock` and `MicroBlock` entities rather than the middleware's.
+
+Three things to know before pointing a crawler at it, all from
+`superhero-api/src/api-core/base/base.controller.ts` — these routes are the only ones in the API
+built by the generated base controller, and they inherit its behaviour:
+
+- **They are rate-limited.** 10 requests per minute per IP **per route path**, returning a `429`
+  with a `retryAfter` field in the body. Nothing else in this reference is throttled; these are.
+  See [Conventions](/api-reference/conventions#rate-limits).
+- **`limit` is capped at 100** with a `400 Maximum limit is 100 items per request`, and an
+  `order_by` outside the route's sortable set is a `400` too.
+- **`page` goes much deeper here than elsewhere.** The base controller's default page ceiling is
+  500, but the chain-mirror tables raise it to **1,000,000**, with the reasoning written into the
+  config: a client walking chain history has no range-filter alternative to `OFFSET` paging, unlike
+  an application table. Deep paging still costs the database a full scan-and-discard of everything
+  before your page, so prefer a `height` or `block_height` filter where you can.
+
+Sortable fields are declared per entity. On `sync-state` they are `id`, `last_synced_height`,
+`tip_height`, `is_bulk_mode`, `backward_synced_height`, `live_synced_height`, `created_at` and
+`updated_at`; on `txs` they include `hash`, `block_height`, `micro_time`, `type`, `contract_id`,
+`function`, `caller_id`, `sender_id` and `recipient_id`.
+
+### `GET /api/mdw/health` — how far behind is it?
+
+This is the endpoint that answers the staleness question for Superhero's own index. It is not
+rate-limited and takes no parameters:
 
 ```bash
 curl -s "https://api.superhero.com/api/mdw/health"
 ```
 
-This mirror is Superhero's own re-indexing, not a passthrough, so its response shapes are the
-`Tx`, `KeyBlock` and `MicroBlock` models in the generated client rather than the middleware's.
-No component in the web app calls any of them, so treat the shapes as unexercised.
+| Key | Contents |
+| --- | --- |
+| `status` | `healthy`, `warning` or `critical` |
+| `totalTxs` | Rows in the mirrored transaction table |
+| `backwardSync` | `status`, `syncedHeight`, `tipHeight`, `remainingBlocks`, `progressPercent`, `mode` (`bulk` or `normal`), `isRunning` |
+| `liveSync` | `status`, `syncedHeight`, `tipHeight`, **`lag`**, `progressPercent`, `gapFromBackwardSync`, `isActive` |
+| `validation` | `status`, `isValidating`, `lastValidationTime` |
+| `comparison` | `syncGap`, `backwardSyncProgress`, `liveSyncProgress` |
+| `plugins` | Per-plugin `name`, `lastSyncedHeight`, `backwardSyncedHeight`, `liveSyncedHeight`, `startFromHeight` |
+| `registeredPlugins` | The plugin names that are loaded |
+
+`liveSync.lag` is the number you want: `tipHeight - liveSyncedHeight`, in key blocks. The
+thresholds the server itself uses to grade that lag are a reasonable default for your own alerting:
+
+| Condition | `status` |
+| --- | --- |
+| Backfill complete and `lag` at most 100 | `healthy` |
+| Backfill complete and `lag` above 100 | `warning` |
+| `lag` above 1000, or more than 10,000 blocks of backfill left | `warning` |
+| `lag` above 5000, more than 50,000 blocks of backfill left, or the live indexer is not active | `critical` |
+
+Two syncs run independently: a **live** one following the tip, and a **backward** one walking from
+the tip down towards genesis. `remainingBlocks` counts down to 0, not to the factory's deployment
+height, so it stays large for a long time on a fresh deployment while live data is already
+current. Judge freshness from `liveSync`, not from `backwardSync`.
+
+`GET /api/stats` gives a three-field summary of the same picture, plus `mdwConnected` — whether
+the WebSocket subscription to the upstream middleware is up. See
+[Factory & Contracts](/api-reference/factory-and-contracts).
 
 ## When to use which
 
@@ -206,7 +280,8 @@ The rule of thumb: **the Superhero API knows about Superhero.** The moment your 
 the chain rather than about the product, it belongs to the middleware or the node.
 
 Both are also further behind than you might expect — the middleware indexes after the fact, and
-the Superhero API indexes after that. For anything where staleness matters, read the node.
+the Superhero API indexes after that. For anything where staleness matters, read the node, and
+check `GET /api/mdw/health` before trusting a recent event to be present in the API.
 
 ## Read more
 
@@ -224,15 +299,16 @@ the Superhero API indexes after that. For anything where staleness matters, read
 
 - **Who operates `mdw.wordcraft.fun`, and what are its uptime and rate-limit guarantees?** The
   layout makes it unambiguously an æternity node plus middleware, and the CSP makes it the only
-  host a Superhero browser page can reach, but no source in either repository documents its
-  operator, its SLA or its throttling.
-- **Is `mainnet.aeternity.io` deliberately excluded from the CSP, or an oversight?** The testnet
-  host is on the allowlist and the mainnet one is not, while `src/config.ts` points mainnet at
-  `mdw.wordcraft.fun` — so the allowlist is at least consistent with the configuration. Whether a
-  browser fallback to the public host was ever intended is not recorded.
-- **How far behind the chain does each middleware run?** `GET /api/v2/mdw/sync-state` and
-  `GET /api/mdw/health` exist to answer this for Superhero's mirror, and the middleware has its
-  own status endpoint, but no source states an expected lag for any of them.
+  host a Superhero browser page can reach. But it appears in no backend source at all — the API
+  server indexes from `mainnet.aeternity.io` — so no repository documents its operator, its SLA or
+  its throttling. Ask whoever runs the Superhero deployment; there is nothing further to read.
+- **Is `mainnet.aeternity.io` deliberately excluded from the browser CSP?** The testnet host is on
+  the allowlist and the mainnet one is not, while the web app's `src/config.ts` points mainnet at
+  `mdw.wordcraft.fun` — so the allowlist is at least consistent with that configuration, and the
+  backend's use of the public host is server-side and unaffected by CSP. Whether a browser fallback
+  was ever intended is not recorded; the `server/lib/csp.cjs` change history would show it.
 - **Which middleware version is deployed at each host?** The middleware's API has changed across
-  major versions — the web app calls both `/v2/` and `/v3/` paths — and neither repository pins or
-  records a version.
+  major versions — the web app calls `/v2/` and `/v3/` paths and the backend subscribes to a
+  `/mdw/v2/websocket` — and nothing in any repository pins or records a version. The middleware's
+  own `GET /mdw/v3/status` reports its version and its distance from the chain tip; that call
+  answers this and the upstream-lag question together.

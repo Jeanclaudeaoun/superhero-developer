@@ -7,8 +7,9 @@ description: "Provide liquidity, earn the 0.3% swap fee, value your position, an
 
 Providing liquidity means depositing both sides of a pair into a pool and receiving LP tokens
 that represent your share of it. In exchange you earn a cut of the 0.3% fee on every swap
-that routes through your pool. You also take on impermanent loss, which this page works
-through with actual numbers rather than hand-waving.
+that routes through your pool — the whole of it, unless the factory's protocol-fee switch is
+turned on. You also take on impermanent loss, which this page works through with actual numbers
+rather than hand-waving.
 
 Manage positions at `https://superhero.com/defi/pool`.
 
@@ -17,16 +18,30 @@ Manage positions at `https://superhero.com/defi/pool`.
 `/defi/pool` puts the add or remove form on the left and your positions on the right, with
 three summary tiles above them:
 
-| Tile | Source |
-| --- | --- |
-| Positions | Count of pools where you hold LP tokens |
-| Total Value | Sum of each position's USD value |
-| Fees Earned | **Hardcoded to `$0.00` in this build.** It is not computing anything. |
+| Tile | Source | State in this build |
+| --- | --- | --- |
+| Positions | Count of pools where you hold LP tokens | Real |
+| Total Value | Sum of each position's `valueUsd` | **Always `0`** — see below |
+| Fees Earned | Nothing | **Hardcoded to `$0.00`** |
 
-Do not read the Fees Earned tile as "you have earned nothing". Fees are not paid out
-separately in a constant-product AMM — they stay in the pool and inflate the value of every
-LP token. Your accrued fees are already inside the Total Value figure. The tile is simply not
-wired up.
+**Two of the three tiles are not wired up.** Fees Earned is a literal string. Total Value is worse,
+because it looks computed: `Pool.tsx` sums `positions.reduce((sum, pos) => sum + (Number(pos.valueUsd) || 0), 0)`,
+but `valueUsd` is declared optional on `LiquidityPosition`
+(`src/features/dex/types/pool.ts`, `src/atoms/dexAtoms.ts`) and **nothing in the repository ever
+assigns it**. The only code that builds positions is `scanAccountLiquidity` in
+`src/features/dex/hooks/useLiquidityPositions.ts`, which sets `pair`, `token0`, `token1` and
+`balance` and stops there. So every `valueUsd` is `undefined`, every term is `0`, and the tile reads
+`0` no matter how much liquidity you hold. The same field gates the estimated-value line in the
+remove-liquidity form, which therefore never renders either.
+
+There is no price source to name behind `valueUsd` because there is no writer — the question is not
+"which oracle feeds it" but "what would feed it if someone finished the feature". To value a
+position today, take your LP balance over the pair's `total_supply`, multiply by each reserve, and
+price those two amounts yourself; `GET /api/dex/pairs/<address>` gives you all three numbers.
+
+Do not read either tile as "you have earned nothing". Fees are not paid out separately in a
+constant-product AMM — they stay in the pool and inflate the value of every LP token, so your
+accrued fees are already inside your redeemable share. Both tiles are simply blank instruments.
 
 ## Adding liquidity
 
@@ -53,20 +68,58 @@ yourShare = lpMinted / totalSupply × 100
 The `min` is why an off-ratio deposit wastes the larger side: the smaller ratio sets the
 mint, and the surplus buys you nothing.
 
-The client also passes `MINIMUM_LIQUIDITY = 1000` as the `minLiquidity` argument on every
-add. That mirrors the Uniswap-V2-style minimum-liquidity floor the first provider into a
-brand-new pool forfeits permanently, which is what prevents the pool from being drained to a
-zero-supply state. For a pool that already exists it is simply a lower bound on the mint.
+The client also passes `MINIMUM_LIQUIDITY = 1000` as the `min_liquidity` argument on every add.
+That is not a lower bound on your mint — it is the pool's permanently locked floor, and it is
+consumed only when the pair is created. `AedexV2Pair.init` stores it (defaulting to 1000 if the
+argument is `None`), and on the very first `mint` the pair does:
+
+```sophia
+if (total_supply == 0)
+    mint_update(None, min_liq)                  // locked_liquidity, owned by nobody
+    Math.sqrt(amount0 * amount1) - min_liq      // what the first provider actually gets
+else
+    Math.min((amount0*total_supply) / reserve0, (amount1*total_supply) / reserve1)
+```
+
+`mint_update(None, ...)` credits `state.locked_liquidity` rather than any address and emits a
+`LockLiquidity` event, so those 1000 units can never be burned. That is what stops the pool being
+drained to a zero-supply state where the price of an LP token would be undefined. The first
+provider into a brand-new pool pays for it; everyone after them is unaffected, because the `else`
+branch never touches `min_liquidity`. Read the current value back with `minimum_liquidity()`.
+
+**Adding liquidity can create the pool.** The router's `ensure_pair_existence` calls
+`factory.create_pair` when `get_pair` returns `None`, so an add against a pair that does not exist
+yet deploys it (via `Chain.clone` of the factory's pair model) in the same transaction. There is no
+separate "create pool" step and no permission check — anyone can create any pair of distinct
+AEX-9 tokens.
 
 Minimum amounts are your desired amounts minus your slippage tolerance, clamped to at least
-one aetto. The deadline is `Date.now()` plus your configured minutes, in milliseconds.
+one aetto. The deadline is `Date.now()` plus your configured minutes, in milliseconds —
+`require(deadline >= Chain.timestamp, "AedexV2Router: EXPIRED")`, and Sophia's `Chain.timestamp`
+is unix time in milliseconds.
 
 ### Router entrypoints
 
+Names and argument orders are from `dex-contracts-v2/contracts/router/AedexV2Router.aes`, and
+match `deployment/aci/AedexV2Router.aci.json`, the ACI the web app initialises the router with.
+
 | Pair type | Entrypoint |
 | --- | --- |
-| Token + token | `add_liquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin, to, minLiquidity, deadline)` |
-| Token + native AE | `add_liquidity_ae(token, amountTokenDesired, amountTokenMin, amountAeMin, to, minLiquidity, deadline)` with the AE attached as call value |
+| Token + token | `add_liquidity(token_a, token_b, amount_a_desired, amount_b_desired, amount_a_min, amount_b_min, to, min_liquidity, deadline)` |
+| Token + native AE | `add_liquidity_ae(token, amount_token_desired, amount_token_min, amount_ae_min, to, min_liquidity, deadline)` with the AE attached as call value |
+
+`min_liquidity` is an `option(int)` and only has an effect when the pair is being created.
+
+`add_liquidity_ae` is `payable` and takes your AE as the call value, which stands in for the
+missing `amount_ae_desired` argument — the attached amount is the upper bound. It wraps what it
+needs with `wae.deposit_to(pair, value = amount_ae)` and refunds the rest to you with
+`Chain.spend` in the same transaction, so over-attaching AE is safe.
+
+Both forms move your tokens with `transfer_allowance(Call.caller, pair, amount)`, which is why
+each AEX-9 side needs a router allowance first. Neither contract enforces the 1% ratio check
+described above — that is the client protecting you. On chain, the router computes the optimal
+counter-amount itself with `quote` and aborts with `AedexV2Router: INSUFFICIENT_A_AMOUNT` or
+`INSUFFICIENT_B_AMOUNT` if it falls below your minimums.
 
 ## Valuing a position
 
@@ -85,6 +138,114 @@ tolerance to derive the minimum amounts it will accept.
 Because reserves grow as fees accumulate while total supply does not, the same LP balance
 redeems for more tokens over time. That growth *is* your fee income.
 
+Note that `total_supply` includes the permanently locked `min_liquidity`, so a pool's LP tokens
+never all belong to somebody. On a pool of any real size the 1000 locked units are a rounding
+error; on a brand-new one they are not.
+
+## Where the 0.3% goes
+
+By default, all of it stays in the pool. There is no protocol cut and no Superhero cut, and
+nothing is paid out as a separate stream: the 3 units in 1000 the pair withholds from each swap
+simply never leave the reserves, so `reserve0 × reserve1` grows on every trade while
+`total_supply` does not, and every LP token redeems for more. See
+[the swap fee](/defi/swap#fees) for where the 0.3% is enforced.
+
+The contracts do carry a protocol-fee switch, of exactly the kind Uniswap V2 has. It is off by
+default.
+
+- **The factory owns the switch.** `AedexV2Factory` holds `fee_to: option(address)` and
+  `fee_to_setter: address`. `init` sets `fee_to = None`. Only the current `fee_to_setter` may call
+  `set_fee_to` or hand the role on with `set_fee_to_setter`; anyone else gets
+  `AedexV2Factory: FORBIDDEN`. There is no vote and no timelock.
+- **Each pair asks the factory, on liquidity events only.** `AedexV2Pair.mint_fee` runs at the top
+  of `mint` and `burn` — never during a swap — and reads `state.factory.fee_to()`.
+
+When that returns `Some(fee_to)`, the pair mints new LP tokens to it
+(`dex-contracts-v2/contracts/AedexV2Pair.aes`):
+
+```sophia
+// If fee is on, mint liquidity equivalent to 1/6th of the growth in sqrt(k)
+let root_k      = Math.sqrt(reserve0 * reserve1)
+let root_k_last = Math.sqrt(k_last)
+if (root_k > root_k_last)
+    let numerator   = state.total_supply * (root_k - root_k_last)
+    let denominator = root_k*5 + root_k_last
+    let liquidity   = numerator / denominator
+    if (liquidity > 0) mint_update(Some(fee_to), liquidity)
+```
+
+The `root_k*5 + root_k_last` denominator is the standard one-sixth split. So when the switch is
+on, the 0.3% divides as **0.25% to liquidity providers and 0.05% to the fee collector**; when it
+is off, providers keep the whole 0.3%.
+
+Two consequences are easy to get wrong:
+
+- **A protocol fee is never deducted from a trade.** It is minted as fresh LP tokens at the next
+  `mint` or `burn`, diluting existing providers by what the fee-free growth would have given them.
+  A swapper pays 0.3% either way and cannot tell which regime is in force.
+- **Switching it on is not retroactive.** `k_last` is the anchor, and it is `0` while the fee is
+  off. The first `mint` or `burn` after the switch flips finds `k_last == 0`, mints nothing, and
+  only then records the current product — so accrued fees up to that point stay with the providers
+  who earned them. Every liquidity event after that captures the growth since the previous one.
+
+**`k_last` is a fee bookmark, not a live invariant.** It holds `reserve0 * reserve1` as of
+immediately after the most recent liquidity event, it is written only while the fee is on, and
+`mint_fee` zeroes it the first time it runs with the fee off. So while the switch is off,
+`k_last()` reads `0` on every pair that has seen a liquidity event — which also makes it a cheap
+way to check the regime from the outside. Do not mistake it for a current value of `k`; for that,
+multiply the two reserves yourself.
+
+## What the pair contract stores
+
+A pair is an AEX-9 token contract (the LP token) with reserves bolted on. Everything worth
+reading is a plain entrypoint:
+
+| Getter | Returns |
+| --- | --- |
+| `get_reserves()` | A record of `reserve0`, `reserve1` and `block_timestamp_last` |
+| `total_supply()` | LP tokens outstanding, including the locked `min_liquidity` |
+| `minimum_liquidity()` | The pair's locked floor — 1000 unless overridden at creation |
+| `k_last()` | The fee bookmark above; `0` while the protocol fee is off |
+| `price0_cumulative_last()`, `price1_cumulative_last()` | TWAP accumulators |
+| `token0()`, `token1()` | The two token contracts, sorted by contract address |
+| `factory()` | The factory that created this pair |
+| `meta_info()` | The LP token's own `name`, `symbol` and `decimals` |
+| `aex9_extensions()` | `["allowances"]` — LP tokens are not mintable or burnable from outside |
+
+The LP token's metadata is composed from the two underlying tokens: `name` is
+`"<A name> vs <B name>"`, `symbol` is `"<A symbol>/<B symbol>"`, and `decimals` is a literal
+**18** regardless of what the two sides use.
+
+**Reserves are a cache, not the balances.** `reserve0` and `reserve1` are a snapshot the pair
+rewrites at the end of every `mint`, `burn`, `swap` and `sync`. The authoritative numbers are the
+pair's actual AEX-9 balances, and the two diverge whenever tokens arrive at the pair address
+without an entrypoint call — `swap` depends on exactly that gap to work out what you paid in. Two
+permissionless entrypoints reconcile them:
+
+- `sync()` raises reserves to match balances, so a stray transfer becomes everyone's.
+- `skim(to)` lowers balances to match reserves, paying the excess to `to`.
+
+Anyone may call either, and `skim`'s caller chooses the recipient. So tokens sent to a pair
+address outside a proper `add_liquidity` are not safely "donated to the pool" — until somebody
+calls `sync`, the first caller of `skim` can take them.
+
+Because of this, `burn` divides by *balances* rather than reserves —
+`amount0 = liquidity * balance0 / total_supply`. Under normal conditions the two are equal and the
+formula above is exact.
+
+**The price accumulators are oracle inputs.** On the first state change in each new block
+timestamp, `update` adds the reserve ratio in UQ112x112 fixed point, multiplied by the elapsed
+milliseconds. Sample two heights and divide the difference by the time between them for a
+manipulation-resistant average price. Nothing in Superhero reads them — the app and the backend
+both price from the instantaneous ratio — but they are there if you need a TWAP.
+
+**Nobody owns a pair.** `owner()` returns `Contract.address`, with the source comment "we don't
+have an owner to make veto decisions over the pair contract". There is no admin key, no pause and
+no upgrade path on a pair. `fee_to_setter` on the factory is the only privileged role anywhere in
+the AMM, and its entire power is `set_fee_to` and `set_fee_to_setter` — turn the one-sixth
+protocol fee on or off, point it somewhere, or hand the role to another account. It cannot touch a
+pair, a reserve or your position.
+
 ## Removing liquidity
 
 1. Press **Remove** on a position card. The form opens on the left.
@@ -96,8 +257,20 @@ redeems for more tokens over time. That growth *is* your fee income.
 
 | Pair type | Entrypoint |
 | --- | --- |
-| Token + token | `remove_liquidity(tokenA, tokenB, liquidity, amountAMin, amountBMin, to, deadline)` |
-| Token + native AE | `remove_liquidity_ae(token, liquidity, amountTokenMin, amountAeMin, to, deadline)` |
+| Token + token | `remove_liquidity(token_a, token_b, liquidity, amount_a_min, amount_b_min, to, deadline)` |
+| Token + native AE | `remove_liquidity_ae(token, liquidity, amount_token_min, amount_ae_min, to, deadline)` |
+
+The allowance goes on the **pair contract**, not on the two underlying tokens, because the router
+does `pair.transfer_allowance(Call.caller, pair.address, liquidity)` — it moves your LP tokens to
+the pair itself, and the pair then burns whatever it finds in its own balance. That is why a
+removal needs one approval on an address you may never have interacted with directly.
+
+`remove_liquidity_ae` is `remove_liquidity` with the router as the recipient, followed by
+`token.transfer(to, ...)`, `wae.withdraw(amount_ae)` and `Chain.spend(to, amount_ae)`. The AE
+reaches you as native AE in the same transaction.
+
+Both forms abort with `AedexV2Router: INSUFFICIENT_A_AMOUNT` or `INSUFFICIENT_B_AMOUNT` if the
+burn returns less than your minimums, and with `AedexV2Router: EXPIRED` past the deadline.
 
 Slippage above 100% or below 0 is rejected client-side on both add and remove.
 
@@ -174,10 +347,11 @@ Three properties worth remembering:
 
 ### Fees are the other side of the trade
 
-Impermanent loss is the cost of providing liquidity; the 0.3% swap fee is the revenue. A pool
-with heavy volume and a stable price ratio is profitable. A pool with thin volume and a
-volatile ratio is not. Before committing, look at the pair's volume against its price
-movement on [the pool explorer](/defi/explore).
+Impermanent loss is the cost of providing liquidity; the swap fee is the revenue — the full 0.3%
+while the protocol-fee switch is off, 0.25% if it is ever turned on. A pool with heavy volume and
+a stable price ratio is profitable. A pool with thin volume and a volatile ratio is not. Before
+committing, look at the pair's volume against its price movement on
+[the pool explorer](/defi/explore).
 
 ## Risks beyond impermanent loss
 
@@ -186,24 +360,32 @@ movement on [the pool explorer](/defi/explore).
   large swap.
 - **Both assets are exposed.** You hold two tokens, not one. A community token that goes to
   zero takes your pool share with it, however well the other side performed.
-- **LP tokens are just AEX-9 tokens.** Losing them, or granting an allowance to the wrong
-  contract, loses the position.
+- **LP tokens are just AEX-9 tokens.** The pair implements the standard with the `allowances`
+  extension, so an LP balance transfers like any other token. Losing them, or granting an
+  allowance to the wrong contract, loses the position.
 - **DEX prices are not bonding-curve prices.** A token's DEX pool can quote something very
   different from its curve price, and nothing arbitrages the two automatically. See
   [the comparison on the DeFi overview](/defi).
-- **Smart contract risk is real.** The contracts were audited by QuviQ in April 2022, which
-  reduces but does not eliminate it.
+- **Smart contract risk is real.** QuviQ audited the contracts in April 2022 and the report is
+  committed to the repository as `Dex2_Audit_20220419.pdf`; the README states it left no further
+  recommendations outstanding. That reduces the risk. It does not eliminate it, and an audit of
+  the pair and router says nothing about the AEX-9 tokens you choose to pool.
 
 ## Open questions
 
-- **Is the Fees Earned tile planned, or abandoned?** It is a literal `$0.00` in the current
-  build with no computation behind it.
-- **Where does a per-position USD value come from?** The positions hook exposes `valueUsd`
-  per position, but which price source backs it — the DEX indexer, an oracle, or a
-  derived route price — is not visible in the client.
-- **Is the 0.3% fee split further?** æternity's documentation says the exchange has no
-  platform fee beyond the liquidity-provider reward. Whether the pair contract carries a
-  protocol-fee switch of the kind Uniswap V2 has is a question for the pair contract.
+- **Are the Fees Earned and Total Value tiles planned, or abandoned?** Both are unimplemented
+  rather than broken: one is a literal string, and the other reads an optional field no code
+  writes. The backend could supply what they need — `GET /api/dex/pairs/<address>` returns reserves
+  and total supply, and `AePricingService` already converts AE to fiat — so this is a front-end
+  gap. Only a maintainer can say whether it is on the roadmap.
+- **Is the factory's protocol fee currently switched on, and who holds `fee_to_setter`?** The
+  mechanism is fully settled above; the live state is not. `AedexV2Factory.init` sets
+  `fee_to = None` and the contracts' README describes it as initially disabled, but nothing in
+  either repository records whether it was ever enabled or which account was passed as the initial
+  `fee_to_setter` at deployment. Two read-only dry-run calls against the mainnet factory
+  `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` settle both — `fee_to()` and
+  `fee_to_setter()` — and neither could be made from this environment, where outbound HTTP is
+  blocked. Until then, assume providers keep the full 0.3% but verify before relying on it.
 
 ## Read more
 

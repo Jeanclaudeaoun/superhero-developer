@@ -147,8 +147,53 @@ on top of one. Practical consequences:
 - **Native access to chain features.** AENS names and oracles are reachable from contract code
   as protocol primitives, not through a precompile.
 
-Superhero's ProfileRegistry targets Sophia compiler version 6 or later and Tipping version 5 or
-later, per the whitepaper.
+## Compiler versions, and where the sources live
+
+The `@compiler` pragma at the top of each `.aes` file is a **minimum**, not the version a contract
+was built with. Both matter, and they are recorded in different places.
+
+| Contract suite | Source repository | Pragma |
+| --- | --- | --- |
+| BCL: factory, sale, curve, DAO, DAO vote, community management, affiliation treasury, and the three interfaces | [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) | `@compiler >= 7` on all ten files |
+| Tipping v3 | [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) | `>= 5` on `Tipping_v3.aes`, `>= 6` on `Tipping_v3_Getter.aes` |
+| Governance | [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) | `>= 5` on `Poll_Iris.aes`, `>= 6` on `Registry_Compiler_v6.aes` |
+
+For the actual build version there is a better record than a pragma, and three of these four
+suites ship one. Each keeps a `generated/` (or, for BCL, `aci/`) directory with a pair of
+provenance files:
+
+| File | Contents |
+| --- | --- |
+| `source_hashes.json` | A blake2b digest per `.aes` file — how you tell whether an ACI matches a given source tree |
+| `bytecode_hashes.json` | Keyed by compiler version, with the bytecode hash each version produces for each contract |
+
+Read the keys of `bytecode_hashes.json` and you have the answer:
+
+| Suite | File | Compiler versions recorded |
+| --- | --- | --- |
+| BCL | `superhero-api/src/plugins/bcl/contract/aci/bytecode_hashes.json` | One key: **8.0.0**, with the full `cb_…` bytecode for each of the seven deployed contracts |
+| Tipping | `tipping-contract/generated/bytecode_hashes.json` | One key: **7.4.1**, covering v1 through v4 including `Tipping_v3.aes` and `Tipping_v3_Getter.aes` |
+| Governance | `aepp-governance/governance-contracts/generated/bytecode_hashes.json` | **27 keys**, from 2.0.0 to 8.0.0 — a lookup table, not an assertion |
+
+So the deployed BCL contracts were built with **Sophia 8.0.0** and the tipping contracts with
+**7.4.1**, both comfortably above their pragmas.
+
+The governance file is a different kind of artefact and worth understanding, because it is the more
+useful pattern. `generate_hashes.js` enumerates every published `aeternity/aesophia_http` Docker
+tag, starts one compiler container per version, compiles all four contracts against each, and
+records the resulting bytecode hash. The result is a reverse index: take a deployed contract's
+bytecode, hash it, and look up which compiler produced it. It also bounds things by itself — the
+table has no hash for `Poll.aes` above 4.3.0 or for `Registry_Compiler_v6.aes` below 6.0.0, so a
+deployed `Registry_Compiler_v6` is necessarily Sophia 6.0.0 or later.
+
+Where no artefact exists, the repository's own build environment is the next-best signal: both
+`tipping-contract/docker-compose.yml` and `aepp-governance/governance-contracts/docker-compose.yml`
+default to `aeternity/aesophia_http:v7.6.1`, which is what a `make test` in either repository
+compiles with today. That is what the maintainers build against now, not necessarily what built
+the mainnet deployment years ago.
+
+The whitepaper's "compiler version ≥ 6" for ProfileRegistry and "≥ 5" for Tipping are pragmas
+quoted as versions — read them as floors.
 
 ## Read more
 
@@ -160,13 +205,21 @@ later, per the whitepaper.
 - [FATE VM](https://docs.aeternity.com/aeternity-core-concepts/protocol/fast-aeternity-transaction-engine-fate-vm) — the official description of the VM.
 - [ACI encoder documentation](https://github.com/aeternity/aesophia/blob/master/docs/aeso_aci.md) — the JSON contract-interface format.
 - [aesophia_cli](https://github.com/aeternity/aesophia_cli) — generating ACI from source locally.
+- [bcl-contracts](https://github.com/superhero-com/bcl-contracts) — the Sophia sources for the token sale, curve, DAO and treasury.
 
 ## Open questions
 
-- The exact Sophia compiler version each deployed Superhero contract was built with is not
-  recorded in either repository beyond the whitepaper's "compiler version ≥ 6" for
-  ProfileRegistry and "≥ 5" for Tipping. Recovering it would mean checking the deployed
-  bytecode's VM and ABI version fields on chain.
-- No Sophia source (`.aes`) is vendored in these repositories — only compiled ACI. Where the
-  canonical sources live, and whether the vendored ACI files are regenerated from them
-  automatically, is not documented.
+- **Which compiler built the deployed governance contracts?** Their repository publishes the
+  reverse index that answers this — a bytecode hash per contract for all 27 compiler versions — but
+  not the answer itself. Fetch the deployed `Poll_Iris` and `Registry_Compiler_v6` bytecode from
+  the node, hash it, and look the hash up in
+  `aepp-governance/governance-contracts/generated/bytecode_hashes.json`. That is one node call per
+  contract and could not be made from this environment, where outbound HTTP is blocked. BCL
+  (8.0.0) and Tipping (7.4.1) are settled from their own single-key files.
+- **Which compiler built ProfileRegistry?** Nothing settles this, and the trail has gone cold:
+  there is no ProfileRegistry source repository in this environment, and the current backend no
+  longer even carries its ACI — the only references left are two comments describing its indexer in
+  the past tense (`superhero-api/src/profile/services/profile-read.service.ts` and
+  `src/plugins/address-links/address-links-plugin-sync.service.ts`), which have been superseded by
+  the AddressLink plugin. Answering it needs both a source tree and the deployed bytecode.
+  Superhero would have to point at the repository.

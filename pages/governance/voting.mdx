@@ -39,8 +39,22 @@ node scripts/superhero-governance.mjs vote ct_abc123... 0
 
 The script re-reads the poll before submitting. It refuses an option index the poll does not
 define — printing the valid options rather than guessing — and refuses to vote on a poll that
-is already closed. It then prints the option label it voted for, so you can confirm you hit
-the option you meant:
+is already closed. Both refusals are courtesies rather than the real protection: the contract
+enforces the same two rules itself, and a call that gets past the client aborts on chain.
+
+```sophia
+stateful entrypoint vote(option : int) =
+  require(!is_closed(), "POLL_ALREADY_CLOSED")
+  require(Map.member(option, state.vote_options), "VOTE_OPTION_NOT_KNOWN")
+  put(state{ votes[Call.caller] = option})
+  Chain.event(Vote(Contract.address, Call.caller, option))
+```
+
+`is_closed()` is `Chain.block_height >= close_height` for a poll that has one, and `false` for a
+poll with `close_height = None` — which is how an open-ended poll stays votable forever.
+
+The script then prints the option label it voted for, so you can confirm you hit the option you
+meant:
 
 ```json
 {
@@ -57,7 +71,11 @@ the option you meant:
 
 **Voting again replaces your previous vote.** One address has one vote per poll; calling
 `vote` with a different option updates your choice rather than adding a second vote. You do
-not need to revoke first.
+not need to revoke first. The contract stores votes as `map(address, int)` and simply writes
+`votes[Call.caller] = option`, so the last call wins.
+
+This is the opposite of a [community DAO vote](/dao/voting), where a second `vote` is rejected with
+`VOTER_ALREADY_VOTED` and you must revoke before changing anything. Do not carry the habit across.
 
 ```bash
 node scripts/superhero-governance.mjs revoke <poll_address>
@@ -75,7 +93,27 @@ consequences worth knowing:
 You can vote again after revoking, as long as the poll is still open.
 
 The script checks that you have actually voted before submitting a revocation, so a revoke on
-a poll you never voted in fails locally rather than costing a transaction.
+a poll you never voted in fails locally rather than costing a transaction. The contract does not
+check: `revoke_vote` is an unconditional `Map.delete` and succeeds whether or not you had voted.
+
+### Revoking still works after a poll closes
+
+`revoke_vote` carries **no** closed check — unlike `vote`, which has one:
+
+```sophia
+stateful entrypoint revoke_vote() =
+  put(state{ votes = Map.delete(Call.caller, state.votes) })
+  Chain.event(RevokeVote(Contract.address, Call.caller))
+```
+
+That matters more than it looks, because of how the result is computed. The reference tally reads
+the poll's **current** `votes` map while reading balances **at the close height**. So a closed
+poll's result is not frozen: anyone who voted can still remove their stake from it afterwards, and
+the figure the governance API reports will change. Nobody can add to a closed poll — `vote` is
+blocked — so the result can only shrink.
+
+Two practical notes. If you are citing a closed poll's numbers, cite them with the date you read
+them. And if you want your weight out of a decision after the fact, you can still take it out.
 
 ## Nothing is locked
 
@@ -87,16 +125,40 @@ This is the sharpest difference from a community DAO vote, and it is worth stati
 | Tokens transferred to the contract | No | Yes |
 | Balance immobilised while voting | No | Yes, until you revoke or withdraw |
 | What is counted | Your AE balance at the poll's close height | The token amount you locked |
+| Changing your mind | Call `vote` again | Rejected — `revoke_vote` first |
+| Revoking after the close | Allowed, and it changes the result | Rejected — `VOTE_ALREADY_CLOSED` |
 | Withdrawal step after closing | None | Required |
+| Minimum to participate | None | The amount you stake, plus an allowance |
 
 The `Poll` contract has no token field, no allowance surface and no withdrawal entrypoint. It
 records which option your address chose; the weight behind that is computed off-chain from
 your AE balance and your delegations at the close height. Your AE stays liquid and spendable
 the whole time.
 
-The flip side: **your weight is not fixed when you vote.** It is measured at the close height.
-Spending AE after voting reduces the weight behind your choice; receiving AE increases it. If
-a poll matters to you, what matters is your balance when it closes, not when you voted.
+The flip side: **your weight is not fixed when you vote.** Spending AE after voting reduces the
+weight behind your choice; receiving AE increases it. If a poll matters to you, what matters is your
+balance when it closes, not when you voted.
+
+And the snapshot only exists once the poll has actually closed. The backend's
+`getClosingHeightOrUndefined` returns a height only when the poll has a `close_height` **and** that
+height has already passed; otherwise it returns nothing and the tally reads live balances and live
+delegations. So:
+
+| Poll state | Weighting is read at |
+| --- | --- |
+| Open, with a future close height | The current height — the figures move as balances move |
+| Closed | The close height — fixed, apart from revocations |
+| Open-ended (`close_height = None`) | The current height, forever. There is never a snapshot |
+
+An open poll's percentages are therefore a live reading, not a provisional result, and two people
+loading the same open poll an hour apart can legitimately see different numbers.
+
+**There is no minimum balance to vote.** The contract requires none, and an account with nothing in
+it can cast a vote that records normally, emits a `Vote` event and appears in `votes()`. It simply
+contributes zero stake: the tally looks up each voter's balance at the close height, and an account
+that did not exist at that height is scored `0`. Such a vote does move one number — it is counted in
+the backend's `voteCount`, which is the address count the app shows as "Total Votes". That is one
+more reason the address count is not the result. See [Polls](/governance/polls).
 
 Nothing about a governance poll executes on-chain either. A poll produces a stake-weighted
 result. Acting on it is a separate, off-chain, social process. See
@@ -127,16 +189,6 @@ The app posts a `contractEvent` notification to the governance backend immediate
 vote and revocation so the backend re-indexes rather than waiting to discover the transaction.
 If you vote through your own client and skip that call, expect your vote to take longer to
 appear in stake-weighted results. The vote itself is on-chain and counted regardless.
-
-## Open questions
-
-- Whether the `Poll` contract itself rejects a `vote` call after `close_height`, or whether the
-  closed check exists only in the clients, is not determinable from the ACI. The CLI and the
-  app both refuse client-side. A vote that landed after the close height would not be counted
-  anyway, because weighting is snapshotted at that height.
-- Whether an account with a zero AE balance can vote is not stated. Nothing in the contract
-  requires a balance, so the vote would presumably record and contribute zero weight, but that
-  is an inference.
 
 ## Read more
 

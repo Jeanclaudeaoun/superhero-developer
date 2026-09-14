@@ -26,15 +26,20 @@ shared by everything below and are not repeated per endpoint.
 
 Both hosts serve identical paths. Every path in this reference begins with `/api/`.
 
-## The three things to know before you start
+## The four things to know before you start
 
-1. **`limit` is capped at 100** on list endpoints. Page rather than asking for more.
-2. **Units are mixed within the same object.** `price` is in AE; `market_cap`, `dao_balance` and
-   `total_supply` are in base units and need dividing by 1e18. [Conventions](/api-reference/conventions)
-   has the full table and the evidence.
+1. **`limit` is capped at 100** on list endpoints — a 400 on most of them, a silent clamp on the
+   DEX paths. Page rather than asking for more.
+2. **Units are mixed within the same object, and the same field name means different scales on
+   different endpoints.** `TokenDto.market_cap` is in aettos; the `market_cap` on a transaction
+   or an OHLC candle is in AE. [Conventions](/api-reference/conventions#units) has the full table
+   and the rule that predicts it.
 3. **Date parameters are spelled three different ways** depending on the endpoint —
    `start_date`, `startDate` and `from_date`. Getting it wrong returns unfiltered data rather
-   than an error.
+   than an error, because loose query parameters are not whitelisted.
+4. **Most reads are unthrottled, but a handful of routes allow only 10 requests per minute per
+   IP.** Which ones, and what the 429 looks like, is in
+   [Conventions](/api-reference/conventions#rate-limits).
 
 ## In this section
 
@@ -51,14 +56,18 @@ Both hosts serve identical paths. Every path in this reference begins with `/api
 | [Factory & Contracts](/api-reference/factory-and-contracts) | Discovering the live factory, its collections and their naming rules |
 | [Invitations & Affiliations](/api-reference/invitations-and-affiliations) | Invite claim status and referral analytics |
 | [DEX](/api-reference/dex) | AMM tokens, pairs, routes and swap transactions |
-| [WebSocket](/api-reference/websocket) | The four Socket.IO channels that push live token data |
+| [WebSocket](/api-reference/websocket) | The two Socket.IO events that push live token data, and the authenticated notification namespace |
 | [Node & Middleware](/api-reference/node-and-middleware) | Direct chain access when the REST API is not enough |
 
 ## Full endpoint index
 
-Every path in the OpenAPI-generated client, grouped by resource. Paths marked **unused** are
-defined in the client but have no caller in the web app or the agent skill — they exist, but their
-response shapes are unexercised by any code in these repositories.
+Every path in the OpenAPI-generated client, grouped by resource. Paths marked **unused** have no
+caller in the web app or the agent skill.
+
+That marking means "no client in these repositories exercises it", not "unverified" and certainly
+not "unstable". Every one of them is a real route with a real controller in `superhero-api`, and
+the endpoint pages in this section now describe their responses from that controller rather than
+from a caller. Treat the marking as a hint about how well-trodden a path is, not as a warning.
 
 ### Tokens
 
@@ -302,22 +311,42 @@ GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD  /api/bull-board/{path}
 
 The job-queue dashboard. Not part of the public surface.
 
+## Is there an OpenAPI document?
+
+Yes — the API server generates one, but it is **not mounted in production by default**.
+
+`superhero-api/src/main.ts` builds a `DocumentBuilder` document titled *"WORD CRAFT Scan"*,
+version `1.0`, and serves it only when `NODE_ENV !== 'production'` or the operator sets
+`ENABLE_SWAGGER=true`:
+
+```text
+GET /api        Swagger UI
+GET /api-json   the OpenAPI 3 JSON document
+```
+
+Where it is mounted, `/api-json` is the authoritative machine-readable description of the whole
+surface and is what `openapi-typescript-codegen` consumed to produce the web app's client. Where
+it is not, both paths 404 — deliberately, so the endpoint surface and parameter schemas are not
+free reconnaissance on a public deployment. The same reasoning disables GraphQL introspection and
+GraphiQL in production.
+
+If you need a generated client for `api.superhero.com` and `/api-json` is closed there, ask the
+operators to enable it or generate against a non-production deployment.
+
 ## Where this comes from
 
-Everything in this section is transcribed from the Superhero web app rather than from a published
-specification:
+This section is written from four sources, in decreasing order of authority:
 
 | Source | What it gives |
 | --- | --- |
-| `src/api/generated/` | The OpenAPI-generated client — services for paths and parameters, models for response DTOs. The most precise description of request and response shapes that exists |
+| `superhero-api/src/` | **The API server itself.** Controllers give routes, parameters and validation; entities give the columns actually returned; services give the formulas. Where a DTO and an entity disagree, the entity is what you receive |
+| `src/api/generated/` | The web app's OpenAPI-generated client. Precise where it is current, but it lags the server in places — those are called out on the pages |
 | `src/api/backend.ts` | The hand-written client — request bodies for the write endpoints, and the error-handling behaviour |
-| `src/config.ts` | Base URLs, WebSocket URLs and contract addresses for both networks |
-| `docs/api-superhero-com-endpoints-and-fields.md` | An inventory of which fields the app actually consumes |
-| `superhero-agent-skill/scripts/*.mjs` | Real query construction and response parsing from outside the browser |
+| `src/config.ts` and `superhero-agent-skill/scripts/*.mjs` | Base URLs, contract addresses, and real query construction from outside the browser |
 
-Where a DTO exists, it is quoted. Where a response is typed `any` with no caller, that is said
-plainly and the question is listed under `Open questions` on the page. There is no published
-OpenAPI document or Swagger UI for `api.superhero.com` that either repository points to.
+The server is quoted in preference to the client throughout, with the file named so you can
+re-check. Where the server is genuinely silent, the question is listed under `Open questions` on
+the page rather than guessed.
 
 ## Read more
 
@@ -331,9 +360,11 @@ OpenAPI document or Swagger UI for `api.superhero.com` that either repository po
 
 ## Open questions
 
-- **Is there a published OpenAPI document?** The client in the web app is generated by
-  `openapi-typescript-codegen`, so a spec exists somewhere in the backend's build, but neither
-  repository records its URL. A live `/api/docs` or `/api-json` route is worth trying.
-- **Are the endpoints marked unused stable?** They are defined and typed, but nothing in these
-  repositories exercises them, so neither their response shapes nor their continued existence can
-  be confirmed from source.
+- **Is Swagger enabled on `api.superhero.com` itself?** The code says it is mounted at `/api` and
+  `/api-json` outside production, or in production when `ENABLE_SWAGGER=true`. Which of those the
+  live mainnet deployment is running is an operator setting, not a source fact. A request to
+  `https://api.superhero.com/api-json` settles it in one call.
+- **Is there a published support or deprecation window?** Retired parameters are annotated and
+  silently stop having an effect (see
+  [Conventions](/api-reference/conventions#versioning-and-deprecation)), but no notice period,
+  changelog location or removal schedule is recorded anywhere in the source.

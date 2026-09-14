@@ -21,8 +21,8 @@ described under [Reading addresses at runtime](#reading-addresses-at-runtime).
 | CommunityFactory | `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` | `superhero-agent-skill/scripts/superhero-token-create.mjs`; `bcl-contracts/README.md`; `superhero-api/src/configs/contracts.ts` |
 | AffiliationTreasury | `ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ` | `superhero-api/src/configs/contracts.ts` (`affiliation_address`); `superhero/src/utils/constants.ts` (`INVITATIONS_CONTRACT`) |
 | ProtocolDAO token (AEX-9) | `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` | `superhero-api/src/configs/contracts.ts` (`bctsl_aex9_address`) |
-| Tipping v3 | `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` | `superhero/src/config.ts` (`CONTRACT_V3_ADDRESS`) |
-| Governance registry | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` | `superhero/src/config.ts` (`GOVERNANCE_CONTRACT_ADDRESS`) |
+| Tipping v3 | `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` | `superhero/src/config.ts` (`CONTRACT_V3_ADDRESS`); `superhero-api/src/social/config/post-contracts.config.ts` |
+| Governance registry | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` | `superhero/src/config.ts` (`GOVERNANCE_CONTRACT_ADDRESS`); `superhero-api/src/plugins/governance/config/governance.config.ts` |
 | DEX factory | `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` | `superhero/src/config.ts` (`DEX_FACTORY`) |
 | DEX router | `ct_azbNZ1XrPjXfqBqbAh1ffLNTQ1sbnuUDFvJrXjYz7JQA1saQ3` | `superhero/src/config.ts` (`DEX_ROUTER`) |
 | WAE (wrapped AE) | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` | `superhero/src/config.ts` (`DEX_WAE`) |
@@ -31,6 +31,9 @@ described under [Reading addresses at runtime](#reading-addresses-at-runtime).
 The mainnet factory was deployed at key block height **1089546**, per
 `deployed_at_block_height` in `superhero-api/src/configs/contracts.ts`. That is the height an
 indexer should start from when backfilling factory events.
+
+The governance registry is far older: `superhero-api/src/plugins/governance/config/governance.config.ts`
+gives its backfill `startHeight` as **164578** on mainnet.
 
 ## Testnet (`ae_uat`)
 
@@ -46,7 +49,22 @@ indexer should start from when backfilling factory events.
 | WAE (wrapped AE) | `ct_JDp175ruWd7mQggeHewSLS1PFXt9AzThCDaFedxon8mF8xTRF` | `superhero/src/config.ts` (`DEX_WAE`) |
 | aeETH | `ct_WVqAvLQpvZCgBg4faZLXA1YBj43Fxj91D33Z8K7pFsY8YCofv` | `superhero/src/config.ts` (`DEX_AEETH`) |
 
-The testnet factory was deployed at key block height **1097291**.
+The testnet factory was deployed at key block height **1097291**, and the testnet governance
+registry's backfill `startHeight` is **168710**.
+
+## Addresses that are deliberately not here
+
+Two contracts Superhero uses have no committed address, and no amount of source reading will
+produce one:
+
+| Contract | Why | How to get it |
+| --- | --- | --- |
+| `AddressLink` | Read from the `ADDRESS_LINK_CONTRACT_ADDRESS` environment variable at backend boot, with no default | A running `superhero-api` deployment's environment, or its startup log line `AddressLink contract configured at {address}` |
+| `ProfileRegistry` | Superseded by `AddressLink`; nothing in the current stack reads or writes it | The Superhero contract team. See [ProfileRegistry](/contracts/profile-registry) |
+
+An exhaustive scan of `superhero-api/src` for `ct_` literals turns up nothing beyond the
+addresses tabled above — every other match is a Swagger example in a DTO or a fixture in
+`plugins/bcl/services/transactions.service.spec.ts`. Do not mine those for real addresses.
 
 ## Reading addresses at runtime
 
@@ -132,21 +150,18 @@ addresses without any chain calls.
 
 ## Open questions
 
-- **Where is the ProfileRegistry deployed?** No address for `ProfileRegistry.aes` appears in
-  `superhero/src/config.ts`, anywhere else in the Superhero web app, in the agent skill, or in
-  a public `superhero-com` repository. The Superhero backend's ProfileRegistry indexer was
-  removed when profile linkage moved to an `AddressLink` contract, whose address is supplied
-  by the deployment-time environment variable `ADDRESS_LINK_CONTRACT_ADDRESS` and is not
-  committed. Ask the Superhero backend operators for the deployed ProfileRegistry address, or
-  read `ADDRESS_LINK_CONTRACT_ADDRESS` from a running `superhero-api` deployment.
 - **Are these addresses still current on chain?** Outbound network access was blocked while
   this page was written, so no address here was confirmed against a node or against
   `GET /api/contracts`. Before relying on one, re-read it from `GET /api/factory` for the
   factory-owned addresses, or from `superhero/src/config.ts` on the deployed build for the
   rest.
-- **Is there a testnet DEX/WAE difference?** The DEX addresses come from `src/config.ts` and
-  are marked `disabled: true` on the mainnet network definition in that file. What that flag
-  disables is not documented in the repository.
+- **What is the mainnet `disabled: true` flag for?** It sits on the whole mainnet
+  `NetworkDefinition` in `superhero/src/config.ts`, not on the DEX addresses as previously
+  assumed here, and `src/utils/constants.ts` copies it through to `CURRENT_NETWORK.disabled`.
+  Nothing in the web app then reads it — the only `.disabled` consumers in `src/` are
+  `AppSelect.tsx` for dropdown options and `BuyAe.tsx` for payment methods, both unrelated. So
+  it is inert in the current build and its intent is undocumented. Ask whoever added it, or
+  check whether a deploy-time config consumes it.
 
 ## Read more
 

@@ -83,10 +83,23 @@ Machine-readable entry points, all served from the same origin: `/llms.txt` (als
 | --- | --- |
 | Web app | `https://github.com/superhero-com/superhero` |
 | Bug tracker and feedback | `https://github.com/superhero-com/superhero/issues` |
+| Indexer and API | `https://github.com/superhero-com/superhero-api` |
+| BCL Sophia contracts | `https://github.com/superhero-com/bcl-contracts` |
+| Superhero Wallet | `https://github.com/superhero-com/superhero-wallet` |
 | AI agent skill | `https://github.com/superhero-com/superhero-agent-skill` |
 
 The GitHub organisation is `superhero-com`. A repository under any other owner is a fork or an
-impersonation, not the official source.
+impersonation, not the official source — with two documented exceptions, both under `aeternity`
+rather than Superhero because Superhero deploys contracts it did not author:
+
+| Repository | URL | What it is |
+| --- | --- | --- |
+| Tipping contract | `https://github.com/aeternity/tipping-contract` | `Tipping_v3.aes`, the post registry |
+| Governance contracts | `https://github.com/aeternity/aepp-governance` | `Registry.aes` and `Poll.aes`, behind `/voting` |
+
+The API's own README additionally points at `https://github.com/bctsl/bctsl-contracts` and
+`https://github.com/bctsl/bctsl-sdk` under the `bctsl` organisation — BCTSL is the copyright holder
+named in the contracts' ISC licence headers.
 
 ## Backend services
 
@@ -128,17 +141,28 @@ These are not operated by Superhero, but the app links to them, so seeing one is
 
 ## What is not on this list
 
-**No social media accounts.** No Discord server, Telegram group, X account, Reddit community, forum
-or mailing list for Superhero could be verified from the web app, its locale files, or the agent
-skill. The only X and Telegram references in the codebase are share intents — the buttons that post
-*your* content to *your* accounts — and the OG banner's description of the card used when someone
-shares a link. The FAQ's reference to "official channels listed in the app" could not be resolved to
-a concrete channel in these sources.
+**One X account, and nothing else.** The app's own copy for the X posting reward tells you to
+"mention `@superhero_chain` or link superhero.com", and the backend's reward checker treats exactly
+those two strings as qualifying (`superhero/src/locales/en.json`;
+`superhero-api/src/profile/profile.constants.ts`). So:
+
+| Channel | URL | Evidence |
+| --- | --- | --- |
+| X | `https://x.com/superhero_chain` | Named in the app's own reward copy and in the backend's keyword list |
+
+That is the complete list. **No Discord server, Telegram group, Reddit community, forum or mailing
+list for Superhero appears in any of the six repositories** — the web app and its locale files, the
+backend, the agent skill, the BCL contracts, the governance contracts or the tipping contract. The
+other X and Telegram references in the codebase are share intents — the buttons that post *your*
+content to *your* accounts — and the OG banner's description of the card used when someone shares a
+link. The FAQ's reference to "official channels listed in the app" still cannot be resolved to a
+concrete list.
 
 Treat that as a live risk. An unofficial Discord or Telegram claiming to be Superhero support is the
 standard setup for a key-phishing or fake-airdrop scam, and this page cannot tell you which invites
-are legitimate. Until an official channel is published by Superhero itself, use the GitHub tracker
-and the email address above, and assume anyone who direct-messages you offering help is not support.
+are legitimate. Use the GitHub trackers and the email address above, and assume anyone who
+direct-messages you offering help is not support — including from an account that looks like the one
+above.
 
 **No other domains.** `superhero.io`, `superhero.app`, `superhero.finance`, `superheroswap.com` and
 anything similar are not referenced anywhere in these repositories. A "Superhero" token sale,
@@ -161,13 +185,21 @@ wallet. See [Security Best Practices](/wallets/security).
 
 ## Open questions
 
-- **Does Superhero operate any official social or community channel?** Nothing in these repositories
-  identifies one, yet the FAQ refers to "official channels listed in the app". The app's own footer
-  links only to the GitHub repository and issue tracker. This should be settled from an official
-  announcement before any invite link is added to this page.
-- **Who operates `mdw.wordcraft.fun`?** It is the configured mainnet node and middleware origin in
-  `src/config.ts` but is not an `aeternity.io` or `superhero.com` domain, and neither repository
-  identifies its operator.
-- **Is `testnet.api.dev.tokensale.org` a permanent testnet endpoint?** The hostname suggests a
-  development deployment rather than a stable service, and nothing in these sources states its
-  status.
+Each of these needs a statement from Superhero. No further code reading will settle them.
+
+- **Is there an official community channel beyond the X account above?** The FAQ refers to "official
+  channels listed in the app" in the plural. Six repositories were searched and only
+  `@superhero_chain` is identifiable. If a Discord or Telegram exists, Superhero must publish it —
+  **do not add an invite to this page on the strength of a search result, a social post, or someone
+  saying so.** The whole value of this page is that every URL on it traces to a repository or to
+  official æternity documentation.
+- **Is `testnet.api.dev.tokensale.org` a permanent testnet endpoint?** The hostname still reads as a
+  development deployment, and the backend repository does not name it — neither `.env.example` nor
+  `.env.testnet.example` carries a testnet API hostname, so the value in the web app's
+  `src/config.ts` is the only record of it. Superhero would have to state whether it is supported.
+- **What availability can you expect from `mdw.wordcraft.fun`?** Its operator is now reasonably
+  clear — the backend's deployment guide pulls mainnet database backups from `dev.wordcraft.fun`,
+  and the API's package name (`wordcraft-api`) and Swagger title ("WORD CRAFT Scan") share the
+  brand, so it is almost certainly the same team rather than a third party. What is unpublished is
+  any commitment: no SLA, rate limit, version policy or maintenance window for that host appears
+  anywhere.

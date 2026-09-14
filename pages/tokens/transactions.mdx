@@ -56,29 +56,71 @@ GET /api/transactions/by-hash?tx_hash=th_...
 
 ## Fields
 
-The generated `TransactionDto` — the shape the app's typed client expects — is:
+**The rows are serialised from the backend's `Transaction` entity, not from `TransactionDto`.** The
+list endpoint returns `paginate<Transaction>(...)` directly, so the entity's column names are what
+arrives on the wire. `TransactionDto` is a Swagger annotation used to describe the response shape,
+and it does not match it — where the two disagree, the entity wins.
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Indexer row id |
-| `account` | The trader's address |
-| `tx_hash` | On-chain transaction hash, verifiable in an explorer |
-| `tx_type` | `buy` or `sell` |
-| `spent_amount` | AE spent or received |
-| `spent_amount_data` | The same figure converted into each supported currency |
-| `volume` | Trade volume |
-| `price` | Buy price at the time of the trade |
-| `price_data` | Converted |
-| `sell_price` | Sell price at the time of the trade |
-| `sell_price_data` | Converted |
-| `created_at` | Timestamp |
+The columns, from `superhero-api/src/transactions/entities/transaction.entity.ts`:
 
-The `*_data` objects are `PriceDto` records with `ae`, `usd`, `eur`, `aud`, `brl`, `cad`, `chf`,
-`gbp` and `xau` keys, so you can read a trade in any of them without doing your own conversion.
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `tx_hash` | string | On-chain transaction hash, and the row's primary key |
+| `sale_address` | string | The bonding-curve sale contract the trade hit |
+| `tx_type` | string | `buy`, `sell` or `create_community` — nothing else |
+| `block_height` | number | Key-block height of inclusion |
+| `address` | string | The trader's address |
+| `verified` | bool | Whether the indexer has re-validated the row against the chain |
+| `volume` | numeric string | **Tokens** bought or sold, in whole tokens |
+| `protocol_reward` | numeric string | ProtocolDAO tokens minted to the buyer, in whole tokens. `0` on a sell |
+| `amount` | price object | **AE** paid or received |
+| `unit_price` | price object | `amount / volume` — the average price you actually got |
+| `previous_buy_price` | price object | Unit price before this trade |
+| `buy_price` | price object | Unit price after this trade |
+| `sell_price` | price object | Legacy, marked for removal in the source |
+| `total_supply` | numeric string | Token supply after this trade, in whole tokens |
+| `market_cap` | price object | `buy_price × total_supply` at the time of the trade |
+| `created_at` | timestamp | Block time |
 
-The agent skill's script reads a slightly different set of names when it formats a row —
-`address`, `amount.ae`, `unit_price.ae`, `buy_price.ae`, `sell_price.ae`, `sale_address`,
-`token.name`, `token.symbol` and `block_height`:
+Every "price object" is a `PriceDto` with `ae`, `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp` and
+`xau` keys, so you can read a trade in any of them without doing your own conversion. Read
+`amount.ae`, not `amount`.
+
+### `volume` is a token count
+
+This is the field most often misread. `volume` is the **number of tokens**; `amount` is the AE. The
+indexer decodes them from different events:
+
+| Row field | Decoded from | Units |
+| --- | --- | --- |
+| `volume` on a buy | the community token's `Mint` event amount | whole tokens |
+| `volume` on a sell | the token's `Burn` event amount | whole tokens |
+| `amount` on a buy | `Buy(total_price, …)` on the sale contract | AE |
+| `amount` on a sell | `Sell(return, …)` on the sale contract | AE |
+| `protocol_reward` | the ProtocolDAO token's `Mint` event amount | whole tokens |
+| `total_supply` | the `Buy`/`Sell` event's supply argument, adjusted by `volume` | whole tokens |
+
+Two things follow. First, `amount` on a buy is the **fee-inclusive** total — `Buy`'s first argument
+is `total_price`, which already contains the 0.5% affiliation fee. That is why it is the right basis
+for a PnL cost figure. Second, the event's own `total_supply` is the supply *before* the trade, so
+the indexer adds `volume` on a buy and subtracts it on a sell to store the supply *after*.
+
+### `create_community` rows are buys
+
+A token creation with an initial buy is stored as one row with `tx_type: 'create_community'`, priced
+exactly like a buy. Anything counting purchases must include it — the backend's own PnL queries all
+write `tx_type IN ('buy', 'create_community')`. A creation with no initial buy emits no
+`PriceChange` event and is stored with zeroes.
+
+Note also that the unfiltered feed is scoped to the **current factory**: with no `token_address`, the
+query joins tokens and filters on `token.factory_address`, so tokens from a superseded factory
+deployment do not appear.
+
+### What the CLI reads
+
+The agent skill's script reads `address`, `amount.ae`, `unit_price.ae`, `buy_price.ae`,
+`sell_price.ae`, `sale_address`, `token.name`, `token.symbol` and `block_height` — all of which are
+real entity fields:
 
 ```js
 function formatTx(tx) {
@@ -99,11 +141,10 @@ function formatTx(tx) {
 }
 ```
 
-The two do not line up field for field: `account` versus `address`, `spent_amount` versus
-`amount.ae`. The script reads every field with optional chaining, so a name that is absent comes back
-as `undefined` rather than throwing — which means a missing column in the output is a naming mismatch,
-not an empty trade. **Inspect one raw response before you build on either list**, and treat the wire
-format as authoritative over both.
+So the CLI is reading the real shape and the Swagger DTO is not: there is no `account`, `id`,
+`spent_amount` or `price` column on a transaction row. Ignore those four. `token.*` is present only
+when the request carries `includes=token` or an `account_address` filter — otherwise the join is
+made but not selected, and the token fields come back `undefined`.
 
 The agent skill's own reference table uses a third set of names again (`type`, `ae_amount`,
 `amount`); those are the guide's labels for the concepts rather than literal response keys.
@@ -150,17 +191,33 @@ deployed code and call its read-only entrypoints directly.
 ## Diagnosing a failed trade
 
 The backend exposes `GET /api/debug/failed-transactions`, which the web app never calls — it is a
-diagnostic endpoint with no UI behind it. Its response shape is not documented, so treat anything you
-get from it as informational.
+diagnostic endpoint with no UI behind it. It takes no parameters, is not scoped to an account, and
+returns at most **500 rows, newest first**, each being:
+
+| Field | Meaning |
+| --- | --- |
+| `hash` | The transaction hash the indexer could not process |
+| `retries` | How many times it has been retried |
+| `error` | The error message |
+| `error_trace` | The stack trace |
+| `created_at` | When it first failed |
+
+Read it as an indexer health surface, not a trading one. **These are transactions the indexer failed
+to ingest, not transactions that failed on-chain** — a reverted buy never reaches it. A retry job
+runs every 30 minutes and drops a row once it succeeds or once `retries` passes 10, so the table is
+a rolling backlog rather than a history. If your trade is on aeScan but missing from
+`/api/transactions`, this is where to look for it.
 
 More reliable first steps when a trade did not go through:
 
-| Symptom | Likely cause |
-| --- | --- |
-| Sell reverted, tokens still held | `minimal_return_required` not met, or no allowance granted to the sale contract |
-| Buy reverted | Attached AE below the price after the curve moved; your slippage tolerance was too tight |
-| Nothing in your transaction list, nothing on-chain | The transaction was never signed or never broadcast — check the wallet |
-| On-chain but not in the list | Indexer lag. Verify on aeScan and wait |
+| Symptom | Abort reason to look for | Likely cause |
+| --- | --- | --- |
+| Sell reverted, tokens still held | `MINIMAL_RETURN_NOT_MEET` | The curve moved below your floor |
+| Sell reverted, tokens still held | — | No allowance granted to the sale contract |
+| Buy reverted | `AE_AMOUNT_NOT_SUFFICIENT` | Attached AE below `price(count)` after the curve moved; tolerance too tight |
+| Buy or sell reverted | `MINIMUM_TOKENS_REQUIRED` | `count` below `10^12`, almost always whole tokens passed where decimal units were expected |
+| Nothing in your transaction list, nothing on-chain | — | The transaction was never signed or never broadcast — check the wallet |
+| On-chain but not in the list | — | Indexer lag, or an ingest failure. Check `/api/debug/failed-transactions` |
 
 See [Buying & Selling](/tokens/buying-and-selling) for the allowance and slippage mechanics behind
 the first two rows.
@@ -177,6 +234,4 @@ the first two rows.
 
 ## Open questions
 
-- **The live response shape of `GET /api/transactions` is not pinned down here.** The generated `TransactionDto` and the agent skill's `formatTx` read different field names for the same concepts, and the app's own endpoint inventory records only "items + meta as used by consumers". One live request would resolve it; it was not reachable from the authoring environment.
-- `GET /api/debug/failed-transactions` takes no documented parameters and has no callers in the app. What it returns, how far back it goes, and whether it is scoped to an account are all unknown.
-- Whether `volume` on a transaction row is a token count or an AE figure is not stated, and the field name is ambiguous on a market where both are natural readings.
+- **What `verified` actually asserts.** It is a boolean column on every row, defaulting to `false`, and the indexer sets it — but the condition under which a row is promoted to `verified` is not stated anywhere the column is defined. Do not treat `verified: false` as "this trade did not happen" without establishing what the flag means; the `_should_revalidate` path in `superhero-api/src/plugins/bcl/services/transactions.service.ts` is the place to start.

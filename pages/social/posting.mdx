@@ -32,7 +32,8 @@ headline.
 
 ## Contract entrypoints
 
-The full Tipping v3 surface, from the vendored ACI, is four entrypoints:
+The full Tipping v3 surface, read from `tipping-contract/contracts/v3/Tipping_v3.aes`, is four
+entrypoints. None of them is `payable`:
 
 | Entrypoint | Signature | Stateful | Purpose |
 | --- | --- | --- | --- |
@@ -59,9 +60,11 @@ These are `CONTRACT_V3_ADDRESS` in the app's per-network configuration.
 
 ## Post ids and slugs
 
-The contract returns a bare integer. Every Superhero surface suffixes it with `_v3` to say
-which contract generation it came from, so a post created as `3903` is referenced everywhere as
-`3903_v3`.
+The contract returns a bare integer. The indexer forms the API id as the contract's return
+value plus `_v` plus the contract's configured version — `_v3` today — so a post created as
+`3903` is referenced everywhere as `3903_v3`. If the middleware hands the indexer a transaction
+with no return value, it falls back to the **last eight characters of the transaction hash**
+plus the same suffix, which is why an occasional id is not numeric.
 
 In-app links then drop the suffix again: a post link is `/post/` plus the id with `_v3`
 stripped, or a human-readable slug the API generates for SEO. The resolver at `/post/:slug`
@@ -73,6 +76,22 @@ tries, in order:
 
 Write the suffix when you call the API and drop it when you build a URL, and the round trip
 works from either direction.
+
+The slug itself is derived once, at index time, from the post's own text
+(`superhero-api/src/social/services/post.service.ts`):
+
+```text
+base = content.toLowerCase()
+             .replace(/[^\p{L}\p{N}._~-]+/gu, '-')   // any non-word run becomes one hyphen
+             .replace(/-+/g, '-')
+             .replace(/^-+|-+$/g, '')
+             .slice(0, 60)
+slug = (base ? base + '-' : '') + <the numeric part of the id>
+```
+
+So `"Hello, æternity!"` as post `3903_v3` becomes `hello-æternity-3903`. Letters and digits in
+any script survive; the id suffix makes the slug unique even when two posts normalise
+identically. Slugs are never regenerated, so editing is moot — there is no edit.
 
 ## Content encoding
 
@@ -94,16 +113,48 @@ rendering as text, so nothing already on chain can be broken by a future syntax 
 
 ## Limits
 
+There are three layers and they do not agree. The contract accepts anything; the composer is
+strict; the indexer sits in between and quietly rewrites what it stores.
+
 | Limit | Value | Enforced by |
 | --- | --- | --- |
-| Character count | 280 | The web composer, for posts and comments alike |
-| Media entries | None documented | — |
+| Character count, composer | 280 | The web composer, for posts and comments alike |
+| Character count, indexed copy | 5,000 | `sanitizeContent` in the indexer — longer content is **truncated**, not rejected |
+| Character count, on chain | Unbounded | The contract stores whatever string you pass |
+| Media entries, indexed | 5 | `extractMedia` keeps the first five valid entries and drops the rest |
+| Media entries, on chain | Unbounded | The contract stores the whole list |
+| Topics per post | 10 | `extractTopics`, each at most 50 characters after normalization |
 | Editing | Impossible | The contract has no update entrypoint |
 | Deletion | Impossible | The contract has no delete entrypoint |
 
-The 280-character limit is a client-side constant in the composer. The contract accepts a
-string of any length, so a post written through the SDK or the CLI is not bound by it — but a
-longer post may render badly in surfaces that assume the limit.
+The 280-character limit is a client-side constant. A post written through the SDK or the CLI is
+not bound by it, but the copy the API serves is normalised on the way in
+(`superhero-api/src/social/utils/content-parser.util.ts`):
+
+- trimmed;
+- CRLF converted to LF;
+- three or more consecutive newlines collapsed to two;
+- truncated to 5,000 characters.
+
+So a 6,000-character post is on chain in full and truncated everywhere a reader will see it.
+Read it back from the contract if you need the original.
+
+### What counts as a media entry
+
+`extractMedia` does not store the `media` list verbatim. Each entry must be a parseable URL
+with an `http:` or `https:` scheme, and must either end in `.jpg`, `.jpeg`, `.png`, `.gif`,
+`.webp`, `.mp4`, `.webm` or `.mov`, or be hosted on `imgur.com`, `giphy.com`, `youtube.com` or
+`vimeo.com` (or a subdomain of one). Everything else is dropped from the indexed `media` array,
+and only the first five survivors are kept.
+
+That rule is why a comment's `comment:3903_v3` marker never appears in the API's `media` field
+even though it is the first entry on chain: it is not a URL, so it is filtered out. The
+`tx_args` field still carries the raw list, which is where the client's parser looks.
+
+The same convention has one more hook: if any raw media entry contains the substring `hidden`,
+the indexer sets `posts.is_hidden = true`, which removes the post from the feeds and from
+popular ranking. It is a self-applied flag, not a moderation control — see
+[Moderation](/social/moderation).
 
 ## Posting from the app
 
@@ -192,16 +243,6 @@ delete, no "only visible to followers", and no mechanism by which Superhero, a c
 or a moderator can remove the content from the chain. Moderation can hide a post from a
 community surface — see [Moderation](/social/moderation) — but the bytes remain, readable by
 anyone running a node, forever.
-
-## Open questions
-
-- **Is the 280-character limit enforced anywhere but the web composer?** The contract takes an
-  unbounded string and the CLI does not check length. Whether the indexer truncates or rejects
-  longer content is not documented.
-- **Are there media-list constraints?** Neither the contract nor the indexer documents a cap on
-  the number of media entries or on entry length.
-- **How is the SEO slug generated?** Posts carry a `slug` field from the API and the app
-  resolves it, but the generation rule is server-side and not documented in the app repository.
 
 ## Read more
 

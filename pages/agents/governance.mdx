@@ -59,6 +59,36 @@ only, not final governance weight.
 When it is `null`, the correct behaviour is to say the result is unavailable — not to fall
 back to the raw counts. Instruct your agent accordingly.
 
+A `null` does not distinguish "the backend is down or slow" from "this poll is not one the
+backend tracks", so an agent that reads results should re-run `info` before concluding
+anything. Treat a single `null` as no information; treat a `null` that persists across
+several runs, minutes apart, as a property of the poll rather than of the network.
+
+### Which polls the official results cover
+
+`guides/governance.md` describes the deployed poll contract as "backend-verifiable" without
+saying what qualifies. The skill deploys a fixed bytecode blob from
+`contracts/PollBytecode.json`, and its metadata is specific:
+
+```json
+{ "contract": "Poll_Iris.aes", "compiler_version": "7.0.1",
+  "hash": "eb364ab0197ab893c0e26f6b88b7631ce934b46faa4eb5930a1ff63e650a8540" }
+```
+
+That is the same `Poll_Iris.aes` source the ecosystem treats as canonical, but a different
+build of it. Superhero's own backend records a canonical set in
+`superhero-api/src/plugins/governance/contract/aci/GovernanceBytecodeHashes.json`, and its
+`Poll_Iris.aes` entry is compiled with aesophia **8.0.0** and hashes to
+`51856aa1948299a30208ffe829b34c9e643bc7f79ef9668a9c84b462c923d464`. The two bytecodes are
+identical except for the compiler-version stamp at the end, so the source is the same and the
+hashes are not.
+
+Practically, that means a poll deployed by the skill is a standard Iris poll — its `vote`,
+`revoke_vote` and `votes` behaviour is the canonical implementation, and anything reading the
+contract directly will work. It also means an indexer that recognises polls by bytecode hash
+would not match it. Which of those the aeternity governance server does is the open question
+below.
+
 ## Voting
 
 The skill's workflow, from `SKILL.md`:
@@ -260,11 +290,10 @@ in the skill where the network is configurable:
 
 ## Open questions
 
-- The governance backend's availability is a hard dependency for official results, and the
-  script treats any failure — including a slow response beyond 8 seconds — as "unavailable"
-  rather than distinguishing it from a genuinely unverifiable poll. An agent that votes based
-  on results should re-run `info` rather than acting on a single `null`.
-- What makes a poll "backend-verifiable" — `guides/governance.md` describes the deployed
-  contract that way — is not documented in the skill. If `stake_weighted_results` is
-  persistently `null` for a poll you created, the cause is not diagnosable from the skill's
-  output alone.
+- **Does the governance server recognise a poll by bytecode hash, and if so which hashes does
+  it accept?** The skill deploys `Poll_Iris.aes` built with aesophia 7.0.1; Superhero's
+  backend records an 8.0.0 build of the same source under a different hash. If the server
+  filters on hash, polls created by the skill get `stake_weighted_results: null` forever and
+  the fix is to rebuild `contracts/PollBytecode.json` with the matching compiler. Settling
+  this needs the `aepp-governance` backend's own indexing rules — it is a different service
+  from `superhero-api`, and neither its source nor its behaviour is in these repositories.

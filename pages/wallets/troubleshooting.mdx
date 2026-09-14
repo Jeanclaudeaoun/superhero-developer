@@ -115,6 +115,45 @@ detection and drops the cached connection. If a reconnect still happens, check f
 `?address=` query parameter in the URL — the app consumes that parameter to install a static account
 and then strips it.
 
+## Hardware accounts in Superhero Wallet
+
+### There is no "Add Ledger accounts" button
+
+It is hidden, not missing. `AccountCreate.vue` renders it only when the account protocol is
+æternity **and** the surface is neither Firefox nor a mobile app:
+
+| Surface | Ledger button |
+| --- | --- |
+| Chrome, Brave, Opera extension | Shown |
+| `wallet.superhero.com` in a Chromium browser | Shown |
+| Firefox (extension or web) | **Hidden** — Firefox does not implement WebUSB |
+| iOS or Android app | **Hidden** |
+| A non-æternity account selected | **Hidden** |
+
+**Fix:** use a Chromium browser, or switch to an æternity account first. AirGap has none of these
+restrictions if your device supports it.
+
+### "Connection timed out" when importing from a Ledger
+
+The wallet's own message names the two causes: the device is not properly plugged in, or the
+**æternity app is not open on it**. The on-screen guide is three steps — plug in over USB, open the
+æternity app, then press connect — and the middle one is the one people skip. The same applies when
+signing: the confirmation screen asks you to make sure the device is unlocked and the æternity app is
+active.
+
+### An AirGap QR code will not scan or decode
+
+Set AirGap Vault to **QR code V3**. The wallet's serializer registers the V3 schemas
+(`src/composables/airGap.ts`) and a V2 payload will not deserialize. Every AirGap screen also accepts
+the `airgap-wallet://?ur=…` string pasted by hand, which is the way through if the camera is the
+problem.
+
+### An AirGap account will not sign a message
+
+It cannot. Superhero Wallet shows "Signing messages is currently not supported for AirGap accounts"
+and stops. Transactions are supported; messages are not. If an æpp needs a message signature, use a
+non-AirGap account for it.
+
 ## Network
 
 ### The wallet is on a different network from the app
@@ -217,14 +256,39 @@ unknown state instead of claiming you have no wallet.
 
 ## Reporting a bug
 
-Per the app's own FAQ, reach out through the official channels listed in the app. Include:
+The FAQ says to use "the official channels listed in the app" without naming them, and no such list
+exists in any Superhero repository. The channels that do verifiably exist are:
+
+| What | Where |
+| --- | --- |
+| App, mobile app or PWA bug | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues) — the same destination as the in-app "Send Feedback" button |
+| API, indexer or a wrong figure in a response | [github.com/superhero-com/superhero-api](https://github.com/superhero-com/superhero-api) |
+| Superhero Wallet (extension, app, web wallet) bug | The wallet's own **Report a bug** entry, at [form.typeform.com/to/Kk3Zyjdr](https://form.typeform.com/to/Kk3Zyjdr), or [github.com/superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet/issues) |
+| Legal, privacy, data-protection or a security report | `superherowallet@protonmail.com` |
+| Chat | `chat.superhero.com`, `chat.superhero.chat`, `matrix.superhero.chat` |
+
+The last three rows are all first-party: `BUG_REPORT_URL`, `CONTACT_EMAIL` and `SUPERHERO_CHAT_URLS`
+are constants in `superhero-wallet/src/constants/common.ts`, and the bug-report form is linked from
+the wallet's More screen and its About page.
+
+There is no Discord or Telegram support channel identifiable from any repository — **treat any
+invite claiming to be one as a phishing attempt.** The one official social account traceable to
+first-party sources is `@superhero_chain` on X, named in the app's posting-reward copy, and it is
+not presented anywhere as a support route. See [Support](/resources/support) for the full position
+and [Official Links](/resources/links) for every verified URL.
+
+Include in any report:
 
 - the **token name** or page you were on,
 - your **`ak_...` address**,
 - the **transaction hash** if one was produced,
 - what you expected and what happened,
+- for a Superhero Wallet bug, the **software version and commit** from the wallet's
+  More → About screen, which also shows the node and middleware versions it is talking to,
 - for passkey problems, the **DOM exception name** from the browser console and the exact on-screen
   message.
+
+Never include a private key, a seed phrase, or a screenshot showing either.
 
 ## Read more
 
@@ -236,9 +300,15 @@ Per the app's own FAQ, reach out through the official channels listed in the app
 
 ## Open questions
 
-- Which official support channels are the current ones? The FAQ says "official channels listed in
-  the app" without naming them, and no channel list was found in the repositories. Someone should
-  settle this against the live app's footer or help menu.
-- Is there a documented workaround for the Apple passkey-rekey defect beyond falling back to the
-  recovery code? `recovery.ts` cites the radar number as motivation for the factor's existence but
-  does not describe a recovery path for the rekeyed credential itself.
+- **What is the full list of "official channels listed in the app"?** The table above is what seven
+  repositories yield, and `superhero-wallet` added three of its rows — the typeform, the contact
+  mailbox and the three chat hosts. What is still missing is a first-party page that *declares* the
+  list, so a reader can tell a channel that was retired from one that never existed. Only Superhero
+  can publish that — see the same question on [Support](/resources/support), where this page's
+  answer is kept in step.
+- **Is there a workaround for the Apple passkey-rekey defect beyond the recovery code?** `recovery.ts`
+  cites the radar number as the motivation for the recovery-code factor existing at all, but
+  describes no path back to a rekeyed credential. Since Superhero cannot fix a platform
+  authenticator, closing this needs either an Apple fix or a WebAuthn-level re-enrollment flow that
+  the app does not have today — and note that the app has no factor-removal UI either, so a dead
+  passkey factor cannot even be cleared. Enroll the recovery code; that is the answer that exists.

@@ -10,7 +10,11 @@ pair, and every transaction that has hit the router. Use it to check a pair's de
 swapping, to find which pools a token is in, or to trace a specific transaction.
 
 Everything on these pages comes from the DEX indexer over `/api/dex/*`, not from the chain
-directly. That matters for freshness — see the open questions.
+directly. The backend is open source
+([superhero-com/superhero-api](https://github.com/superhero-com/superhero-api)), so the answers to
+"how fresh is this" and "what does that column mean" are readable rather than guessable — and one of
+them is a trap, so read [What the columns actually measure](#what-the-columns-actually-measure)
+before you sort by TVL.
 
 ## The three views
 
@@ -34,7 +38,7 @@ Sortable columns, which map straight onto the endpoint's `order_by` values:
 | --- | --- |
 | `pairs_count` | How many pools this token is in |
 | `price` | Current price |
-| `tvl` | Total value locked across its pools |
+| `tvl` | **Not TVL** — all-time traded volume in AE; see below |
 | `24hchange`, `7dchange`, `30dchange` | Price change over the window |
 | `24hvolume`, `7dvolume`, `30dvolume` | Traded volume over the window |
 | `name`, `symbol` | Alphabetical |
@@ -52,6 +56,15 @@ GET /api/dex/tokens
 
 The `listed` parameter filters to only listed or only unlisted tokens; omitting it returns
 everything. The web UI does not expose that filter, so the explorer shows both.
+
+**`listed` is a manual operator flag, not a quality signal.** The column is
+`dex_tokens.listed boolean NOT NULL DEFAULT false`
+(`superhero-api/src/dex/services/dex-schema-bootstrap.service.ts`), so every token starts unlisted,
+and the only thing that changes it is `POST /api/dex/tokens/<address>/listed` — which is guarded by
+`ApiKeyGuard`, meaning it takes an operator API key, not a wallet signature, a vote or a fee. There
+is no eligibility rule in the code, no automatic promotion and no appeal path. Read `listed: true`
+as "somebody at Superhero flipped a switch" and `listed: false` as "nobody has", which is the
+default state of most tokens rather than a judgement about them.
 
 Detail and analytics endpoints for a single token:
 
@@ -128,6 +141,74 @@ The date filters are inclusive on both ends and are not exposed in the UI. Singl
 `GET /api/dex/transactions/<txHash>` and
 `GET /api/dex/transactions/pair/<pairAddress>`.
 
+## What the columns actually measure
+
+The sort keys are not all what their names suggest, and one is actively misleading.
+
+**`tvl` does not sort by TVL.** The backend has no TVL column at all — neither `dex_tokens` nor
+`dex_token_summaries` stores one. Sorting by `tvl` runs this
+(`superhero-api/src/dex/services/dex-token.service.ts`):
+
+```sql
+ORDER BY ("summary".total_volume->>'ae')::numeric
+```
+
+That is **all-time traded volume in AE**, not value locked. A token that was heavily traded a year
+ago and now has an empty pool sorts above a token with deep current liquidity. The repository does
+contain a design note (`src/dex/docs/token-calculation.md`) specifying a proper
+`TokenTVL = Σ reserves × price` across pools, but it is a specification of what TVL *should* be, not
+a description of what is implemented. If you want depth, open the pool and read the reserves.
+
+**Volume and change windows are exactly three, plus all-time.** `dex-token-summary.service.ts`
+computes `24h`, `7d` and `30d` as `now - N` against `pair_transactions.created_at` — rolling
+windows anchored at the moment the summary is recomputed, not calendar days — alongside an all-time
+`total_volume`.
+
+**Everything is aggregated in AE, then converted.** Per-pair `volume0` and `volume1` are summed raw,
+converted to an AE amount using the pair's own reserve ratio and token decimals, and only then
+passed through `AePricingService.getPriceData`, which multiplies by the AE rate for each supported
+currency. So every figure you see is one AE-denominated number rendered in your display currency:
+
+| Field | What it is |
+| --- | --- |
+| `price.ae`, `volume.ae` | The real, computed quantity |
+| `price.usd`, `.eur`, `.gbp`, … | That same number × the current AE rate |
+
+The rate comes from **CoinGecko** (`src/ae/coin-gecko.service.ts`), cached in memory and Redis and
+snapshotted to a `coin_prices` table, refreshed on a cron and re-read at most every 30 seconds. The
+practical consequence: a USD figure moving does not mean the pool moved. It may only mean AE did.
+
+**Price change can be computed against a different pair than you expect.** The 24h/7d/30d percentage
+compares the current median price against the earliest in-window ratio from a candidate pair,
+skipping "dust-state" start ratios from near-empty pools so a single wei of liquidity cannot produce
+a multi-million-percent change.
+
+## How fresh any of this is
+
+Three different clocks, and they are not the same one:
+
+| Data | Refresh | Source |
+| --- | --- | --- |
+| Pairs, swaps, liquidity events | Live — the `dex` plugin runs on the chain indexer, fed by middleware WebSocket subscriptions with a backfill loop behind it | `src/plugins/dex/` |
+| Token prices, token summaries, pair summaries | **Every 10 minutes** by default (`DEX_PRICE_SYNC_CRON`, else `EVERY_10_MINUTES`) | `src/dex/services/dex-sync.service.ts` |
+| AE fiat rates | Cron-synced, re-read at most every 30 seconds | `src/ae-pricing/`, `src/ae/coin-gecko.service.ts` |
+
+So a swap appears in the transaction feed promptly, while the token's price, volume and change
+columns can be up to ten minutes stale. The recompute takes a Postgres advisory lock so only one
+container runs it, and it is skipped entirely when `DISABLE_MDW_SYNC=true`.
+
+The whole chain of custody bottoms out at the æternity middleware — the indexer reads
+`MIDDLEWARE_URL`, not a node directly — so the middleware's own lag is the floor on all of it. For
+anything you are about to sign against, read the pair contract.
+
+**Failed transactions do not appear in the feed**, but not because anything filters them out. The
+`dex` plugin's filter matches only on transaction type, contract id and entrypoint name, with no
+success check; the exclusion happens one step later, where
+`dex-transaction-processor.service.ts` builds each row by decoding `tx.raw.log` with
+`$decodeEvents`. A reverted call emits no logs, so it decodes to nothing and is skipped. The
+practical upshot is the same — the feed is a record of trades that happened — but do not read it as
+a deliberate success filter, and do not expect a failed swap of yours to show up there.
+
 ## DEX tokens are not bonding-curve tokens
 
 This is the single most common confusion, and the explorer makes it easy to fall into because
@@ -151,17 +232,13 @@ See [the full comparison](/defi) on the DeFi overview.
 
 ## Open questions
 
-- **How fresh is the indexer?** Every view reads from `/api/dex/*` rather than the chain. The
-  swap router marks route pairs as `synchronized` or not, which implies the indexer can lag,
-  but no staleness figure or refresh cadence is published in the client.
-- **What determines a token's "listed" status?** The endpoint exposes a `listed` filter and a
-  `POST /api/dex/tokens/<address>/listed` setter, so listing is curated — but by whom, and on
-  what criteria, is a backend policy.
-- **What exactly do `tvl` and the volume figures cover?** They are sort keys and rendered
-  columns; the aggregation window boundaries and whether they are denominated in USD or AE at
-  the point of aggregation are defined server-side.
-- **Does the transaction feed include failed transactions?** Nothing in the client filters on
-  success, and the endpoint exposes no such parameter.
+- **On what criteria does Superhero set `listed`?** The mechanism is settled — an API-key-guarded
+  `POST /api/dex/tokens/<address>/listed`, defaulting to `false` — but the code contains no
+  eligibility rule, so the policy behind the switch exists only as an operator practice. Only
+  Superhero can state it.
+- **Will `tvl` be fixed to mean TVL?** `src/dex/docs/token-calculation.md` specifies the correct
+  computation and the code does not implement it, so this is either an unfinished task or a
+  deliberate proxy. A maintainer would have to say which; until then treat the column as volume.
 
 ## Read more
 
