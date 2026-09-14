@@ -46,6 +46,24 @@ C = integral of buy(x) dx, from supply to supply + amount
     where buy(x) = 0.001 * e^(0.00000001 * x) - 0.0009999
 ```
 
+That closed form is the **idealised curve the contract approximates**, not the arithmetic it runs.
+`BondingCurveExponential.aes` reports `curve_type() = "TAYLOR_EXPONENTIAL_V1"` and
+`calculate_price` evaluates a Maclaurin expansion of `e^x` from the quadratic term, in integer
+arithmetic, terminating at 100 terms or when a term rounds to zero:
+
+```sophia
+function exp_helper(x : int, term : int, sum : int, i : int, scale : int) : int =
+  if (i > 100 || term < 1) sum
+  else
+    let next_term = (term * x) / (i * scale)
+    exp_helper(x, next_term, sum + next_term, i + 1, scale)
+```
+
+The two agree closely enough that the closed form is the right thing to reason with — checked
+against an exact integer replica of the Sophia, the difference is about 2e-16 AE at supply 0 and
+1.4e-12 AE at supply 10,000,000. Use the closed form to understand the shape; use `price(count)`
+when a number has to be exact.
+
 The base bonding curve defines the sell curve as `sell(x) = buy(x) * 0.995`, which is the 0.5% that
 funds the DAO. The affiliation sale contract then adds its own 0.5% **on top of** the curve price —
 the whitepaper calls it "an additional 0.5% affiliation fee thus the total spread between buy and

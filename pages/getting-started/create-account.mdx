@@ -173,9 +173,20 @@ Your account exists but holds nothing. Put a little AE in it, then post or trade
 
 ## Open questions
 
-- Can a passkey-created wallet's recovery phrase be revealed anywhere, for a user who later wants a
-  written backup? The code comments name a user-verification-gated reveal as the intended fix but
-  describe it as not yet shipped.
-- Where in Superhero Wallet's own onboarding does the seed-phrase backup verification happen, and is
-  it mandatory there as it is in the built-in wallet? The wallet's FAQ copy describes backing up the
-  phrase but was not verified against the wallet's own repository.
+Two things that were open are now settled, and both are worth knowing before you choose a path.
+**A passkey-created wallet's phrase cannot be revealed anywhere** — three modules in
+`src/features/wallet/` say so in comments and no component implements a reveal, so if you create
+with a passkey, that passkey is your only backup and it must sync. And **the built-in wallet's
+passphrase cannot be changed later** — there is no `addPassphraseFactor` and nothing calls
+`removeFactor`, so changing it means recreating the vault from the phrase. See
+[The Built-In Wallet](/wallets/built-in-wallet) and
+[Backup & Recovery](/wallets/backup-and-recovery).
+
+- **Is a phrase reveal actually planned?** The code names a user-verification-gated reveal as "the
+  fix", but no repository carries a roadmap, an issue reference or a design note beyond those
+  comments. Only Superhero can say whether it is scheduled.
+- **Where in Superhero Wallet's own onboarding does seed-phrase backup verification happen, and is
+  it mandatory there as it is in the built-in wallet?** The wallet's FAQ copy describes backing up
+  the phrase without saying whether the confirmation step can be skipped. That is a question for
+  [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — its
+  onboarding components — or for anyone who can run its first-run flow.

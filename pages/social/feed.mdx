@@ -244,11 +244,13 @@ The feed is not only posts. In latest mode the app runs a second infinite query 
 merges the two lists. Trade activity items appear the same way. That is why a brand-new
 community token shows up in the feed without anyone posting about it.
 
-Those activity items are the one thing in the feed that updates live: the app subscribes to the
-API socket's token-created channel and prepends new sales to the cached activity list as they
-arrive. Posts themselves are not pushed — the feed refetches on window focus and treats data as
-fresh for 10 seconds, so a new post from someone else appears on the next refetch rather than
-instantly.
+The app registers a listener for a `token-created` channel and prepends new sales to the cached
+activity list. **That channel is never emitted.** `TokenWebsocketGateway` in `superhero-api`
+emits exactly two events — `token-updated` and `token-history` — so the listener sits idle and
+those activity items arrive on the next refetch like everything else.
+
+Posts are not pushed either. The feed refetches on window focus and treats data as fresh for
+10 seconds, so a new post from someone else appears on the next refetch rather than instantly.
 
 Your own new post is the exception. The composer optimistically inserts it at the top of the
 latest-feed cache before the indexer has seen it; see [Posting](/social/posting).
@@ -274,10 +276,10 @@ place.
 
 ## Open questions
 
-- **Is there a live post channel?** The API socket carries token-created, token-updated,
-  token-transaction and token-history channels, and `superhero-api` exposes a `/notifications`
-  namespace for the bell. Neither carries new posts. Whether a post channel is planned is a
-  question for Superhero; nothing in the client or the backend implements one today.
+- **Is there a live post channel?** No. The API socket emits only `token-updated` and
+  `token-history`, and `superhero-api` exposes a separate `/notifications` namespace for the
+  bell. Neither carries new posts, and nothing in the client or the backend implements one.
+  Whether one is planned is a question for Superhero.
 
 ## Read more
 

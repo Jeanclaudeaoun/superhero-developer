@@ -112,6 +112,23 @@ gas plus the name fee, so run `available` first.
 
 The script targets **mainnet** with hardcoded endpoints — see [Using Testnet](/getting-started/testnet).
 
+## Short names: not from Superhero, at all
+
+A correction worth making explicitly, because it is easy to assume otherwise from a field that
+accepts typing: **the app never prices, quotes or bids on a name of 12 characters or fewer.** All
+three surfaces refuse, each at its own layer:
+
+| Surface | Where it refuses |
+| --- | --- |
+| Profile claim field | `validateChainName` returns `chainNameClaimTooShort` for `name.length <= 12` — and the self-funded price is computed only *after* validation passes, so a short name never even gets a figure (`src/components/modals/ProfileEditModal.tsx`) |
+| Sponsored claim (backend) | `SponsoredChainNameLabelPipe` requires at least `PROFILE_CHAIN_NAME_MIN_LABEL_LENGTH` = 13 characters, and also restricts the label to `[a-z0-9-]` because the sponsor flow stores the label verbatim and never normalises it (`superhero-api/src/profile/validation/`) |
+| Agent CLI | `register` aborts with `name_too_short_auction_required` |
+
+To bid on a short name, use Superhero Wallet's own claim screen, another æternity wallet, or
+`@aeternity/aepp-sdk` directly. [AENS on æternity](/aeternity/aens) documents the auction —
+including the Ceres rule that every bid extends the auction by up to 120 key blocks, and
+`getMinimumNameFee(name)` as the way to compute a starting bid.
+
 ## After you have one
 
 **Point it where you want.** The registration flow sets the `account_pubkey` pointer to your address.
@@ -135,10 +152,16 @@ repositories describes an automatic renewal, so treat this as your responsibilit
 
 ## Open questions
 
-- What is the auction process for names of 12 characters or fewer, in practice on Superhero? The CLI
-  refuses them and the sponsored claim excludes them; the app's own claim field prices them but the
-  bidding flow itself was not traced. The AENS documentation above describes the protocol mechanism.
-- What is a name's default TTL in blocks, and does Superhero warn you before one lapses? The profile
-  modal reads a `chain_expires_at` value, but no expiry notification was found in the app.
-- What happens to a lapsed name's pointer and to a profile that used it as its display source? Not
-  documented anywhere in the repositories.
+Both are about expiry, and neither is answerable from the Superhero side — the app reads a name's
+expiry height but does nothing with it.
+
+- **What is a name's default TTL in blocks, and does Superhero warn you before one lapses?** The
+  profile modal reads a `chain_expires_at` value and the agent CLI's `available` reports an
+  `expires_at_height`, but no notification, banner or scheduled check exists in the web app or in
+  `superhero-api` — there is no expiry job anywhere in the backend. The TTL itself is a protocol
+  constant in [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md); treat renewal as
+  entirely your responsibility until Superhero ships a reminder.
+- **What happens to a lapsed name's pointer, and to a profile using it as its display source?** The
+  protocol side (whether pointers are cleared, and whether the name re-enters auction) is in AENS.md.
+  The Superhero side — whether a profile silently falls back to the address or keeps showing a dead
+  name — is not determinable from the repositories and would need a lapsed name to observe.

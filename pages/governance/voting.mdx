@@ -135,9 +135,23 @@ records which option your address chose; the weight behind that is computed off-
 your AE balance and your delegations at the close height. Your AE stays liquid and spendable
 the whole time.
 
-The flip side: **your weight is not fixed when you vote.** It is measured at the close height.
-Spending AE after voting reduces the weight behind your choice; receiving AE increases it. If
-a poll matters to you, what matters is your balance when it closes, not when you voted.
+The flip side: **your weight is not fixed when you vote.** Spending AE after voting reduces the
+weight behind your choice; receiving AE increases it. If a poll matters to you, what matters is your
+balance when it closes, not when you voted.
+
+And the snapshot only exists once the poll has actually closed. The backend's
+`getClosingHeightOrUndefined` returns a height only when the poll has a `close_height` **and** that
+height has already passed; otherwise it returns nothing and the tally reads live balances and live
+delegations. So:
+
+| Poll state | Weighting is read at |
+| --- | --- |
+| Open, with a future close height | The current height — the figures move as balances move |
+| Closed | The close height — fixed, apart from revocations |
+| Open-ended (`close_height = None`) | The current height, forever. There is never a snapshot |
+
+An open poll's percentages are therefore a live reading, not a provisional result, and two people
+loading the same open poll an hour apart can legitimately see different numbers.
 
 **There is no minimum balance to vote.** The contract requires none, and an account with nothing in
 it can cast a vote that records normally, emits a `Vote` event and appears in `votes()`. It simply

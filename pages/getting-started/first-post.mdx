@@ -23,9 +23,16 @@ nothing else.
      found from a token page or a topic feed.
    - **Mentions** — type `@` for an account or `#` for a token to get an autocomplete list. What you
      see in the box is a short display form; what gets stored is the full serialized reference.
-   - **Media** — attach images or GIFs, or paste a link and let the app render a preview card.
+   - **Media** — pick an image or a GIF, or paste a link and let the app render a preview card.
 5. Press post. Your wallet opens a confirmation.
 6. Approve it.
+
+**You are not uploading anything.** The composer has no file input: the image button searches
+[Openverse](https://api.openverse.org/v1/images/) (filtered to commercially licensed, modifiable,
+non-mature JPG and PNG) and the GIF button searches Giphy through the backend at
+`GET /api/giphy/search`. Either way what gets stored on chain is *someone else's URL*. Since a post
+can never be edited, an attachment that disappears from its host leaves a permanently broken link
+in a permanent post — so put anything that matters in the text.
 
 The post appears in the feed **immediately**, before the indexer has caught up. That is deliberate:
 the app builds an optimistic post from what it just submitted, tries to fetch the indexed version,
@@ -138,8 +145,10 @@ The script signs with `AE_PRIVATE_KEY` from the environment and targets mainnet 
 
 ## Open questions
 
-- Is there a media size or count limit on attachments, and where is it enforced — client, backend, or
-  neither? The composer accepts a media list and the contract stores strings; no limit was found in
-  `PostForm.tsx`.
+- **Is there a limit on the number of media entries in one post?** File size is not a question —
+  nothing is uploaded, so a "size limit" has no place to live; the media list is a list of URL
+  strings. But no count cap was found in `PostForm.tsx`, and the contract takes an unbounded
+  `list(string)`, so the practical ceiling is gas and whatever the pickers let you accumulate. Adding
+  many entries to a post on testnet and watching where it stops would settle it.
 - A screenshot of the composer with each control labelled would make this page easier to follow.
   None exists in the repositories; capturing one against the live app is a follow-up.

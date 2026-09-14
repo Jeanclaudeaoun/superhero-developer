@@ -131,23 +131,51 @@ most 200, and returns the matching accounts.
 
 ## `GET /api/accounts/{address}/tokens`
 
-An account's holdings. `order_by` accepts only `balance`; `order_direction` is `ASC` or `DESC`.
-The `search` parameter narrows server-side, which matters because **`limit` is capped at 100** —
-an unfiltered fetch only ever returns the top 100 holdings by balance.
+An account's holdings.
 
-Item shape varies slightly by deployment, which the web app handles explicitly: usually
-`{ token, balance, ... }` with the full `TokenDto` nested under `token`, but some environments
-flatten it to `token_name` / `token_symbol` / `token_address` on the item itself. Read `item.token`
-first and fall back to the item.
+| Parameter | Notes |
+| --- | --- |
+| `order_by` | Only `balance`. Anything else is a 400 |
+| `order_direction` | `ASC` or `DESC`, default `DESC` |
+| `search` | `ILIKE` on the token's name |
+| `factory_address` | Restrict to one factory. **Without it the list is restricted to the current factory** |
+| `creator_address` | Switches modes — see below |
+| `owner_address` | Switches modes — see below |
+| `limit`, `page` | `limit` defaults to 100, must be 1–100 |
 
-The agent skill reads `h.balance`, `h.aex9_address`, and `h.token.name` / `h.token.symbol` /
-`h.token.sale_address` / `h.token.price` / `h.token.sell_price` / `h.token.trending_score`.
+There is **no `includes` parameter** here; the token is always nested. Each item is a holder row
+with a `token` object attached, and that token carries a freshly computed `rank`:
 
-```bash
-curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/tokens?includes=token&order_by=balance&order_direction=DESC&limit=50"
+```json
+{
+  "id": "...", "aex9_address": "ct_...", "address": "ak_...",
+  "balance": "1500000000000000000000", "block_number": 1104233,
+  "last_tx_hash": "th_...", "created_at": "2026-05-02T11:04:19.000Z",
+  "token": { "rank": 17 }
+}
 ```
 
-Balances are in token base units — divide by 10 raised to the token's `decimals`.
+Balances are in **token base units** — divide by 10 raised to the token's `decimals`. Because
+`limit` is capped at 100, an unfiltered fetch only ever returns the top 100 holdings by balance;
+use `search` to narrow rather than paging blindly.
+
+### `creator_address` and `owner_address` change what the endpoint means
+
+Pass either and the handler switches to a different query entirely: it lists **tokens the path
+address created or owns**, regardless of balance, and attaches whatever balance exists (or the
+string `"0"`). Without them, it lists tokens the path address *holds a positive balance in*.
+
+The value you pass is used only as a flag — the query filters on the **path** address, not on the
+value. So `?owner_address=ak_ANYTHING` on `/api/accounts/ak_ALICE/tokens` returns Alice's owned
+tokens. Pass the same address as the path to avoid confusion.
+
+```bash
+# Tokens Alice holds
+curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/tokens?order_by=balance&order_direction=DESC&limit=50"
+
+# Tokens Alice created, including any she has sold out of
+curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/tokens?creator_address=ak_YOUR_ADDRESS&limit=50"
+```
 
 ## Portfolio history
 

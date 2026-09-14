@@ -57,21 +57,23 @@ decay = 1 / (1 + hours_since_last_activity / 2) ^ 1.15      (0 if the pre-decay 
 ```
 
 `hours_since_last_activity` is measured from the most recent of the last trade and the last social
-event. Two hours of silence roughly halves a score; a day of silence divides it by about eighteen.
+event. Two hours of silence multiplies a score by `0.45`; twelve hours by `0.11`; twenty-four hours
+by `0.05`. Silence is the single biggest term in the whole formula.
 
 ### What that means in practice
 
 - **Caps make the score a presence signal, not a size one.** Volume is capped at 5,000 AE and
   carries 0.20 of the 0.35 trading weight — so 5,000 AE and 500,000 AE of daily volume score
   identically on that axis. The score cannot tell you how much money moved.
-- **Log normalisation front-loads the first few units.** Going from 0 to 5 buys earns more score than
-  going from 20 to 40. Small tokens can climb quickly; large ones saturate.
+- **Log normalisation front-loads the first few units.** On the buy-count signal, going from 0 to 5
+  buys scores `0.48` while going from 20 to 40 adds only `0.18`. Small tokens can climb quickly;
+  large ones saturate.
 - **Sells count exactly as much as buys.** `sellCount` and `buyCount` share the same weight and the
   same cap. A token being dumped hard scores the same on that axis as one being accumulated. The
   score measures *activity*, not direction, and reading it as buying pressure is a mistake.
 - **Decay dominates a quiet token.** A token with an excellent pre-decay score and twelve hours of
-  silence keeps about 12% of it. Most of the movement you see in the trending list is the decay
-  term, not new activity.
+  silence keeps about 11% of it. Most of the movement you see in the trending list between refreshes
+  is the decay term, not new activity.
 
 ### Refresh cadence
 

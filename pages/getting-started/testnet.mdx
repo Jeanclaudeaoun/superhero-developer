@@ -87,12 +87,26 @@ configuration. The active factory address comes from the backend's factory endpo
 ## Getting test AE
 
 Use the æternity faucet at **[faucet.aepps.com](https://faucet.aepps.com/)**: select Testnet, paste
-your `ak_...` address, and submit. The form takes nothing but the address. Search results report a
-default grant of 5 AE per request; treat the faucet page itself as authoritative on the current
-amount, since it has changed over the project's life.
+your `ak_...` address, and submit. The form takes nothing but the address. It also has a programmatic
+form:
+
+```bash
+curl -X POST https://faucet.aepps.com/account/ak_YOUR_ADDRESS
+```
+
+**There is a per-address cooldown, and it is enforced with a distinctive status code.** Request again
+too soon and the faucet answers **HTTP 425** with a message of the form "The address is graylisted
+for another …". Handle 425 explicitly in any script that tops an account up — it is not a failure,
+it is a wait.
+
+The grant amount is the one figure not to hard-code: published sources report both 5 AE and 250 AE
+for different faucet deployments, and the amount has changed over the project's life. Read what the
+faucet actually returns rather than assuming — see the open questions.
 
 Test AE has no value and is not convertible to mainnet AE. If you need more than a single grant,
-request again or see the faucet documentation for the self-hosted options.
+wait out the graylist and request again, or run your own faucet from
+[aeternity/aepp-faucet](https://github.com/aeternity/aepp-faucet), where the top-up amount is a
+configuration value you control.
 
 The faucet's own documentation is at
 [Testnets and Faucet](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet)
@@ -151,14 +165,37 @@ have changed those constants yourself.
 - [Testnets and Faucet documentation](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet) — the upstream guide.
 - [testnet.aescan.io](https://testnet.aescan.io) — the testnet explorer.
 
+## Is there a hosted testnet front end?
+
+Probably, but no public URL for it is recorded anywhere, and you should plan on building your own.
+
+What is established: **the testnet backend is real and deliberately operated.** The API repository
+treats `testnet` as one of four named deploy environments in its workflow (alongside `develop`,
+`staging` and `production`), and ships a `docker-compose-testnet.yml` that names a
+`superhero-api-testnet2` container and a matching `.env.testnet.example`. That is consistent with
+`https://testnet.api.dev.tokensale.org` in `src/config.ts` being a live service rather than a
+leftover.
+
+What is not established is a testnet build of the **web app**. No `testnet.superhero.com` or
+equivalent appears in any repository, the deploy hosts in the workflow are GitHub secrets, and the
+app's own config never refers to a testnet front-end origin. So assume you build it:
+
+```bash
+VITE_NETWORK=ae_uat npm run dev
+```
+
 ## Open questions
 
-- What is the faucet's current grant per request and its rate limit? Search results describe a
-  default of 5 AE and a much larger grant on a separate sdk-edgenet faucet; the live faucet page is
-  the only reliable source.
-- Is there a hosted testnet deployment of superhero.com itself, or must you build one? `src/config.ts`
-  carries a full testnet endpoint set, but no public testnet URL for the app appears anywhere in the
-  repositories.
-- Why is the mainnet entry in `NETWORKS` marked `disabled: true`? The flag is carried through
-  `utils/constants.ts` into the runtime network object but is not read anywhere else in the app, so
-  its intended effect is unclear.
+- **What is the faucet's grant per request?** Published figures disagree — 5 AE and 250 AE both
+  appear for different æternity faucet deployments — and the amount is a configuration value, not a
+  protocol constant, so any number written here would be a guess about someone's deployment. The
+  rate limit *shape* is settled (a per-address graylist, signalled by HTTP 425), but not its
+  duration. Both close in one request: `POST https://faucet.aepps.com/account/<address>` and read
+  the response, then repeat it and read the graylist message. Outbound HTTP is blocked in the
+  environment these docs were written in, so neither call could be made.
+- **Is a public testnet deployment of the Superhero front end hosted anywhere?** See above — the
+  testnet *backend* is evidently operated, but no front-end URL exists in any repository. Only
+  Superhero can say whether one is published.
+
+The `disabled: true` flag on the mainnet network entry is no longer an open question: it is
+vestigial and inert, and [Networks & Endpoints](/aeternity/networks) traces it end to end.

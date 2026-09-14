@@ -207,6 +207,11 @@ Three rules from the Sophia standard library carry over to anything you write ag
    `Frac.geq`, `Frac.eq`. Off-chain, cross-multiply or convert to `BigNumber` first.
 3. The denominator is not fixed and can be large. Do not coerce it to a JavaScript `number`.
 
+The unit of the value is worth pinning down, because it is the one place on the curve contract where
+the answer is not aettos. `buy_curve(x)` evaluates to **AE per whole token** — identically, aettos
+per attotoken, since both sides scale by `10^18`. At supply zero it is `1e-7`, matching the
+`0.0000001 AE` launch price. Multiply by `10^18` if you want a spot price in aettos per whole token.
+
 For pricing a trade you rarely need `buy_curve` at all: `calculate_buy_price` and
 `calculate_sell_return` already do the integration and hand you aettos.
 

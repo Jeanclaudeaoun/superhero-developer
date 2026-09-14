@@ -158,20 +158,40 @@ The web app shows this as a two-step progress indicator; the agent CLI does it s
 ## The live-update path
 
 Token views do not poll. `src/libs/WebSocketClient.ts` opens a single socket.io connection to the
-`websocketUrl` from config — `https://api.superhero.com` on mainnet — and multiplexes four channels:
+`websocketUrl` from config — `https://api.superhero.com` on mainnet — and registers four channel
+listeners. **Only two of them can ever fire.**
+`superhero-api/src/tokens/token-websocket.gateway.ts` contains exactly two emits:
 
-| Channel | Emitted when |
-| --- | --- |
-| `token-created` | A new community token is deployed |
-| `token-updated` | A token's aggregate state changes; the payload carries `sale_address` |
-| `token-transaction` | A buy or sell is indexed; fans out to a global and a per-`sale_address` subscription |
-| `token-history` | A new chart point exists for a `sale_address` |
+| Channel | Emitted when | Emitted by the backend? |
+| --- | --- | --- |
+| `token-updated` | A token's aggregate state changes; the payload carries `sale_address` | **Yes** — `handleTokenUpdated` |
+| `token-history` | A new chart point exists for a `sale_address` | **Yes** — `handleTokenHistory` |
+| `token-created` | A new community token is deployed | **No emit exists anywhere in the backend** |
+| `token-transaction` | A buy or sell is indexed | **No emit exists anywhere in the backend** |
 
-Subscriptions made before the socket connects are queued and replayed on `connect`, and the client
-reconnects after 1000 ms. Notifications ride a separate socket.io namespace
-(`src/features/notifications/notification-feed-client.ts`). Chat is neither: it is a Nostr
-connection to `wss://relay.superhero.chat`, whose origin must also appear in the server's CSP
-`connect-src` allowlist or every socket dies at connect time. See [WebSocket](/api-reference/websocket).
+So a client subscribed to `token-created` or `token-transaction` will wait forever. Refresh token
+lists and transaction feeds from the REST endpoints, and use `token-updated` as your signal to do
+so.
+
+**The gateway is broadcast-only, deliberately.** It defines no `@SubscribeMessage` handlers, and the
+file says why: the gateway used to relay any client-sent message back to every connected client,
+"which let anonymous callers poison the UI with fabricated prices/events". Every emit now originates
+from a server-side service that has validated the payload. Two consequences for a client:
+
+- **There is no server-side subscribe.** `server.emit` broadcasts to everyone; any per-`sale_address`
+  filtering happens in your own client after delivery.
+- **Delivery is at-most-once.** Nothing is replayed and nothing is acknowledged, so a socket event is
+  a hint to refetch, never a source of record. The client's own queue-and-replay on `connect` and its
+  1000 ms reconnect cover the socket, not the messages missed while it was down.
+
+Notifications ride a **separate** gateway (`superhero-api/src/notifications/notifications.gateway.ts`)
+with the same no-`@SubscribeMessage` rule, but room-scoped rather than broadcast:
+`server.to(address).emit('notification', …)` and `server.to(address).emit('unread-count', { count })`.
+The client side is `src/features/notifications/notification-feed-client.ts`.
+
+Chat is neither: it is a Nostr connection to `wss://relay.superhero.chat`, whose origin must also
+appear in the server's CSP `connect-src` allowlist or every socket dies at connect time. See
+[WebSocket](/api-reference/websocket).
 
 ## What is open source, and where
 

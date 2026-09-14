@@ -183,7 +183,8 @@ a token the answer is `{ "total_users": 0 }`. It is cached for 20 seconds.
 returns a flat map of currency code to rate:
 
 ```json
-{ "usd": 0.0312, "eur": 0.0287, "gbp": 0.0243, "cny": 0.221 }
+{ "usd": 0.0312, "eur": 0.0287, "aud": 0.0471, "brl": 0.1683,
+  "cad": 0.0428, "chf": 0.0249, "gbp": 0.0243, "xau": 0.0000094 }
 ```
 
 The web app lowercases every key, discards any value that is not a finite number, and polls this
@@ -194,9 +195,18 @@ figure when the API has not already supplied one.
 curl -s "https://api.superhero.com/api/coins/aeternity/rates"
 ```
 
-Note that the map is **wider than the nine `convertTo` currencies** — `cny` appears in the app's
-own documentation of this endpoint but is not a valid `convertTo` value. Do not assume the two
-sets match.
+The map has **exactly eight keys** — `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp`, `xau` — one
+for each `convertTo` currency other than `ae` itself. The backend builds the upstream request as
+`vs_currencies=<the CURRENCIES list joined by commas>` and refuses to cache a partial answer
+(`isCompleteCurrencyRates` requires every code), so a response either has all eight or is replaced
+by the last known good snapshot.
+
+A `cny` key appears in the web-app repository's own documentation of this endpoint. It is not in
+`CURRENCIES`, it is not a valid `convertTo` value, and nothing in the backend would produce it.
+Read defensively anyway — the app lowercases every key and discards any value that is not a finite
+number — but do not build a currency picker from this map expecting more than the eight.
+
+`xau` is troy ounces of gold, not a currency; treat it accordingly when formatting.
 
 `GET /api/coins/aeternity/history` gives the AE price series as an array of
 `[timestamp_ms, price]` pairs:
@@ -300,7 +310,7 @@ row for every day in the range whether or not it did anything:
 | `pnl_usd` | number | The same in USD |
 
 ```bash
-curl -s "https://api.superhero.com/api/analytics/challenge?addresses=ak_A,ak_B&start_date=2026-09-01&end_date=2026-09-14"
+curl -s "https://api.superhero.com/api/analytics/challenge?addresses=ak_FIRST_ADDRESS,ak_SECOND_ADDRESS&start_date=2026-09-01&end_date=2026-09-14"
 ```
 
 `GET /api/analytics/challenge/preview` and `GET /api/analytics/preview` are **server-rendered HTML
@@ -323,11 +333,3 @@ inferred from a caller, so the field lists are the implementation, not a guess.
 - [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — the referral analytics endpoints
 - [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
 
-## Open questions
-
-- **Is the `GET /api/coins/aeternity/rates` map really wider than the nine `convertTo`
-  currencies?** The web-app documentation of this endpoint shows a `cny` key, which is not a valid
-  `convertTo` value, while the backend's own `CURRENCIES` list has exactly the nine. Whether the
-  live map carries extra keys from the upstream provider, or whether the app's example is simply
-  wrong, needs one request against the live endpoint. Read defensively either way: lowercase the
-  keys and discard anything that is not a finite number, as the app does.

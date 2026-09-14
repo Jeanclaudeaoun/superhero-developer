@@ -473,9 +473,12 @@ backend sends the unsubscribe once per source value rather than tracking which o
 subscribed with, and reconnects after a 20-second timeout when the socket drops — worth copying,
 since a dropped socket is silent and the gap is otherwise invisible.
 
-The Superhero API in turn republishes decoded activity on its own WebSocket channels
-(`token-created`, `token-updated`, `token-transaction`, `token-history`), which is usually the
-easier integration if you only care about tokens.
+The Superhero API in turn republishes decoded activity on its own WebSocket, which is usually
+the easier integration if you only care about tokens. It emits exactly two channels —
+`token-updated` and `token-history` — from `TokenWebsocketGateway`. The web app also registers
+listeners for `token-created` and `token-transaction`, but the backend emits neither, so those
+never fire. There are no `@SubscribeMessage` handlers on the gateway either: the relay was
+removed as a security fix, so a client `message` emit is dropped and delivery is at-most-once.
 
 ## Open questions
 

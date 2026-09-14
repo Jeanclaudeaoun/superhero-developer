@@ -82,6 +82,38 @@ The caveat to internalise before you fund it: **that only works as a backup if t
 today. Enroll the recovery code the flow offers you, and read
 [The Built-In Wallet](/wallets/built-in-wallet) for what each factor does and does not survive.
 
+## Push notifications
+
+Push is standard Web Push (VAPID), not a native notification channel, and it is opt-in behind a user
+gesture. `enablePush()` in `src/features/notifications/notification-feed-client.ts` runs this
+sequence, returning a state at each point it can stop:
+
+| Step | Returns if it stops here |
+| --- | --- |
+| Check the browser supports push at all | `unsupported` |
+| Fetch the server's VAPID public key | `unconfigured` — the backend has no key set |
+| `Notification.requestPermission()` — **this is the OS prompt** | `denied`, or `default` if dismissed |
+| Register `/notifications-sw.js` as a service worker, scope `/` | — |
+| `pushManager.subscribe({ userVisibleOnly: true, applicationServerKey })` | — |
+| Register the endpoint with the backend under your bearer token | — |
+
+Three things follow that are worth knowing before you go looking for a setting:
+
+- **Exactly one permission is requested** — the browser's notification permission. No location, no
+  contacts, no background-refresh grant. `userVisibleOnly: true` means the browser will not deliver
+  a push that does not show a notification, which is what stops silent background wake-ups.
+- **It can be unavailable through no fault of yours.** If the server has no VAPID key configured,
+  the app reports "Browser push is not configured on the server (no VAPID key)" and stops before
+  prompting you. The backend side is `superhero-api/src/notifications/`, and its public-key route
+  deliberately returns nothing when the key pair is incomplete, so the app does not prompt for a
+  channel that cannot deliver.
+- **It must be triggered by a tap.** The permission prompt requires a user gesture, so push is
+  enabled from a control in the app, never automatically on load.
+
+If a server VAPID key is rotated, an existing subscription made with the old key can never receive a
+push; the client detects the mismatch, unsubscribes and re-subscribes rather than leaving you
+silently unnotified.
+
 ## Connecting the standalone Superhero Wallet app instead
 
 On a mobile browser the app cannot detect an extension — there are none — so it uses a deep link.
@@ -101,13 +133,14 @@ the app through the transaction queue route, described in
 
 ## Open questions
 
-- Which iOS Safari control is current for **Add to Home Screen**? The app ships two versions of this
-  copy — the landing-page prompt says "Tap the Share button" while the install guide says "Tap the
-  three-dot menu (⋯)". Both live in `src/locales/en.json`. Someone should test on a current iOS and
-  reconcile them.
-- How are push notifications enabled and what permissions do they request? The install copy lists
-  push notifications as a benefit of installing, but no permission-request flow was documented in the
-  files read for this page.
-- Do the native apps and the installed PWA differ in any feature beyond the store wrapper? No
-  comparison was found in the repository, and a screenshot-based walkthrough of native onboarding is
-  still wanted for this page.
+- **Which iOS Safari control is current for Add to Home Screen?** The app ships two contradictory
+  versions of this copy — the landing-page prompt says "Tap the Share button", the install guide says
+  "Tap the three-dot menu (⋯)" — and both live in `src/locales/en.json`, so the repository cannot
+  adjudicate between them. This needs one test on a current iOS Safari, after which the losing string
+  should be fixed in the app rather than worked around here.
+- **Do the native apps and the installed PWA differ in any feature beyond the store wrapper?** No
+  comparison exists in any repository. The surface-gated behaviours documented above are keyed on
+  *installed versus browser tab*, not on native versus PWA, so there is no code path that
+  distinguishes them — but that is an absence of evidence, not evidence of parity. Someone with both
+  installed would have to compare, and a screenshot-based walkthrough of native onboarding is still
+  wanted for this page.
