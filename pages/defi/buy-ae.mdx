@@ -1,97 +1,58 @@
 ---
 title: "Buying AE"
-description: "How to actually get AE — every route Superhero points at is third-party, and the in-app on-ramp is disabled."
+description: "Earn AE inside Superhero, or buy it from the exchanges and swap aggregators the Get AE page links to."
 ---
 
 # Buying AE
 
-AE is the native coin of the æternity blockchain. You need it to pay transaction fees, to buy
-community tokens on the bonding curve, to swap on the DEX, and to fund invite links. Without
-AE you cannot do anything on Superhero that touches the chain.
+AE is the native coin of the æternity blockchain. You need it to pay transaction fees, buy
+community tokens on the bonding curve, swap on the DEX, and fund invite links.
 
-**Superhero does not sell you AE.** There is no in-app on-ramp in this build. The Get AE page
-is a directory: it points at Superhero-native ways to *earn* AE, and at third-party exchanges
-and swap aggregators where you can buy it. Everything you do on those providers is between you
-and them.
-
-The page lives at `https://superhero.com/get-ae`. The older `/buy-ae` path still works and
+The Get AE page at `https://superhero.com/get-ae` collects every route: ways to earn AE inside
+Superhero, and exchanges and swap aggregators where you can buy it. The older `/buy-ae` path
 redirects there.
 
-## Earn it first
+## Earn AE
 
-The page leads with earning, not buying, and lists two routes:
+| Route | Where |
+| --- | --- |
+| Refer & Earn | [`/trends/invite`](https://superhero.com/trends/invite) — see [Invite Links](/rewards/invite-links) |
+| Earn by posting on X | The [Superhero Rewards Program](/rewards/rewards-program), from the Refer & Earn page |
 
-| Route | Status | Where |
+Refer & Earn needs some AE to start with: each invite link is funded with the gift amount plus a
+0.001 AE fee cover for the invitee's redemption. It grows a balance rather than bootstrapping one.
+
+## Buy AE
+
+The Get AE page links to four providers:
+
+| Provider | What it is | Link |
 | --- | --- | --- |
-| Refer & Earn | Live | [`/trends/invite`](https://superhero.com/trends/invite) |
-| Earn by posting on X | Marked **Coming soon**, and the button is disabled on this page | — |
-
-The "coming soon" label is worth flagging: the
-[Superhero Rewards Program](/rewards/rewards-program) — which pays 50 AE for linking an X
-account and 10–30 AE per qualifying post — is live on the Refer & Earn page. The Get AE page's
-card for it has simply not been updated. Go to `/trends/invite` and use the rewards cards
-there.
-
-Note also that Refer & Earn requires AE to start with: you fund each invite link with the
-gift plus a 0.001 AE fee cover. It grows a balance, it does not bootstrap one.
-
-## Buy it from a third party
-
-These are the four providers the app links to, with the exact destinations it uses:
-
-| Provider | What it is | Link the app opens |
-| --- | --- | --- |
-| Gate.io | Centralised exchange with an AE/USDT market — the app calls it one of the main options for AE liquidity | `https://www.gate.io/trade/AE_USDT` |
+| Gate.io | Centralised exchange with an AE/USDT market | `https://www.gate.io/trade/AE_USDT` |
 | Changelly | Instant swap service with many AE pairs | `https://changelly.com/` |
-| Swapzone | Aggregator that compares swap providers for an ETH-to-AE route | `https://swapzone.io/exchange/eth/ae` |
-| SwapSpace | Aggregator offering direct ETH-to-AE routing where available | `https://swapspace.co/?direction=direct&from=eth&fromNetwork=ETH&to=ae&toNetwork=AE` |
+| Swapzone | Aggregator comparing swap providers for an ETH-to-AE route | `https://swapzone.io/exchange/eth/ae` |
+| SwapSpace | Aggregator with direct ETH-to-AE routing where available | `https://swapspace.co/?direction=direct&from=eth&fromNetwork=ETH&to=ae&toNetwork=AE` |
 
-The two aggregators are the practical answer for anyone holding ETH, and they route around
-the problem entirely: you get AE delivered to your æternity address without bridging, so
-none of the [bridge risk](/defi/bridge) applies.
+If you hold ETH, the two aggregators deliver AE straight to your æternity address with no
+bridging step.
+
+Identity verification, payment methods, purchase limits and country availability are set by each
+provider. Centralised exchanges such as Gate.io require an account and identity verification;
+instant-swap services and aggregators typically need no account for a crypto-to-crypto swap but
+may apply their own checks on larger amounts. Superhero collects no payment information.
 
 ## Before you buy
 
-The app's own safety checklist, which is short and worth following exactly:
-
-- **Confirm the token, the network, the deposit address, the withdrawal fees, and the minimum
-  withdrawal amount.** AE has an ERC-20 representation on Ethereum as well as the native coin
-  on æternity; sending the wrong one to the wrong network loses it.
-- **Start with a small test transaction** before moving larger amounts. Pay the fee twice
-  rather than discovering a wrong address with your whole balance.
-- **Keep custody in your own wallet** where you can, and never share private keys or seed
-  phrases with anyone, including support staff.
-
-Two more that follow from how these routes work:
-
-- **You need a receiving address first.** Set up a wallet before you buy — see
+- **Set up a wallet first** so you have an `ak_` address to receive at — see
   [Fund your wallet](/getting-started/fund-wallet).
-- **Availability changes.** The app's own tip says so: pairs, routes and supported regions
-  move around, so confirm details with the provider before sending funds.
-
-## What the in-app ETH on-ramp would have done
-
-There is a `BuyAeWidget` in the codebase that bridged native ETH to æternity as aeETH and
-then swapped aeETH to AE through the DEX in one flow, with staged progress — connecting,
-bridging, waiting for the aeETH deposit, swapping, completed.
-
-It is disabled. Its import in the right-hand rail is commented out, the "Buy AE with ETH"
-quick action is commented out, and its route at `/defi/buy-ae-with-eth` redirects to
-`/defi/swap`. See [Bridging from Ethereum](/defi/bridge) for the full evidence and the
-implications. If you want ETH to AE today, use one of the two aggregators above.
-
-## KYC, limits and regions
-
-Superhero runs none of this. Every purchase route on the page is an external link, so identity
-verification, payment methods, purchase limits and country availability are set by Gate.io,
-Changelly, Swapzone or SwapSpace respectively, and are subject to change without anything in
-Superhero reflecting it. The app collects no payment information and performs no verification
-of its own.
-
-Broadly: centralised exchanges like Gate.io require an account and identity verification;
-instant-swap services and aggregators typically need no account for a crypto-to-crypto swap
-but may apply their own compliance checks on larger amounts or flagged funds. Confirm the
-current rules with the provider rather than trusting a summary here.
+- **Confirm the token, the network, the deposit address, the withdrawal fee and the minimum
+  withdrawal.** AE also exists as an ERC-20 token on Ethereum; only native AE on æternity works
+  in Superhero, and sending the wrong one to the wrong network loses it.
+- **Start with a small test transaction** before moving larger amounts.
+- **Keep custody in your own wallet**, and never share private keys or seed phrases with anyone,
+  including support staff.
+- **Check availability.** Pairs, routes and supported regions change; confirm details with the
+  provider before sending funds.
 
 ## After you have AE
 
@@ -102,34 +63,9 @@ current rules with the provider rather than trusting a summary here.
 | Provide liquidity and earn fees | [Liquidity Pools](/defi/pools) |
 | Create invite links and earn referrals | [Invite Links](/rewards/invite-links) |
 
-## Open questions
-
-- **What are each provider's limits, fees and supported countries?** Not determinable from any
-  Superhero repository — the app stores a link and nothing else, and the backend has no on-ramp
-  module at all. Each provider's own terms page is the only source, and they vary by the country
-  you are in, so no figure quoted here would be right for every reader.
-- **Will the in-app ETH on-ramp return?** The code carries re-enable instructions but no reason for
-  the disablement and no timeline, and `superhero-api` has no corresponding endpoint to re-point at.
-  Only a maintainer can say; see [Bridging from Ethereum](/defi/bridge) for the same question about
-  the bridge it shared code with.
-- **Is the "coming soon" label on the X earning card accurate?** More likely than it looked. The
-  backend's X posting reward is built but gated behind several environment switches that ship off:
-  `.env.example` sets `PROFILE_X_POSTING_REWARD_ENABLE_POST_FETCH=false` (which short-circuits every
-  reward evaluation with `post_fetch_disabled`), `PROFILE_X_PERPOST_REWARD_ENABLED=false` and
-  `PROFILE_X_INVITE_MILESTONE_REWARD_AMOUNT_AE=0`
-  (`superhero-api/src/profile/profile.constants.ts`, `.env.example`). Those are example values, not
-  the production configuration, so what remains unknown is which switches `api.superhero.com`
-  actually has set — a question only Superhero can answer.
-
 ## Read more
 
-- [Fund your wallet](/getting-started/fund-wallet) — set up somewhere to receive AE before
-  you buy any.
-- [AE and gas](/aeternity/ae-and-gas) — what AE is actually spent on, and how much you need
-  to keep back for fees.
-- [Bridging from Ethereum](/defi/bridge) — why the in-app ETH route is not an option.
-- [Invite Links](/rewards/invite-links) — the live earn-AE route the Get AE page links to.
-- [Swapping](/defi/swap) — what to do with AE once you have it.
-- [Get AE on superhero.com](https://superhero.com/buy-ae) — the live directory page, which
-  redirects to `/get-ae`.
-- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — the earning side.
+- [Fund your wallet](/getting-started/fund-wallet) — set up somewhere to receive AE.
+- [AE & Gas](/aeternity/ae-and-gas) — what AE is spent on, and how much to keep back for fees.
+- [Invite Links](/rewards/invite-links) — the earn-AE route.
+- [Testnet](/getting-started/testnet) — free test AE for development.

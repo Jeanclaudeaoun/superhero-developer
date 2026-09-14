@@ -1,13 +1,13 @@
 ---
 title: "How the Skill Works"
-description: "The anatomy of the agent skill: SKILL.md, the guides, and the scripts."
+description: "The anatomy of the agent skill: SKILL.md, the guides, the scripts, and the conventions that make it runtime-agnostic."
 ---
 
 # How the Skill Works
 
-The Superhero agent skill is a directory, not a service. Understanding its three layers — the
-entry point, the playbooks and the executables — is what lets you extend it, audit it, or
-replace the agent entirely and drive the scripts from cron.
+The Superhero agent skill is a directory, not a service. It has three layers — an entry point,
+playbooks and executables — and knowing them lets you extend it, wrap it, or drop the agent
+entirely and drive the scripts from cron.
 
 ## The three layers
 
@@ -17,17 +17,17 @@ replace the agent entirely and drive the scripts from cron.
 | Playbooks | `guides/*.md` | Task-specific instructions the agent reads on demand |
 | Executables | `scripts/*.mjs` | Plain Node scripts that do the on-chain work and print JSON |
 
-Two supporting directories complete the picture:
+Two supporting paths complete the picture:
 
-| Directory | Contents |
+| Path | Contents |
 | --- | --- |
 | `contracts/` | Nine JSON files: contract ACIs plus `PollBytecode.json`, the compiled Poll contract the governance script deploys |
 | `package.json` | Two runtime dependencies and a `skill` block declaring the install command and the required environment variable |
 
-## The frontmatter schema, field by field
+## The frontmatter schema
 
-`SKILL.md` opens with YAML frontmatter. Two fields are required by the
-[Agent Skills specification](https://agentskills.io/specification); the third is a
+`SKILL.md` opens with YAML frontmatter. `name` and `description` are required by the
+[Agent Skills specification](https://agentskills.io/specification); `metadata` is a
 runtime-specific extension.
 
 ```yaml
@@ -62,15 +62,14 @@ metadata:
 
 | Field | Type | What it does |
 | --- | --- | --- |
-| `name` | string | The skill's identifier, `superhero`. Under the Agent Skills standard this must match the containing folder's name, which is why the install instructions all clone into a directory called `superhero` rather than `superhero-agent-skill` |
-| `description` | string | The trigger text. Runtimes keep this in context permanently and load the full `SKILL.md` only when a request matches it. It names the four capabilities — posting, token creation, trading, autonomous mode with cron — so that a request mentioning any of them routes here |
+| `name` | string | The skill's identifier, `superhero`. Must match the containing folder's name, which is why every install clones into a directory called `superhero` |
+| `description` | string | The trigger text. Runtimes keep this in context permanently and load the full `SKILL.md` only when a request matches it. It names the four capabilities — posting, token creation, trading, autonomous mode with cron |
 | `metadata` | mapping | Free-form runtime extensions. Runtimes that do not recognise a key ignore it |
 | `metadata.openclaw.requires.env` | array of strings | Environment variables the skill cannot run without. One entry: `AE_PRIVATE_KEY` |
-| `metadata.openclaw.primaryEnv` | string | The single variable the runtime should prompt for at install time. Also `AE_PRIVATE_KEY` |
-| `metadata.openclaw.install` | array of objects | Install steps the runtime can execute on the operator's behalf. Each has an `id`, a `kind` (`node`), a `package`, and a human-readable `label`. Two entries, one per npm dependency |
+| `metadata.openclaw.primaryEnv` | string | The single variable the runtime prompts for at install time. Also `AE_PRIVATE_KEY` |
+| `metadata.openclaw.install` | array of objects | Install steps the runtime can execute. Each has an `id`, a `kind` (`node`), a `package` and a `label`. One entry per npm dependency |
 
-The same two dependencies are declared a second time, canonically, in `package.json`, which
-also carries a parallel `skill` block:
+`package.json` declares the same requirements in a runtime-agnostic `skill` block:
 
 ```json
 {
@@ -86,95 +85,66 @@ also carries a parallel `skill` block:
 }
 ```
 
-Two declarations of the same contract is redundant but harmless: a runtime that understands
-neither block still works, because `npm install` in the skill directory resolves the
-`dependencies` field like any Node project.
+A runtime that understands neither block still works: `npm install` in the skill directory
+resolves the `dependencies` field like any Node project.
 
-### Which runtimes read which block
+### What each runtime reads
 
-The `metadata` mapping is the standard's escape hatch, and what a runtime does with the keys
-inside it is entirely that runtime's business.
-
-| Runtime | What it reads |
+| Runtime | Frontmatter fields it uses |
 | --- | --- |
-| OpenClaw / ClawHub | The `metadata.openclaw` block. `requires.env`, `requires.bins`, `primaryEnv` and `envVars` are documented fields of ClawHub's skill format, and its security analysis flags a skill whose code reads an environment variable the frontmatter does not declare |
-| GitHub Copilot | `name`, `description`, `allowed-tools`, and a `metadata` section it uses for its own purposes — a version field, and the provenance `gh skill` writes on install. **No environment declaration at all**, so nothing prompts for `AE_PRIVATE_KEY` |
-| Claude Code | `name` and `description` for discovery. It has its own permission system rather than an env declaration |
+| OpenClaw / ClawHub | The `metadata.openclaw` block: `requires.env`, `primaryEnv` and `install` |
+| GitHub Copilot | `name`, `description`, `allowed-tools`, and its own `metadata` keys. No environment declaration |
+| Claude Code | `name` and `description` for discovery. Permissions come from its own settings |
 
-The practical rule: **assume nothing prompts you.** Set `AE_PRIVATE_KEY` yourself before the
-first run, on every runtime, and verify with `superhero-wallet.mjs exists` as the first thing
-you ask for. The `package.json` `skill.env` block is the runtime-agnostic place to look for
-the same information if you are adapting the skill somewhere new.
+Set `AE_PRIVATE_KEY` yourself before the first run on every runtime, and ask for
+`superhero-wallet.mjs exists` as the first command.
 
 ## The `{baseDir}` placeholder
 
-Every command inside `SKILL.md` and the guides is written with a `{baseDir}` prefix:
+Every command inside `SKILL.md` and the guides carries a `{baseDir}` prefix:
 
 ```bash
 node {baseDir}/scripts/superhero-wallet.mjs balance
 ```
 
-`{baseDir}` is not shell syntax and not an environment variable. It is a placeholder the
-runtime substitutes with the absolute path of the installed skill directory before the text
-reaches the model. An agent that has loaded the skill from
-`/home/you/.claude/skills/superhero` sees:
+`{baseDir}` is not shell syntax and not an environment variable. The runtime substitutes it
+with the absolute path of the installed skill directory before the text reaches the model. An
+agent that loaded the skill from `/home/you/.claude/skills/superhero` sees:
 
 ```bash
 node /home/you/.claude/skills/superhero/scripts/superhero-wallet.mjs balance
 ```
 
-Two consequences matter in practice:
+If your runtime does not perform the substitution, `cd` into the skill directory and use the
+relative form, `node scripts/superhero-wallet.mjs balance`, which is the form the trading,
+portfolio and governance guides use.
 
-1. **If your runtime does not perform the substitution, the commands will not run.** The model
-   will emit `node {baseDir}/scripts/...` literally and the shell will fail. Resolve the paths
-   yourself, or `cd` into the skill directory and use the relative form
-   `node scripts/superhero-wallet.mjs balance`, which is what the `guides/governance.md`,
-   `guides/trading.md` and `guides/portfolio.md` examples already use.
-2. **Substituting the path is not the same as setting the working directory.** Five scripts
-   load their contract ACIs with a *cwd-relative* path, `./contracts/...`. Running
-   `node /abs/path/to/superhero/scripts/superhero-post.mjs "hi"` from your home directory
-   fails with `ENOENT` even though the script path was resolved correctly.
+Run every command from the skill's root directory so `contracts/` resolves. Substituting
+`{baseDir}` sets the script path, not the working directory; a `cd` into the skill root does
+both.
 
-## The working-directory contract
+## Script conventions
 
-| Script | Reads `contracts/` how | Safe to run from anywhere? |
-| --- | --- | --- |
-| `superhero-post.mjs` | `./contracts/Tipping_v3.aci.json` | No |
-| `superhero-comment.mjs` | `./contracts/Tipping_v3.aci.json` | No |
-| `superhero-token-swap.mjs` | `./contracts/AffiliationBondingCurveTokenSale.aci.json`, `./contracts/FungibleTokenFull.aci.json` | No |
-| `superhero-token-create.mjs` | `./contracts/CommunityFactory.aci.json`, `./contracts/BondingCurve.aci.json` | No |
-| `superhero-invite.mjs` | `./contracts/CommunityFactory.aci.json` | No |
-| `superhero-governance.mjs` | Resolved from the script's own location | Yes |
-| The other six | No contract files | Yes |
+Every script in `scripts/` follows five conventions:
 
-The rule that always works: `cd` into the skill root first.
-
-## The script conventions
-
-Every script in `scripts/` follows the same five conventions. They are what make the skill
-runtime-agnostic.
-
-1. **One file, one domain, `main()` with a `switch`.** The first CLI argument selects a
-   `case`. Unrecognised arguments fall through to a `help` block.
-2. **Structured output on stdout.** Results are `JSON.stringify`'d and printed with
-   `console.log`. Nothing else is written to stdout.
-3. **Human progress on stderr.** Lines like `Posting "..." with 0 link(s)...` and
-   `Step 1/3: Preclaiming ...` go to `console.error`, so `stdout` stays machine-parseable even
-   during long multi-transaction flows. Pipe stdout to `jq` and leave stderr on the terminal.
-4. **The key comes from the environment, once.** Each script has its own `loadAccount()` or
-   `loadAddress()` reading `process.env.AE_PRIVATE_KEY`. No script writes it anywhere, and no
-   script prints it — except `superhero-wallet.mjs generate` and `import`, whose entire purpose
-   is to show it to you.
+1. **One file, one domain, `main()` with a `switch`.** The first CLI argument selects a case;
+   `help` prints usage.
+2. **JSON on stdout.** Results are `JSON.stringify`'d and printed with `console.log`. Nothing
+   else is written to stdout.
+3. **Progress on stderr.** Lines like `Step 1/3: Preclaiming ...` go to `console.error`, so
+   stdout stays machine-parseable during multi-transaction flows.
+4. **The key comes from the environment.** Each script reads `process.env.AE_PRIVATE_KEY`. No
+   script writes it anywhere, and none prints it except `superhero-wallet.mjs generate` and
+   `import`.
 5. **Non-zero exit on failure.** Every script ends with a `.catch` that prints the message to
    stderr and calls `process.exit(1)`.
 
-Nothing in the scripts is model-specific. There is no prompt, no LLM call, no API key beyond
-the wallet. The "agent" part lives entirely in the markdown.
+Nothing in the scripts is model-specific: no prompt, no LLM call, no API key beyond the wallet.
+The "agent" part lives entirely in the markdown.
 
 ## How the agent picks a guide
 
-`SKILL.md` contains a capabilities table mapping each task to a guide path and a one-line
-example command:
+`SKILL.md` maps each task to a guide and a one-line example command:
 
 | Task | Guide | Quick command |
 | --- | --- | --- |
@@ -186,32 +156,23 @@ example command:
 | Trending | `guides/trading.md` | `superhero-trending.mjs tokens 10` |
 | Holdings and history | `guides/portfolio.md` | `superhero-portfolio.mjs holdings` |
 | Transactions | `guides/portfolio.md` | `superhero-transactions.mjs token ct_...` |
-| Invite links | (inline in `SKILL.md`) | `superhero-invite.mjs generate 1 5` |
+| Invite links | inline in `SKILL.md` | `superhero-invite.mjs generate 1 5` |
 | Wallet and balance | `guides/setup.md` | `superhero-wallet.mjs balance` |
-| Names (AENS) | (inline in `SKILL.md`) | `superhero-name.mjs register myagentname` |
+| Names (AENS) | inline in `SKILL.md` | `superhero-name.mjs register myagentname` |
 | Autonomous mode | `guides/autonomous.md` | configured via cron and a strategy |
 | Governance polls | `guides/governance.md` | `superhero-governance.mjs list` |
 
-The instruction under the table is explicit: *read the relevant guide for detailed
-instructions before executing a task.* This is progressive disclosure. Only `SKILL.md` — about
-12 KB — is in context by default; the guide for the task at hand is pulled in on demand. Two
-capabilities, invites and AENS names, have no guide file and are documented inline in
-`SKILL.md` instead.
+Only `SKILL.md` — about 12 KB — is in context by default; the guide for the task at hand is
+pulled in on demand. `SKILL.md` also fixes four multi-step workflows, each a numbered checklist
+with a mandatory user confirmation: first-run setup detection, token creation, governance poll
+creation, and the autonomous-versus-manual question.
 
-`SKILL.md` also hard-codes four multi-step workflows that the agent must follow rather than
-improvise: first-run setup detection, token creation, governance poll creation, and the
-autonomous-versus-manual mode question. Each is a numbered checklist with a mandatory user
-confirmation in the middle.
-
-## Adding a script of your own
-
-To extend the skill without forking its design:
+## Add a script of your own
 
 1. **Write `scripts/superhero-<domain>.mjs`** as an ES module (`package.json` sets
-   `"type": "module"`). Follow the five conventions above — especially JSON on stdout and
+   `"type": "module"`). Follow the five conventions — especially JSON on stdout and
    `process.exit(1)` on failure.
-2. **Resolve contract paths from the script's own location,** the way
-   `superhero-governance.mjs` does, rather than from the cwd:
+2. **Resolve contract paths from the script's own location** so it runs from any directory:
 
    ```js
    import { fileURLToPath } from 'url';
@@ -223,19 +184,15 @@ To extend the skill without forking its design:
 3. **Add a `help` case.** It is the only interface an unfamiliar agent has to your script.
 4. **Add a row to the capabilities table in `SKILL.md`,** and a guide in `guides/` if the task
    needs more than one command. The agent will not find a script that is not in the table.
-5. **Drop any new ACI into `contracts/`.** The existing ACIs are exported from the Superhero
-   contract sources — see [Calling contracts](/contracts/calling-contracts).
+5. **Drop any new ACI into `contracts/`.** See [Calling contracts](/contracts/calling-contracts).
 
-If you need a network other than mainnet, note that only `superhero-governance.mjs` honours an
-`AE_NODE_URL` override. The other eleven scripts hard-code
+Only `superhero-governance.mjs` reads an `AE_NODE_URL` override; the other scripts use
 `https://mainnet.aeternity.io`.
 
-## Read more
+## Related
 
 - [CLI Reference](/agents/cli-reference) — every command, its arguments, and the JSON it prints
 - [Other Agents & Runtimes](/agents/other-runtimes) — how to use the scripts with no agent at all
-- [Agent Quickstart](/agents/quickstart) — install it and run the three verification commands
+- [Agent Quickstart](/agents/quickstart) — install it and run the verification commands
 - [Calling contracts](/contracts/calling-contracts) — where the ACIs in `contracts/` come from
 - [Agent Skills specification](https://agentskills.io/specification) — the open standard the frontmatter follows
-- [ClawHub skill format](https://docs.openclaw.ai/clawhub/skill-format) — the `metadata.openclaw` fields and what the registry does with them
-- [Creating agent skills for Copilot CLI](https://docs.github.com/en/enterprise-cloud@latest/copilot/how-tos/copilot-cli/customize-copilot/create-skills) — the frontmatter fields Copilot recognises

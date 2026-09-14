@@ -6,34 +6,27 @@ description: "Use the skill from any agent that can run a shell command — or f
 # Other Agents & Runtimes
 
 Nothing in the Superhero skill is runtime-specific. There is no SDK, no prompt template, no
-model call, and no API key beyond the wallet. It is twelve Node scripts and nine markdown
-files. Any agent that can read a file, set an environment variable and run `node` can use it —
-and if you strip the agent out entirely, the scripts still work.
+model call and no API key beyond the wallet — twelve Node scripts and nine markdown files. Any
+agent that can read a file, set an environment variable and run `node` can use it, and the
+scripts work with no agent at all.
 
 ## The generic contract
 
-Five steps, in this order:
-
-1. **Clone the repository** somewhere the agent can read.
+1. **Clone the repository** somewhere the agent can read, as a directory named `superhero`:
 
    ```bash
    git clone https://github.com/superhero-com/superhero-agent-skill.git superhero
    ```
 
-   Name the directory `superhero`. Runtimes that implement the
-   [Agent Skills specification](https://agentskills.io/specification) require the directory
-   name to match the frontmatter `name`, and runtimes that do not implement it will not care.
-
-2. **Install the two dependencies.**
+2. **Install the two dependencies:**
 
    ```bash
    cd superhero && npm install
    ```
 
-   That resolves `@aeternity/aepp-sdk` (^14.1.0) and `bignumber.js` (^10.0.2) from
-   `package.json`. There is nothing else.
+   This resolves `@aeternity/aepp-sdk` (^14.1.0) and `bignumber.js` (^10.0.2).
 
-3. **Export the key into the process environment.**
+3. **Export the key into the process environment:**
 
    ```bash
    export AE_PRIVATE_KEY=<your_secret_key>
@@ -44,63 +37,51 @@ Five steps, in this order:
    requirements table in the [CLI Reference](/agents/cli-reference).
 
 4. **Point the agent at `SKILL.md`** as its instruction file. If your runtime substitutes a
-   base-directory placeholder, the `{baseDir}` tokens throughout the skill resolve
-   automatically. If it does not, tell the agent to run everything from the skill directory
-   with relative paths instead — `node scripts/superhero-wallet.mjs balance`.
+   base-directory placeholder, the `{baseDir}` tokens resolve automatically. If not, tell the
+   agent to run everything from the skill directory with relative paths:
+   `node scripts/superhero-wallet.mjs balance`.
 
-5. **Run from the skill root.** Five scripts load contract ACIs from `./contracts/`, relative
-   to the current working directory. This is the failure mode that catches every new
-   integration.
+5. **Run from the skill root** so `contracts/` resolves.
 
-That is the whole contract. Everything else — which guide to read, when to ask before
-trading — is instruction text the model follows, not machinery.
+Everything else — which guide to read, when to ask before trading — is instruction text the
+model follows.
 
 ## What the scripts guarantee
-
-These are the invariants you can build against:
 
 | Guarantee | Detail |
 | --- | --- |
 | JSON on stdout | Every successful command prints one `JSON.stringify` result and nothing else |
-| Human text on stderr | Progress lines and all errors. Safe to discard, or to surface as a log |
+| Human text on stderr | Progress lines and errors. Safe to discard, or to surface as a log |
 | Exit `0` or `1` | Nothing else. `1` means the command did not do what you asked |
-| Idempotent reads | Every read-only command can be re-run freely; none of them cost gas |
+| Idempotent reads | Every read-only command can be re-run freely; none costs gas |
 | One key, from the environment | No script persists, transmits or prints the key, except the two wallet commands whose purpose is to show it to you |
 
-The one wrinkle: `superhero-name.mjs` prints a JSON *error* object to stdout on two failure
-paths while still exiting `1`. Branch on the exit code, not on whether stdout parsed.
+`superhero-name.mjs register` and `resolve` print a JSON error object to stdout on failure and
+exit `1`. Branch on the exit code, not on whether stdout parsed.
 
-## Wrapping the scripts as an MCP server
+## Wrap the scripts as an MCP server
 
 Agents that prefer typed tools over raw shell access can front the scripts with a
 [Model Context Protocol](https://modelcontextprotocol.io/docs/develop/build-server) server.
-The mapping is nearly mechanical, because the scripts already have the shape of tools: fixed
-argument lists, structured output, a single failure mode.
-
-A reasonable design:
+The scripts already have the shape of tools: fixed argument lists, structured output, a single
+failure mode.
 
 - **One MCP tool per subcommand**, not one per script. `superhero_trending_tokens` and
-  `superhero_token_buy` are separate tools with separate schemas; `superhero-trending.mjs` as
-  a single tool taking a free-text argument gives the model nothing to reason about.
+  `superhero_token_buy` are separate tools with separate schemas.
 - **Spawn the script, parse stdout as JSON, return it as structured content.** Pass stderr
-  through as the human-readable part of the result so failures are legible.
-- **Set the child process's working directory to the skill root** so the `./contracts/` reads
-  resolve.
-- **Pass `AE_PRIVATE_KEY` in the child environment** from the server's own configuration.
-  The model never sees it.
-- **Split the tool surface by risk.** Expose the read-only commands unconditionally; put
-  `buy`, `sell`, `create`, `post`, `vote`, `register` and the invite commands behind an
-  explicit server-side toggle or a confirmation step. This gives you
-  [manual mode](/agents/autonomous-mode) enforced outside the model.
-- **Return non-zero exits as tool errors**, with the stderr text as the message, rather than
-  as successful results containing an error string.
+  through as the human-readable part of the result.
+- **Set the child process's working directory to the skill root** so `contracts/` resolves.
+- **Pass `AE_PRIVATE_KEY` in the child environment** from the server's own configuration. The
+  model never sees it.
+- **Split the tool surface by risk.** Expose the read-only commands unconditionally; put `buy`,
+  `sell`, `create`, `post`, `vote`, `register` and the invite commands behind a server-side
+  toggle or a confirmation step. This gives you [manual mode](/agents/autonomous-mode)
+  enforced outside the model.
+- **Return non-zero exits as tool errors**, with the stderr text as the message.
 
-The last two points are the reason to build the wrapper at all. A shell-access agent can run
-`superhero-token-swap.mjs buy` whenever it decides to; an MCP server decides for it.
+## Run it from cron with no agent
 
-## Running it from cron with no agent at all
-
-The monitoring half of the loop needs no model. These are ordinary programs.
+The monitoring half of the loop needs no model:
 
 ```bash
 #!/usr/bin/env bash
@@ -121,55 +102,39 @@ node scripts/superhero-transactions.mjs mine 50 > "logs/mine-$stamp.json"
 ```
 
 That gives you a time series of the trending list and your own portfolio with no LLM in the
-path, no cost beyond bandwidth, and no possibility of an unintended transaction — the three
-scripts above never sign anything, and `superhero-trending.mjs` does not even read the key.
+path and no possibility of an unintended transaction — none of these three commands signs
+anything, and `superhero-trending.mjs` does not read the key at all.
 
-From there you can go further without adding an agent:
+From there:
 
 - Pipe the JSON into `jq` and alert when a held token's `trending_score` drops past your
-  threshold. That is `sell_on_score_drop_percent` implemented in shell.
-- Diff consecutive `mine` snapshots to detect trades you did not authorise — a cheap tripwire
-  if you *do* also run an autonomous agent.
-- Feed `superhero-transactions.mjs all 100` into a database and compute your own signals
-  rather than trusting the trending score. See [The Trending Score](/tokens/trending-score).
+  threshold — `sell_on_score_drop_percent` implemented in shell.
+- Diff consecutive `mine` snapshots to detect trades you did not authorise, a cheap tripwire if
+  you also run an autonomous agent.
+- Feed `superhero-transactions.mjs all 100` into a database and compute your own signals. See
+  [The Trending Score](/tokens/trending-score).
 
-Automating the *signing* half without a model is possible too — `buy` and `sell` are just
-commands — but it means a script deciding to spend money on a schedule with no judgement in
-the loop. Everything in [Safety & Limits](/agents/safety) applies twice over.
+Automating the *signing* half without a model is possible too — `buy` and `sell` are commands —
+but it means a script spending money on a schedule with no judgement in the loop. Everything in
+[Safety & Limits](/agents/safety) applies twice over.
 
-## Runtime-specific notes
+## Runtime notes
 
-| Runtime | Status |
+| Runtime | Notes |
 | --- | --- |
-| [OpenClaw](/agents/openclaw) | Verified. Frontmatter carries an `openclaw` metadata block; Gateway cron schedules the loop |
-| [Claude Code](/agents/claude-code) | Verified install path. No built-in scheduler; use print mode plus system cron |
-| [GitHub Copilot](/agents/copilot) | Verified install path. No scheduler |
-| Any other Agent Skills runtime | Should work — the skill uses only `name`, `description` and a namespaced `metadata` block, all of which the standard permits |
-| A bare shell, cron, or CI | Works. Nothing in the scripts requires an agent |
+| [OpenClaw](/agents/openclaw) | Frontmatter carries an `openclaw` metadata block; Gateway cron schedules the loop |
+| [Claude Code](/agents/claude-code) | No built-in scheduler; use print mode plus system cron |
+| [GitHub Copilot](/agents/copilot) | No scheduler; interactive use, or schedule the scripts directly |
+| Any other Agent Skills runtime | The skill uses only `name`, `description` and a namespaced `metadata` block, all of which the standard permits |
+| A bare shell, cron, or CI | Nothing in the scripts requires an agent |
 
-The install locations differ per runtime; the rest of this page does not.
+Only `superhero-governance.mjs` reads an `AE_NODE_URL` override; the other scripts use
+`https://mainnet.aeternity.io` and `https://api.superhero.com`.
 
-## Read more
+## Related
 
 - [How the Skill Works](/agents/how-the-skill-works) — the conventions this contract is built on
 - [CLI Reference](/agents/cli-reference) — the tool surface an MCP wrapper would expose, with JSON shapes
 - [Safety & Limits](/agents/safety) — read before you let anything sign on a schedule
 - [Scheduling & Cron](/agents/scheduling) — cadence, overlap and timezone considerations
 - [Build an MCP server](https://modelcontextprotocol.io/docs/develop/build-server) — the official getting-started guide
-- [Agent Skills specification](https://agentskills.io/specification) — the format the skill conforms to
-
-## Open questions
-
-- No MCP wrapper for these scripts is published in the Superhero organisation. The design
-  above is a recommendation, not a description of existing code — if one ships, it will be in
-  the [skill repository](https://github.com/superhero-com/superhero-agent-skill).
-- Only `superhero-governance.mjs` honours an `AE_NODE_URL` override; the eight other scripts
-  that reach a node hard-code `https://mainnet.aeternity.io`, and the six that reach the REST
-  API hard-code `https://api.superhero.com`. Running the skill against testnet would need a
-  patch in both places, so there is currently no safe rehearsal environment — even though the
-  backend itself is network-aware and ships testnet addresses for the factory, the
-  affiliation treasury and the governance registry. Two environment variables,
-  `AE_NODE_URL` and an `AE_API_BASE`, applied consistently across the scripts, would close
-  this; watch the
-  [skill repository](https://github.com/superhero-com/superhero-agent-skill) for them. See
-  [Testnet](/getting-started/testnet) for what testing on æternity normally looks like.

@@ -1,22 +1,16 @@
 ---
 title: "æternity Node & Middleware"
-description: "Read chain state directly: the node for contract calls and submission, the middleware for indexed history — and which host to point at."
+description: "Read chain state directly: the node for contract calls and submission, the middleware for indexed history, and the mirror on api.superhero.com."
 ---
 
 # æternity Node & Middleware
 
-The Superhero API is an index over the æternity chain, not the chain itself. When you need
-something it does not carry — an arbitrary transaction, an AEX-9 balance, a name's pointers, a
-contract's event log, or the ability to submit a transaction at all — you talk to an æternity
-**node** or its **middleware**.
-
-This page covers which hosts to use, why the two repositories disagree about that, which
-middleware endpoints the app and the agent skill actually call, and when the middleware beats the
-Superhero API.
+The Superhero API is an index over the æternity chain, not the chain itself. For anything it
+does not carry — an arbitrary transaction, an AEX-9 balance, a name's pointers, a contract's
+event log, or submitting a transaction at all — talk to an æternity **node** or its
+**middleware**.
 
 ## Node versus middleware
-
-They are different services with different jobs, usually deployed behind the same hostname.
 
 | | Node | Middleware |
 | --- | --- | --- |
@@ -25,85 +19,32 @@ They are different services with different jobs, usually deployed behind the sam
 | Use it for | Contract calls, dry-runs, balances, submitting transactions, current height | Transactions by account or contract, AEX-9 transfers and balances, AENS names, contract event logs |
 | Can it write? | Yes — transactions are submitted here | No, read-only |
 
-The æternity SDK's `Node` class wraps the **node** API. Everything in the agent skill that signs
-something — posting, creating a token, swapping, generating invites, voting — goes through a
-`Node` instance. The middleware is only ever read with plain `fetch`.
+The æternity SDK's `Node` class wraps the node API. Everything that signs something — posting,
+creating a token, swapping, generating invites, voting — goes through a `Node` instance. The
+middleware is read with plain `fetch`.
 
-## Which host?
+## Hosts
 
-Three sources point at two different mainnet hosts, and each is correct for its context.
-
-| Source | Mainnet node | Mainnet middleware |
+| | Mainnet | Testnet |
 | --- | --- | --- |
-| Web app (`src/config.ts`) | `https://mdw.wordcraft.fun` | `https://mdw.wordcraft.fun/mdw` |
-| Agent skill (`scripts/*.mjs`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw/v3` |
-| **The API server** (`superhero-api/src/configs/network.ts`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw` |
+| Node | `https://mainnet.aeternity.io` | `https://testnet.aeternity.io` |
+| Middleware | `https://mainnet.aeternity.io/mdw` | `https://testnet.aeternity.io/mdw` |
+| Middleware WebSocket | `wss://mainnet.aeternity.io/mdw/v2/websocket` | `wss://testnet.aeternity.io/mdw/v2/websocket` |
+| Explorer | `https://aescan.io` | `https://testnet.aescan.io` |
+| Compiler | `https://v7.compiler.aepps.com` | `https://v7.compiler.aepps.com` |
 
-The third row settles something the first two left open: **`api.superhero.com` itself indexes from
-the public æternity host**, not from `mdw.wordcraft.fun`. Its `NETWORK_MAINNET` record is
+`api.superhero.com` indexes from these hosts. The web app reaches mainnet through a
+Superhero-operated node and middleware at `https://mdw.wordcraft.fun` and
+`https://mdw.wordcraft.fun/mdw`, which serve the same `ae_mainnet` chain; a transaction submitted
+to either host is visible from the other.
 
-```text
-url:          https://mainnet.aeternity.io
-middlewareUrl: https://mainnet.aeternity.io/mdw
-websocketUrl:  wss://mainnet.aeternity.io/mdw/v2/websocket
-explorerUrl:   https://aescan.io
-compilerUrl:   https://v7.compiler.aepps.com
-```
-
-and testnet is the same with `testnet.` substituted. Every server-side chain read on this
-site — the token price sync, the AEX-9 `eventSupply` lookup behind `circulating_supply`, the live
-indexer's WebSocket subscription — goes to that host. So the data in the Superhero API is derived
-from the public middleware, whatever a browser page is configured to call directly.
-
-Testnet is not in dispute — all three use `https://testnet.aeternity.io` and
-`https://testnet.aeternity.io/mdw`.
-
-### Resolving the discrepancy
-
-Note the shape: both are `HOST` for the node and `HOST/mdw` for the middleware. That is the
-standard æternity deployment layout — the hosted middleware sits under `/mdw/` on the same origin
-as the node, while a local deployment serves it at the root. So `mdw.wordcraft.fun` is not a
-different kind of service; it is **Superhero's own node-plus-middleware deployment**, serving the
-same `ae_mainnet` chain as the public `mainnet.aeternity.io`. ("Wordcraft" is the internal name of
-the trending feature; the same host appears as `aeRpc` and `aeAPI` in the AE-to-ETH bridge
-configuration.)
-
-Which one is canonical depends on who is asking:
-
-- **In a browser, `mdw.wordcraft.fun` is the only option.** The server's Content-Security-Policy
-  `connect-src` allowlist in `server/lib/csp.cjs` contains `https://mdw.wordcraft.fun` and
-  `https://testnet.aeternity.io` — and **not** `https://mainnet.aeternity.io`. A browser page
-  served by Superhero cannot reach the public host; the request is blocked before it leaves.
-- **In a script there is no CSP,** so the agent skill uses the public host.
-- **On the server, the public host is the configured default** and `mdw.wordcraft.fun` does not
-  appear in the backend at all. `AE_NETWORK_ID` selects mainnet or testnet; the URLs themselves are
-  constants, not environment variables, so pointing a self-hosted deployment at a different node
-  means editing `network.ts`.
-
-Both serve the same chain, so a transaction submitted to one is visible from the other. The
-practical differences are operational — uptime, rate limiting and middleware sync lag.
-
-**Make it configurable.** `superhero-governance.mjs` already does:
-
-```js
-const NODE_URL = process.env.AE_NODE_URL || 'https://mainnet.aeternity.io';
-```
-
-The other eleven scripts hardcode the host. If you fork them, lift the URL into an environment
-variable first — it is the difference between a one-line fix and twelve when a host has a bad day.
-
-## Node endpoints in use
-
-The scripts use the node for two things.
+## Node endpoints
 
 **Current height**, read directly:
 
 ```bash
 curl -s "https://mainnet.aeternity.io/v3/headers/top"
 ```
-
-Used by `superhero-governance.mjs` and `superhero-name.mjs` to compute voting windows and name
-expiry. The web app gets the same number through the SDK and polls it every 30 seconds.
 
 **Everything else through the SDK.** Contract initialisation, dry-run reads (`has_community`,
 `calculate_buy_price`, `bonding_curve`, `supported_decimals`), balance lookups and transaction
@@ -119,22 +60,24 @@ const aeSdk = new AeSdk({
 });
 ```
 
-See [Calling contracts](/contracts/calling-contracts) for the contract side of this.
+See [Calling contracts](/contracts/calling-contracts) for the contract side.
 
-## Middleware endpoints in use
+## Middleware endpoints
 
-These are the v3 paths the two repositories actually call. Everything else in the middleware is
-available too — this is what is exercised.
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /mdw/v3/transactions?contract={ct}&account={ak}&limit={n}` | Read an account's posts from the social contract |
+| `GET /mdw/v3/transactions?contract={ct}&caller_id={ak}` | Find invite-creation transactions |
+| `GET /mdw/v3/transactions/{hash}` | Poll a transaction to confirmation |
+| `GET /mdw/v3/names?owned_by={ak}&state=active&limit=100` | List the `.chain` names an account owns |
+| `GET /mdw/v3/names/{name}` | Resolve a `.chain` name to an address |
+| `GET /mdw/v3/aex9/{address}` | AEX-9 token metadata |
+| `GET /mdw/v3/accounts/{ak}/aex9/balances?limit=100` | An account's AEX-9 balances |
+| `GET /mdw/v2/aex9/account-balances/{ak}?limit=100` | The v2 form of the same |
 
-### Called by the agent skill
+`/v3/` is current; `/v2/` paths still work against the same deployment.
 
-| Endpoint | Script | Purpose |
-| --- | --- | --- |
-| `GET /mdw/v3/transactions?contract={ct}&account={ak}&limit={n}` | `superhero-read.mjs` | Read an account's posts from the social contract |
-| `GET /mdw/v3/names?owned_by={ak}&state=active&limit=100` | `superhero-name.mjs` | List the `.chain` names an account owns |
-
-Reading posts is the interesting one, because it shows how to decode a contract call from the
-index:
+### Reading posts from the index
 
 ```bash
 curl -s "https://mainnet.aeternity.io/mdw/v3/transactions?contract=ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb&account=ak_YOUR_ADDRESS&limit=20"
@@ -142,46 +85,29 @@ curl -s "https://mainnet.aeternity.io/mdw/v3/transactions?contract=ct_2Hyt9ZxzXr
 
 The response is `{ data: [...], next }`. Each element carries `hash`, `block_height`,
 `micro_time` (milliseconds) and a `tx` object with `function`, `arguments` (an array of
-`{ type, value }`) and `return`. The script filters to
-`tx.function === 'post_without_tip'`, then reads the post body from `arguments[0].value` and the
-attached links from `arguments[1].value`.
+`{ type, value }`) and `return`. Filter to `tx.function === 'post_without_tip'`, then read the
+post body from `arguments[0].value` and the attached links from `arguments[1].value`.
 
-`next` is a **path**, not a full URL — concatenate it onto the middleware origin to page. Both the
-skill and the web app do exactly that.
+`next` is a **path**, not a full URL — concatenate it onto the middleware origin to page.
 
-### Called by the web app
+### Name resolution
 
-| Endpoint | Where | Purpose |
-| --- | --- | --- |
-| `GET /v3/names/{name}` | `useChainName.ts` | Resolve a `.chain` name to an address |
-| `GET /v2/names?owned_by={ak}&state=active&limit=100` | `ProfileEditModal.tsx` | List owned names for the profile form |
-| `GET /v3/transactions/{hash}` | `useTransactionStatus.ts` | Poll a transaction to confirmation |
-| `GET /v3/transactions?contract={ct}&caller_id={ak}` | `useInvitations.ts` | Find invite-creation transactions |
-| `GET /v3/aex9/{address}` | `TokenChip.tsx`, `TokenDetail.tsx` | AEX-9 token metadata |
-| `GET /v2/aex9/account-balances/{ak}?limit=100` | `useAccountBalances.ts` | An account's AEX-9 balances |
-| `GET /v3/accounts/{ak}/aex9/balances?limit=100` | AE-to-ETH bridge | The v3 form of the same |
+`GET /mdw/v3/names/{name}` returns a name record; the address is the pointer whose `key` is
+`account_pubkey`: `pointers.find(p => p.key === 'account_pubkey').id`. Check `active` and that
+the returned `name` matches what you asked for, and treat `404` as "no such name".
 
-Two conventions worth copying:
+For chain names in bulk, prefer `GET /api/accounts/chain-names?addresses=ak_a,ak_b`, which
+resolves up to 25 at a time, and fall back to the middleware for names it does not know. See
+[Accounts](/api-reference/accounts).
 
-- **Name resolution.** `GET /v3/names/{name}` returns a name record; the address is the pointer
-  whose `key` is `account_pubkey`, read as `pointers.find(p => p.key === 'account_pubkey').id`.
-  The app also checks `payload.active` and that the returned `name` matches what it asked for
-  before trusting the result, and treats `404` as "no such name" rather than as an error.
-- **Transaction confirmation.** `GET /v3/transactions/{hash}` returning `404` means **pending**,
-  not failed. The app polls every 5 seconds and computes confirmations as
-  `currentHeight - blockHeight + 1`.
+### Transaction confirmation
 
-Note the mix of `/v2/` and `/v3/` paths in the web app. Both work against the same deployment;
-`/v3/` is current and is what you should write.
-
-For chain names specifically, prefer the Superhero API's own batch helper —
-`GET /api/accounts/chain-names?addresses=ak_a,ak_b` resolves up to 25 at a time in one request —
-and fall back to the middleware only for names it does not know. See [Accounts](/api-reference/accounts).
+`GET /mdw/v3/transactions/{hash}` returning `404` means **pending**, not failed. Poll every 5
+seconds and compute confirmations as `currentHeight - blockHeight + 1`.
 
 ## The middleware mirror on api.superhero.com
 
-You do not always have to leave the Superhero API. It proxies a slice of middleware data under
-its own paths, which is useful when a CSP or a firewall makes the middleware host awkward:
+The Superhero API re-indexes a slice of middleware data under its own paths:
 
 | Method & path | Returns |
 | --- | --- |
@@ -196,37 +122,25 @@ its own paths, which is useful when a CSP or a firewall makes the middleware hos
 | `GET /api/mdw/health` | Middleware health check |
 
 These take an `includes` parameter for nested relations — `keyBlock`, `keyBlock.txs`,
-`microBlocks`, `txs.keyBlock` and similar, comma-separated — which the upstream middleware does
-not offer. An array relation is truncated to **50** items per parent regardless of what you ask
-for.
+`microBlocks`, `txs.keyBlock` and similar, comma-separated. An array relation is truncated to
+**50** items per parent. Response shapes are the mirror's own `Tx`, `KeyBlock` and `MicroBlock`
+records, not the upstream middleware's.
 
-This mirror is Superhero's own re-indexing, not a passthrough, so its response shapes are the
-`Tx`, `KeyBlock` and `MicroBlock` entities rather than the middleware's.
-
-Three things to know before pointing a crawler at it, all from
-`superhero-api/src/api-core/base/base.controller.ts` — these routes are the only ones in the API
-built by the generated base controller, and they inherit its behaviour:
-
-- **They are rate-limited.** 10 requests per minute per IP **per route path**, returning a `429`
-  with a `retryAfter` field in the body. Nothing else in this reference is throttled; these are.
-  See [Conventions](/api-reference/conventions#rate-limits).
-- **`limit` is capped at 100** with a `400 Maximum limit is 100 items per request`, and an
-  `order_by` outside the route's sortable set is a `400` too.
-- **`page` goes much deeper here than elsewhere.** The base controller's default page ceiling is
-  500, but the chain-mirror tables raise it to **1,000,000**, with the reasoning written into the
-  config: a client walking chain history has no range-filter alternative to `OFFSET` paging, unlike
-  an application table. Deep paging still costs the database a full scan-and-discard of everything
+- **Rate-limited.** 10 requests per minute per IP per route path, returning `429` with a
+  `retryAfter` field in the body. See [Conventions](/api-reference/conventions#rate-limits).
+- **`limit` is capped at 100** with `400 Maximum limit is 100 items per request`; an `order_by`
+  outside the route's sortable set is a `400`.
+- **`page` goes up to 1,000,000.** Deep paging still costs the database a scan of everything
   before your page, so prefer a `height` or `block_height` filter where you can.
 
-Sortable fields are declared per entity. On `sync-state` they are `id`, `last_synced_height`,
-`tip_height`, `is_bulk_mode`, `backward_synced_height`, `live_synced_height`, `created_at` and
-`updated_at`; on `txs` they include `hash`, `block_height`, `micro_time`, `type`, `contract_id`,
-`function`, `caller_id`, `sender_id` and `recipient_id`.
+Sortable fields on `sync-state`: `id`, `last_synced_height`, `tip_height`, `is_bulk_mode`,
+`backward_synced_height`, `live_synced_height`, `created_at`, `updated_at`. On `txs`: `hash`,
+`block_height`, `micro_time`, `type`, `contract_id`, `function`, `caller_id`, `sender_id`,
+`recipient_id`.
 
-### `GET /api/mdw/health` — how far behind is it?
+### `GET /api/mdw/health`
 
-This is the endpoint that answers the staleness question for Superhero's own index. It is not
-rate-limited and takes no parameters:
+How far behind Superhero's own index is. Not rate-limited; no parameters.
 
 ```bash
 curl -s "https://api.superhero.com/api/mdw/health"
@@ -243,8 +157,7 @@ curl -s "https://api.superhero.com/api/mdw/health"
 | `plugins` | Per-plugin `name`, `lastSyncedHeight`, `backwardSyncedHeight`, `liveSyncedHeight`, `startFromHeight` |
 | `registeredPlugins` | The plugin names that are loaded |
 
-`liveSync.lag` is the number you want: `tipHeight - liveSyncedHeight`, in key blocks. The
-thresholds the server itself uses to grade that lag are a reasonable default for your own alerting:
+`liveSync.lag` is `tipHeight - liveSyncedHeight`, in key blocks. The server grades it as:
 
 | Condition | `status` |
 | --- | --- |
@@ -253,13 +166,11 @@ thresholds the server itself uses to grade that lag are a reasonable default for
 | `lag` above 1000, or more than 10,000 blocks of backfill left | `warning` |
 | `lag` above 5000, more than 50,000 blocks of backfill left, or the live indexer is not active | `critical` |
 
-Two syncs run independently: a **live** one following the tip, and a **backward** one walking from
-the tip down towards genesis. `remainingBlocks` counts down to 0, not to the factory's deployment
-height, so it stays large for a long time on a fresh deployment while live data is already
-current. Judge freshness from `liveSync`, not from `backwardSync`.
+Two syncs run independently: a **live** one following the tip, and a **backward** one walking
+from the tip towards genesis. `remainingBlocks` counts down to 0, so it stays large on a fresh
+deployment while live data is already current. Judge freshness from `liveSync`.
 
-`GET /api/stats` gives a three-field summary of the same picture, plus `mdwConnected` — whether
-the WebSocket subscription to the upstream middleware is up. See
+`GET /api/stats` gives a shorter summary of the same picture plus `mdwConnected`. See
 [Factory & Contracts](/api-reference/factory-and-contracts).
 
 ## When to use which
@@ -276,39 +187,17 @@ the WebSocket subscription to the upstream middleware is up. See
 | Contract event logs | Middleware |
 | Reading contract state, or writing anything at all | Node, through the SDK |
 
-The rule of thumb: **the Superhero API knows about Superhero.** The moment your question is about
-the chain rather than about the product, it belongs to the middleware or the node.
+The Superhero API knows about Superhero. The moment your question is about the chain rather than
+the product, it belongs to the middleware or the node. The middleware indexes after the fact and
+the Superhero API indexes after that, so for anything where staleness matters read the node, and
+check `GET /api/mdw/health` before expecting a recent event to be in the API.
 
-Both are also further behind than you might expect — the middleware indexes after the fact, and
-the Superhero API indexes after that. For anything where staleness matters, read the node, and
-check `GET /api/mdw/health` before trusting a recent event to be present in the API.
-
-## Read more
+## Related
 
 - [API Conventions](/api-reference/conventions) — how the Superhero API's conventions differ from the middleware's
 - [Transactions API](/api-reference/transactions) — Superhero trade records, and how `tx_hash` links back to the chain
-- [Accounts API](/api-reference/accounts) — the batch chain-name resolver to use before falling back here
-- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — a worked example of combining both sources
+- [Accounts API](/api-reference/accounts) — the batch chain-name resolver
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — combining both sources
 - [Networks](/aeternity/networks) — mainnet and testnet, and what a network id means
 - [æternity node API documentation](https://api-docs.aeternity.io/) — the node's own reference
-- [ae_mdw on GitHub](https://github.com/aeternity/ae_mdw) — the middleware's endpoint list and source
-- [Middleware Swagger UI (testnet)](https://testnet.aeternity.io/mdw/swagger/) — an interactive reference for the same v3 API mainnet serves
-- [æScan](https://aescan.io/) — the explorer, when you want to look at one thing by hand
-
-## Open questions
-
-- **Who operates `mdw.wordcraft.fun`, and what are its uptime and rate-limit guarantees?** The
-  layout makes it unambiguously an æternity node plus middleware, and the CSP makes it the only
-  host a Superhero browser page can reach. But it appears in no backend source at all — the API
-  server indexes from `mainnet.aeternity.io` — so no repository documents its operator, its SLA or
-  its throttling. Ask whoever runs the Superhero deployment; there is nothing further to read.
-- **Is `mainnet.aeternity.io` deliberately excluded from the browser CSP?** The testnet host is on
-  the allowlist and the mainnet one is not, while the web app's `src/config.ts` points mainnet at
-  `mdw.wordcraft.fun` — so the allowlist is at least consistent with that configuration, and the
-  backend's use of the public host is server-side and unaffected by CSP. Whether a browser fallback
-  was ever intended is not recorded; the `server/lib/csp.cjs` change history would show it.
-- **Which middleware version is deployed at each host?** The middleware's API has changed across
-  major versions — the web app calls `/v2/` and `/v3/` paths and the backend subscribes to a
-  `/mdw/v2/websocket` — and nothing in any repository pins or records a version. The middleware's
-  own `GET /mdw/v3/status` reports its version and its distance from the chain tip; that call
-  answers this and the upstream-lag question together.
+- [ae_mdw on GitHub](https://github.com/aeternity/ae_mdw) — the middleware's endpoint list

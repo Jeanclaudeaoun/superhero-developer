@@ -1,6 +1,6 @@
 ---
 title: "The æternity Blockchain"
-description: "The chain Superhero runs on — just enough to use and build on Superhero confidently."
+description: "A short primer on the chain Superhero runs on — accounts, AE, names, contracts, tokens and endpoints as they surface in the product."
 ---
 
 # The æternity Blockchain
@@ -9,10 +9,9 @@ Superhero runs on **æternity**, a public blockchain with a functional smart-con
 (Sophia), a purpose-built VM (FATE), a native naming system (AENS), and state channels for
 layer-2 scaling.
 
-You do not need to understand æternity deeply to use Superhero. This section covers only the
-parts that surface in the product — addresses, AE, gas, names, tokens, endpoints and explorers
-— and points at the official æternity documentation for everything else. It is supporting
-context, not a protocol manual.
+You do not need to know æternity deeply to use or build on Superhero. The product touches a
+handful of chain features — the ones below — and the
+[æternity documentation](https://docs.aeternity.com/) covers everything else in depth.
 
 ## What surfaces in Superhero
 
@@ -24,24 +23,23 @@ context, not a protocol manual.
 | Sophia contracts on FATE | [Tipping](/contracts/tipping), the [token sale](/contracts/token-sale), [DAOs](/contracts/dao), [governance](/contracts/governance-contracts) |
 | AEX-9 fungible tokens | Every community token, and [token balances](/wallets/aex9-tokens) in the wallet |
 | Node and middleware HTTP APIs | [Node & middleware](/api-reference/node-and-middleware) reads, transaction status polling |
-| State channels | Not used by Superhero today — see [State Channels](/aeternity/state-channels) |
+| State channels | Not used by Superhero — see [State Channels](/aeternity/state-channels) |
 
 ## In this section
 
-- [Why æternity](/aeternity/why-aeternity) — the specific chain properties Superhero depends on, and the ones it does not use.
+- [Why æternity](/aeternity/why-aeternity) — the chain properties Superhero depends on.
 - [Accounts & Keys](/aeternity/accounts-and-keys) — every address prefix, the key type, and the secret-key encoding the SDK expects.
-- [AE & Gas](/aeternity/ae-and-gas) — aettos, the 10^18 conversion, and what transactions actually cost.
-- [AENS](/aeternity/aens) — preclaim/claim, pointers, expiry, and the short-name auction.
-- [Sophia & FATE](/aeternity/sophia-and-fate) — a Solidity-to-Sophia orientation, plus what ACI is.
+- [AE & Gas](/aeternity/ae-and-gas) — aettos, the 10^18 conversion, and what transactions cost.
+- [AENS](/aeternity/aens) — preclaim and claim, pointers, expiry, and the short-name auction.
+- [Sophia & FATE](/aeternity/sophia-and-fate) — a Solidity-to-Sophia orientation, and what an ACI is.
 - [AEX Standards](/aeternity/aex-standards) — AEX-9 in detail, the rest in one line each.
 - [Networks & Endpoints](/aeternity/networks) — mainnet and testnet endpoints in one table.
-- [Explorers](/aeternity/explorers) — how to verify a claim yourself instead of trusting the UI.
-- [State Channels](/aeternity/state-channels) — what they are, and an honest answer about Superhero's use of them.
+- [Explorers](/aeternity/explorers) — check any transaction, account or contract on æScan.
+- [State Channels](/aeternity/state-channels) — what they are, and that Superhero does not use them.
 
 ## Read more
 
 - [Architecture Overview](/concepts/architecture) — how the app, the backend and the chain fit together.
 - [Smart Contracts](/contracts) — the Superhero contracts that run on this chain.
-- [Glossary](/concepts/glossary) — every term used across these docs, defined once.
-- [æternity Documentation Hub](https://docs.aeternity.com/) — the canonical protocol, node and tooling documentation.
-- [What is æternity?](https://docs.aeternity.com/getting-started/what-is-aeternity) — the official overview, if you want the chain's own framing.
+- [Glossary](/concepts/glossary) — every term used across the docs, defined once.
+- [What is æternity?](https://docs.aeternity.com/getting-started/what-is-aeternity) — the official overview.

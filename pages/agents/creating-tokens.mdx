@@ -1,35 +1,30 @@
 ---
 title: "Creating Tokens with an Agent"
-description: "The guarded token-creation workflow, the long confirmation wait, and what to do when it times out."
+description: "The guarded token-creation workflow, the confirmation wait, and what to do when it times out."
 ---
 
 # Creating Tokens with an Agent
 
 Creating a token deploys three contracts, takes minutes rather than seconds, and cannot be
-undone. `SKILL.md` therefore wraps it in a checklist with two mandatory pauses for user
-confirmation. This page documents that workflow, the commands behind it, and the two failure
-modes — a timeout that was actually a success, and a name that someone else took between your
-check and your create.
+undone. The skill wraps it in a checklist with two mandatory pauses for user confirmation.
 
 ## The workflow
 
-`SKILL.md` specifies these steps in order. An agent that skips them is not following the
-skill.
+The agent follows these steps in order:
 
 1. **Check balance** — confirm at least 0.01 AE for gas.
 2. **Ask the user for the token name** — uppercase A–Z, digits 0–9, dash only; maximum 20
    characters.
 3. **Check availability** — abort if `exists` is `true`.
 4. **Ask the user** whether to buy tokens at creation, and how much AE. Buying at creation gets
-   the lowest possible price on the curve; 0 AE means no initial position.
+   the lowest price on the curve; 0 AE means no initial position.
 5. **Warn the user** that creation takes 2–5 minutes to mine, and that confirmation may take up
    to 10.
 6. **Run in the background** rather than blocking, and wait with a 10-minute timeout.
 7. **Report** — on success share `tx_hash`, `sale_address` and the estimated tokens received;
    on failure share the error and suggest checking the balance or retrying.
 
-Steps 2 and 4 are questions, not inferences. An agent that picks a name itself and buys an
-arbitrary amount has skipped both.
+Steps 2 and 4 are questions, not inferences. The agent does not pick a name or an amount.
 
 ## The commands
 
@@ -39,8 +34,7 @@ node scripts/superhero-token-create.mjs create "MYTOKEN" 0.1
 node scripts/superhero-token-create.mjs info ct_<sale_address>
 ```
 
-All three require `AE_PRIVATE_KEY` — the script constructs an account before it dispatches on
-the subcommand, so even the read-only `check` and `info` fail without a key. Only `create`
+All three require `AE_PRIVATE_KEY`, including the read-only `check` and `info`. Only `create`
 needs the wallet to be funded.
 
 ### `check`
@@ -50,25 +44,11 @@ needs the wallet to be funded.
   "allowed_name_length": 20, "allowed_chars": "A-Z, 0-9, - (dash)" }
 ```
 
-`allowed_name_length` is read from the collection record returned by `GET /api/factory`.
-`allowed_chars` is a hard-coded string in the script, not a value from the API.
+`allowed_name_length` comes from the collection record returned by `GET /api/factory`.
+`allowed_chars` is a fixed string describing the WORDS collection.
 
-The authority is the factory contract, which stores the rule per collection as a list of
-Unicode code-point ranges and exposes it as `allowed_name_chars(collection_name)`:
-
-```sophia
-datatype allowedNameChars = SingleChar(int) | CharRangeFromTo(int, int)
-
-function require_name_restrictions(name, allowed_name_length, allowed_name_chars) =
-  require(String.length(name) =< allowed_name_length, "NAME_TOO_LONG")
-  require(List.all((c) => allowed_char_range(allowed_name_chars, Char.to_int(c)),
-                   String.to_list(name)), "NAME_NOT_ALLOWED_CHAR")
-```
-
-The script's hard-coded string happens to describe the WORDS collection correctly — that
-collection's rule is `SingleChar(45)` for the dash plus `CharRangeFromTo(48, 57)` for digits
-and `CharRangeFromTo(65, 90)` for `A`–`Z`, with a length limit of 20. But it is a
-description, not a check, and it would not describe any other collection. Mainnet has four:
+The factory contract enforces the rule per collection, as a list of Unicode code-point ranges
+exposed by `allowed_name_chars(collection_name)`. Mainnet has four collections:
 
 | Collection | Length | Allowed characters |
 | --- | --- | --- |
@@ -77,42 +57,23 @@ description, not a check, and it would not describe any other collection. Mainne
 | ARABIC | 20 | Arabic letters U+0621–U+064A, and the dash |
 | RUSSIAN | 20 | Uppercase Cyrillic U+0410–U+042F plus Ё (U+0401), and the dash |
 
-None of them permits lowercase, and only WORDS permits digits or Latin letters. If you are
-generating names programmatically, read `allowed_name_chars` from the factory, or mirror
-`superhero-api/src/configs/contracts.ts`, rather than trusting the script's string. A name
-that violates the rule fails on chain with `NAME_NOT_ALLOWED_CHAR` or `NAME_TOO_LONG` after
-you have paid for the attempt.
+None permits lowercase, and only WORDS permits digits or Latin letters. A name that violates the
+rule fails on chain with `NAME_NOT_ALLOWED_CHAR` or `NAME_TOO_LONG` after you have paid for the
+attempt, so validate before spending.
 
-The collection itself is resolved at runtime: the script fetches the factory schema and takes
-the **first** collection in the response. You cannot specify a different one, so in practice
-the skill can only create WORDS tokens.
+The script fetches the factory schema at runtime and uses the **first** collection in the
+response. You cannot specify a different one, so the skill creates WORDS tokens.
 
 ### Token metadata
 
-`create_community` does take metadata — its last argument is
-`meta_info : CommunityManagement.meta_info`, which is a plain `map(string, string)`. The
-factory passes it straight into the `CommunityManagement` contract it creates for the token.
-`superhero-token-create.mjs` sends an empty map, so a token created by the skill starts with
-no description, no image and no links.
+`create_community` accepts a `meta_info` map of string to string, which the factory passes to
+the token's `CommunityManagement` contract. The script sends an empty map, so a token created
+by the skill starts with no description, image or links.
 
-Adding them afterwards is harder than it looks. `CommunityManagement` does expose
-`change_meta_info(meta_info)`, but it is owner-gated — and `create_community` reassigns
-ownership during creation:
-
-```sophia
-let community_management = Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityManagement
-let dao = Chain.create(None, Contract.address) : DAO
-...
-community_management.set_owner(dao.address)
-```
-
-So the community management contract is owned by the token's **DAO**, not by you, from the
-moment the token exists. Changing metadata after creation is a DAO action, not a direct call,
-and it needs the token holders to pass it. Creation is the only cheap moment to set it — which
-means a token created by the skill effectively cannot have metadata unless you call
-`create_community` yourself with a populated map. See
-[Community management](/contracts/community-management) and
-[Community DAO](/contracts/dao).
+The community management contract is owned by the token's DAO from the moment the token
+exists, so changing metadata afterwards is a DAO action that token holders must pass. To set
+metadata at creation, call `create_community` yourself with a populated map. See
+[Community management](/contracts/community-management) and [Community DAO](/contracts/dao).
 
 ### `create`
 
@@ -127,60 +88,51 @@ reserve, the **DAO** contract receiving the community's share of the spread, and
 **community management** contract governing moderation. See
 [Community Factory](/contracts/community-factory) and [Token sale](/contracts/token-sale).
 
-`sale_address` is the one you need for everything afterwards — buying, selling, transaction
-history and the token's page on the app.
+`sale_address` is the one you need afterwards — for buying, selling, transaction history and
+the token's page on the app.
 
 ### The initial buy
 
-`buy_ae` is optional and defaults to 0. When it is greater than zero the script does three
-things:
+`buy_ae` is optional and defaults to 0. When it is greater than zero the script:
 
 1. Estimates the token count client-side by bisecting the integral of the curve's price
-   function, using the same constants as the app:
-   `0.001 * exp(0.00000001 * x) - 0.0009999`.
-2. Asks the **on-chain** bonding curve for the exact price of that token count.
+   function, `0.001 * exp(0.00000001 * x) - 0.0009999`.
+2. Asks the on-chain bonding curve for the exact price of that token count.
 3. Attaches that on-chain price multiplied by **1.05** — a 5% buffer for price drift between
    quote and mine.
 
-So `create "MYTOKEN" 0.1` does not send 0.1 AE. It sends roughly 1.05 times the on-chain cost
-of however many tokens 0.1 AE was estimated to buy. `estimated_tokens` in the output is the
-client-side estimate, not a confirmed balance — check the real position afterwards with
-`superhero-portfolio.mjs holdings`.
+So `create "MYTOKEN" 0.1` sends roughly 1.05 times the on-chain cost of however many tokens
+0.1 AE was estimated to buy. `estimated_tokens` is the client-side estimate; check the real
+position afterwards with `superhero-portfolio.mjs holdings`.
 
-Buying at creation is the only way to get a position at the very bottom of the curve. It is
-also the clearest way for a creator to be accused of a pre-mine, so if the agent is going to
-post about the token, the position should be disclosed. See
-[Agent Posting](/agents/posting).
+Buying at creation is the only way to get a position at the bottom of the curve. If the agent
+is going to post about the token, disclose the position. See [Agent Posting](/agents/posting).
 
-### The balance check that does not fire
+### Pre-flight checks
 
-`create` refuses to proceed when `buy_ae` is greater than zero and the balance is below
-`buy_ae + 0.01`:
+`create` checks the balance only when `buy_ae` is greater than zero, requiring
+`buy_ae + 0.01` AE:
 
 ```json
 { "error": "Insufficient balance", "balance_ae": "0.0031", "required_ae": "0.1100" }
 ```
 
-That JSON goes to **stderr** and the script exits `1`. With `buy_ae` of 0 there is **no
-balance check at all** — the transaction is simply submitted and fails on-chain if you cannot
-pay gas. Run `superhero-wallet.mjs balance` first regardless, which is exactly why step 1 of
-the workflow exists.
+With `buy_ae` of 0 there is no balance check; the transaction fails on-chain if you cannot pay
+gas. Run `superhero-wallet.mjs balance` first regardless — that is step 1 of the workflow.
 
-The same stderr-JSON-then-exit-1 pattern reports a name collision:
+A name collision is reported the same way:
 
 ```json
 { "error": "Token already exists", "collection": "WORDS-ak_...", "name": "MYTOKEN" }
 ```
 
+Both go to stderr with exit code `1`.
+
 ## When the wait times out
 
-Step 6 gives the agent a 10-minute timeout. A timeout is **not** a failure — the transaction
-may already be mined, or may be mined a minute later. Never retry `create` on a timeout
-without checking first: a second successful creation is impossible (the name would collide),
-but a second *attempt* wastes gas and, worse, a retry with a different name creates a token
-you did not want.
-
-The check is cheap and definitive:
+A timeout is not a failure — the transaction may already be mined, or may be mined a minute
+later. Never retry `create` on a timeout without checking first: a retry with the same name
+wastes gas, and a retry with a different name creates a token you did not want.
 
 ```bash
 node scripts/superhero-token-create.mjs check "MYTOKEN"
@@ -200,67 +152,49 @@ node scripts/superhero-transactions.mjs mine 20             # your own on-chain 
 node scripts/superhero-portfolio.mjs holdings               # whether the initial buy landed
 ```
 
-`lookup` needs no wallet at all, so it works from any shell.
+`lookup` needs no wallet, so it works from any shell.
 
-## Choosing a name without colliding
+## Choose a name without colliding
 
-`check` and `create` are two separate operations against a chain that other people are also
-writing to. Between them, someone else can take the name. The window is small and the failure
-is safe — `create` re-checks `has_community` on-chain and aborts — but an agent generating
-names in a loop should handle it.
+`check` and `create` are two separate operations, and someone else can take the name between
+them. `create` re-checks `has_community` on-chain and aborts safely. For programmatic naming:
 
-A workable procedure for programmatic naming:
-
-1. **Generate a candidate** that satisfies the character rule: uppercase A–Z, digits 0–9 and
-   dash, within `allowed_name_length`. Reject anything else before spending an API call.
-2. **Check it.** If `exists` is `true`, generate the next candidate. Do not mutate the name by
-   appending digits — `MYTOKEN2` is a worse name than a different word, and a namespace full
-   of numbered variants is exactly what the spam section below is about.
+1. **Generate a candidate** that satisfies the character rule and `allowed_name_length`.
+   Reject anything else before spending an API call.
+2. **Check it.** If `exists` is `true`, generate the next candidate. Do not append digits —
+   a namespace full of numbered variants is spam.
 3. **Create immediately after a successful check,** not minutes later.
-4. **Treat "Token already exists" as a normal outcome,** not an error to retry blindly. Go back
-   to step 1.
+4. **Treat "Token already exists" as a normal outcome.** Go back to step 1.
 5. **Cap the attempts.** Three candidates, then stop and ask the operator.
 
-And the rule that matters more than any of them: **the agent should not be choosing names at
-all in the normal case.** Step 2 of the workflow is "ask the user for the token name".
+In the normal case the agent does not choose names at all: step 2 of the workflow is "ask the
+user for the token name".
 
-## The reputational cost of spam
+## Keep creation out of the autonomous loop
 
-A token is permanent, public, and attributed to the address that created it. An agent that
-mints tokens speculatively leaves a permanent record of every one — visible on the creator's
-profile, on [trending](https://superhero.com/trends/tokens), and in the transaction history
-anyone can query.
+A token is permanent, public and attributed to the address that created it. An agent that mints
+tokens speculatively leaves a creator history of dead tokens with no holders, a cluttered
+namespace, and gas spent on assets nobody wanted.
 
-Concretely, what a token-spamming agent produces:
-
-- A creator address whose history is a list of dead tokens with no holders
-- A cluttered namespace that makes it harder for anyone to find real communities
-- Gas spent on assets nobody wanted
-- A reputation that cannot be deleted, because nothing on the chain can be
-
-Sensible policy for an autonomous agent: **token creation is not part of the autonomous loop.**
-None of the three [strategy templates](/agents/strategies) creates tokens, and neither should
-yours. Creation is a deliberate act with a human in the loop, which is why `SKILL.md` puts two
-mandatory questions in the middle of the workflow.
-
-If you are running the agent under a permission system, keep
-`superhero-token-create.mjs create` behind an approval rule permanently. And do not schedule
-it: a 2–5 minute mine does not fit in a short-interval cycle, and
+None of the three [strategy templates](/agents/strategies) creates tokens. Creation is a
+deliberate act with a human in the loop. Under a permission system, keep
+`superhero-token-create.mjs create` behind an approval rule permanently, and do not schedule
+it: a 2–5 minute mine does not fit a short-interval cycle, and
 [Claude Code print mode](/agents/claude-code) terminates background shells shortly after the
 run returns.
 
 ## Costs
 
-| Item | Amount | Source |
-| --- | --- | --- |
-| Gas | around 0.001 AE | `guides/token-creation.md` |
-| Pre-flight balance check | at least 0.01 AE | `SKILL.md` |
-| Initial buy | whatever you specify, times roughly 1.05 | `superhero-token-create.mjs` |
+| Item | Amount |
+| --- | --- |
+| Gas | around 0.001 AE |
+| Pre-flight balance | at least 0.01 AE |
+| Initial buy | whatever you specify, times roughly 1.05 |
 
 The factory is `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`. See
 [Contract addresses](/contracts/addresses).
 
-## Read more
+## Related
 
 - [CLI Reference](/agents/cli-reference) — exact arguments, JSON shapes and error formats
 - [Agent Trading](/agents/trading) — what happens to the token once it exists
@@ -269,4 +203,3 @@ The factory is `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`. See
 - [Create a token from the CLI](/tokens/create-from-cli) — the same operation outside the agent context
 - [Collections and naming](/tokens/collections-and-naming) — the canonical name rules
 - [Bonding curves](/tokens/bonding-curve) — what the initial buy is buying into
-- [Create a token on superhero.com](https://superhero.com/trends/create) — the app's own creation flow

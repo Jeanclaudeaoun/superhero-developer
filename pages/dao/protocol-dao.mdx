@@ -1,21 +1,19 @@
 ---
 title: "The ProtocolDAO Token"
-description: "The platform-wide token minted on every buy, and what it is for."
+description: "The platform-wide AEX-9 token minted to every buyer of a community token, at 1,000 tokens per AE spent."
 ---
 
 # The ProtocolDAO Token
 
-The ProtocolDAO token is issued automatically to anyone who buys a community token, at a rate
-proportional to what they spent. Issuance has been live since the factory was deployed. The
-governance it is named after **does not exist yet** — there is no ProtocolDAO contract, no
-proposal mechanism, no staking, and no way to vote with the token. This page documents what is
-real today and is explicit about the gap.
+The ProtocolDAO token is issued automatically to anyone who buys a community token, in
+proportion to the AE they spend. It is one platform-wide token, intended for protocol-level
+governance. Issuance is live; the governance it is named after is not yet built — there is no
+ProtocolDAO contract, no proposal mechanism and no staking.
 
-Do not confuse it with a community token. A community token governs one community's treasury
-through that community's DAO. The ProtocolDAO token is one platform-wide token, intended for
-protocol-level decisions, with no governance attached to it at present.
+It is not a community token. A community token governs one community's treasury through that
+community's DAO.
 
-## What is real today
+## Properties
 
 | Property | Value |
 | --- | --- |
@@ -27,7 +25,6 @@ protocol-level decisions, with no governance attached to it at present.
 | Trigger | Buying a community token on the bonding curve, or creating one with an initial buy |
 | Utility today | None implemented |
 | Utility intended | Platform-wide governance, proposal voting, staking |
-| Current status | Issuance active; governance framework in development |
 
 The factory holds the token in its state and exposes two entrypoints:
 
@@ -36,12 +33,10 @@ CommunityFactory.protocol_dao_token() : FungibleTokenFull
 CommunityFactory.mint_protocol_dao_token(buy_value: int, receiver: address) : unit
 ```
 
-`protocol_dao_token()` returns the AEX-9 contract, so you can look it up on-chain from the
-factory rather than needing a hardcoded address. `mint_protocol_dao_token` is also declared on
-the `ICommunityFactory` interface, which is how a token sale contract calls back into its
-factory to mint on the buyer's behalf.
-
-It is permissioned, narrowly:
+`protocol_dao_token()` returns the AEX-9 contract, so you can look it up from the factory
+rather than hardcoding an address. `mint_protocol_dao_token` is declared on the
+`ICommunityFactory` interface, which is how a token sale calls back into its factory to mint
+on the buyer's behalf. Only a sale contract the factory itself deployed can mint:
 
 ```sophia
 stateful entrypoint mint_protocol_dao_token(buy_value : int, receiver : address) =
@@ -49,58 +44,27 @@ stateful entrypoint mint_protocol_dao_token(buy_value : int, receiver : address)
   state.protocol_dao_token.mint(receiver, buy_value * protocol_dao_token_multiplier)
 ```
 
-Only a sale contract the factory itself deployed can mint — `known_token_sales` is populated by
-`create_community` and never otherwise. A sale contract deployed by hand, pointed at the same
-factory, gets `NOT_KNOWN_TOKEN_SALE`. There is no owner mint and no other issuance path, so
-ProtocolDAO supply is exactly 1,000 times the AE ever spent buying community tokens through this
-factory.
+`known_token_sales` is populated by `create_community` and nothing else. There is no owner
+mint and no other issuance path, so ProtocolDAO supply is exactly 1,000 times the AE ever
+spent buying community tokens through the factory.
 
-The token contract is an ordinary `FungibleTokenFull` with 18 decimals, so everything in the AEX-9
-surface applies to it — `balance`, `total_supply`, `transfer`, `create_allowance` and the rest. Its
-name **and** symbol are the same string, set once at factory deployment by
+The token contract is an ordinary `FungibleTokenFull` with 18 decimals, so the whole AEX-9
+surface applies — `balance`, `total_supply`, `transfer`, `create_allowance` and the rest. Its
+name and symbol are the same string, set once at factory deployment by
 `CommunityFactory.init(protocol_token_name)`.
 
-### The address
-
-The Superhero backend carries it as `bctsl_aex9_address` on each network's factory configuration in
-`superhero-api/src/configs/contracts.ts`, and uses it to identify which `Mint` log in a buy
-transaction is the protocol reward:
+### Addresses
 
 | Network | ProtocolDAO token contract |
 | --- | --- |
 | Mainnet | `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` |
 | Testnet | `ct_2cyV58CrBwi2k4kvP3mN517C1NH21zfxxYmaAyb41GXdXSsRvN` |
 
-These are configuration, not something read from the chain, so confirm one before you depend on it:
-call `protocol_dao_token()` on the factory for that network and check the two agree. The factory is
-the authority, and the call costs nothing.
+`protocol_dao_token()` on the factory for that network returns the same address.
 
-## Which rate: 1,000 or 950?
+## How much a buy mints
 
-**1,000. The chain mints 1,000×.** `bcl-contracts/contracts/CommunityFactory.aes` declares
-
-```sophia
-// mints protocol DAO tokens at a rate of 1000 times the buy value.
-let protocol_dao_token_multiplier = 1000
-```
-
-and that constant is the only multiplier anywhere in the issuance path. The whitepaper, the
-token-economics table and the value-flow diagram are all correct.
-
-The 950 comes from the web app's *estimate*, not from the chain.
-`protocolTokenReward` in `useTokenTrade.ts`, and the identical expression in
-`TransactionConfirmModal.tsx`, compute:
-
-```js
-(1 - PROTOCOL_DAO_AFFILIATION_FEE) * PROTOCOL_DAO_TOKEN_AE_RATIO * aeValue
-// = (1 - 0.05) * 1000 * aeValue = 950 * aeValue
-```
-
-`PROTOCOL_DAO_AFFILIATION_FEE = 0.05` is wrong twice over: the affiliation fee is 0.5%, not 5%, and
-it should not be subtracted at all — the contract mints on the **gross** amount paid, fee included.
-So the pre-trade preview understates the reward by about 5%.
-
-### What `buy_value` actually is
+The chain mints **1,000× the AE paid**. The sale contract passes the amount actually spent:
 
 ```sophia
 if (Call.caller != state.factory.address)
@@ -108,72 +72,36 @@ if (Call.caller != state.factory.address)
 else ()
 ```
 
-`Call.value - overpaid_refund` is what you really spent — the curve integral plus the 0.5%
-affiliation fee, with any slippage buffer already refunded. So a buy quoted at `1.000 AE` of curve
-value costs `1.005 AE` and mints `1005` ProtocolDAO tokens, not `1000` and certainly not `950`.
-Attaching a 3% buffer does not mint you 3% more: the refund happens first.
+`Call.value - overpaid_refund` is the curve price plus the 0.5% affiliation fee, with any
+slippage buffer already refunded. A buy quoted at `1.000 AE` of curve value costs `1.005 AE`
+and mints `1005` ProtocolDAO tokens. Attaching a 3% slippage buffer does not mint 3% more:
+the refund happens first.
 
-The branch also explains why an initial buy at creation still works. When
-`create_community` calls `buy_with_affiliation`, the caller *is* the factory, so the sale skips the
-callback to avoid re-entering the factory mid-call; the factory then mints directly, with the same
-multiplier, immediately afterwards.
+When `create_community` performs an initial buy, the caller of the sale *is* the factory, so
+the sale skips the callback and the factory mints directly, with the same multiplier.
 
-The `Mint` event on the ProtocolDAO token contract carries the real figure, and the app reads exactly
-that event to report what you received after the fact. If the amount matters to you, trust the event
-over the preview.
+The `Mint` event on the ProtocolDAO token contract carries the exact amount, and the app reads
+that event to report what you received.
 
-## What does not exist
+## What does not exist yet
 
-Being precise about the gap, because the token's name invites the opposite assumption:
-
-- **There is no ProtocolDAO contract.** The BCL repository contains ten Sophia sources — the
-  factory, the sale, the curve, the affiliation treasury, community management, the DAO and its
-  vote, plus three interfaces. None of them implements platform-wide proposals or voting for this
-  token, and neither does the æternity governance registry.
-- **There is no staking.** The whitepaper and the contract repository's own README describe staking
-  as a future mechanism — "users can stake these tokens to vote on proposals in the future", "while
-  the functionality for the ProtocolDAO is not yet implemented". No staking entrypoint exists on the
-  token or the factory.
+- **There is no ProtocolDAO governance contract.** No deployed contract implements
+  platform-wide proposals or voting for this token.
+- **There is no staking.** No staking entrypoint exists on the token or the factory.
 - **The token does nothing in the app.** No screen consumes a ProtocolDAO balance, and no
   feature is gated on holding one.
-- **It is not the æternity governance system.** The polls at `/voting` are weighted by **AE**
-  balance and delegation, not by ProtocolDAO tokens. Holding ProtocolDAO tokens gives you no
-  weight there. See [Governance and Voting](/governance).
+- **It is not the æternity governance system.** The polls at `/voting` are weighted by AE
+  balance and delegation, not by ProtocolDAO tokens. See [Governance and Voting](/governance).
 - **It is not a community DAO token.** Community votes are weighted by that community's own
   AEX-9 token. See [Voting](/dao/voting).
 
-The whitepaper frames this as progressive decentralisation: issuance starts early so that a
-distribution exists by the time governance is built, with the token serving "as a foundation
-for future governance and signaling mechanisms". That is a roadmap statement, not a
-description of a shipped feature — and a roadmap with no dates attached.
-
-## What to assume if you hold some
-
-You are accumulating an AEX-9 balance whose future utility is announced but unspecified. Two
-consequences follow.
-
-First, **treat it as having no present utility**, because it has none. Any value ascribed to
-it today is a bet on a governance design that has not been published.
-
-Second, **verify transferability and liquidity yourself** rather than assuming either. It is a
-standard `FungibleTokenFull`, so the transfer entrypoints exist; whether any market makes them
-useful is a separate question, and one this page cannot answer from the repositories. See the
-open questions.
+The token is a standard `FungibleTokenFull`, so its transfer entrypoints work; it is not a
+bonding-curve token and has no protocol-native market.
 
 ## Read more
 
-- [Community DAOs](/dao) — the governance that does exist today, per community.
-- [Governance and Voting](/governance) — æternity-wide polls, weighted by AE rather than by this token.
+- [Community DAOs](/dao) — the per-community governance that exists today.
+- [Governance and Voting](/governance) — æternity-wide polls, weighted by AE.
 - [Value flow](/concepts/value-flow) — where ProtocolDAO issuance sits in what a buyer pays and receives.
 - [Community Factory contract reference](/contracts/community-factory) — the factory entrypoints that mint it.
 - [AEX standards](/aeternity/aex-standards) — the AEX-9 interface this token implements.
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the "ProtocolDAO Token" section, which is the only published statement of intent.
-
-## Open questions
-
-- **Whether it is traded anywhere.** It does not appear in the Superhero DEX configuration and
-  is not a bonding-curve token, so there is no protocol-native market for it. Whether a DEX
-  pair exists would have to be checked against the live DEX factory.
-- **The governance roadmap.** No design document, specification or timeline for the ProtocolDAO
-  appears in the repositories — only the whitepaper's and the contract README's statements of
-  intent. This page should be updated when one is published.

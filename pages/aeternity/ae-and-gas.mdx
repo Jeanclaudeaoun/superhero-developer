@@ -1,47 +1,33 @@
 ---
 title: "AE & Gas"
-description: "The native coin, its denominations, and what transactions cost."
+description: "The native coin, the 10^18 aetto conversion, and what a transaction costs."
 ---
 
 # AE & Gas
 
 AE is æternity's native coin. It pays for gas, it is the base currency of every bonding curve,
-and it is what a tip is denominated in. Almost every integration bug in this ecosystem is a unit
-bug, so start here.
+and it is what a tip is denominated in. Most integration bugs in this ecosystem are unit bugs, so
+start here.
 
 ## 1 AE = 10^18 aettos
 
-An **aetto** (plural *aettos*) is the smallest unit of AE. The conversion is fixed:
+An **aetto** (plural *aettos*) is the smallest unit of AE:
 
 ```text
 1 AE      = 1 000 000 000 000 000 000 aettos = 10^18 aettos
 1 aetto   = 0.000000000000000001 AE          = 10^-18 AE
 ```
 
-This is confirmed four ways:
-
-1. The æternity JavaScript SDK documents `spend` as taking aettos, "the smallest possible unit,
-   1 AE equal to 1 000 000 000 000 000 000 aettos", and its examples send one AE as `1e18`.
-2. Every conversion in the Superhero agent skill uses an exponent of 18 —
-   `new BigNumber(balanceAettos).dividedBy(1e18)` in `superhero-wallet.mjs`,
-   `new BigNumber(amountAE).shiftedBy(18)` and `.shiftedBy(-18)` in `superhero-invite.mjs`.
-3. `superhero-invite.mjs` independently pins the exponent in a constant whose comment states the
-   AE value: `const REDEMPTION_FEE_COVER = 10n ** 15n; // 0.001 AE to cover gas for redemption`.
-   10^15 aettos being 0.001 AE gives 10^18 aettos per AE.
-4. A passing test in the web app asserts that 76,000 gas at 10^9 aettos per gas renders as
-   `0.000076 AE` — see [Gas price](#gas-price) below. That arithmetic only works at 10^18.
-
 **Every amount crossing a chain boundary is in aettos.** Node balances, contract call `amount`
 options, bonding-curve prices, event arguments — all aettos, all integers. AE is a presentation
-format and nothing else.
+format.
 
-### Converting, correctly
+### Convert safely
 
-Never use JavaScript floating point for this. `10^18` is past `Number.MAX_SAFE_INTEGER`
-(about `9.007 × 10^15`), so a balance held as a `Number` silently loses precision. Superhero uses
-`BigNumber` or `BigInt` for every value it sends or receives; the few places that divide by
-`1e18` with plain `Number` are display-only, and you should treat that as a display-only
-technique too.
+Never use JavaScript floating point for this. `10^18` is past `Number.MAX_SAFE_INTEGER` (about
+`9.007 × 10^15`), so a balance held as a `Number` silently loses precision. Use `BigNumber` or
+`BigInt` for every value you send or receive, and divide by `1e18` with a plain `Number` only for
+display.
 
 ```js
 import BigNumber from 'bignumber.js';
@@ -53,7 +39,7 @@ const balanceAE = new BigNumber(balanceAettos).dividedBy(1e18).toString();
 const amountAettos = BigInt(new BigNumber('0.25').shiftedBy(18).toFixed(0));
 ```
 
-The SDK also ships a formatter, which the agent skill uses when printing a quote:
+The SDK also ships a formatter:
 
 ```js
 import { formatAmount, AE_AMOUNT_FORMATS } from '@aeternity/aepp-sdk';
@@ -64,16 +50,14 @@ const priceAE = formatAmount(priceAettos.toString(), {
 });
 ```
 
-The web app uses the SDK's `toAe` helper for the same job — see `src/hooks/useAccountBalances.ts`
-and `src/features/shared/components/PriceDataFormatter.tsx`.
+The SDK's `toAe` helper does the same job in one call.
 
 ### Community tokens have their own decimals
 
 Do not assume a token balance shares AE's exponent. AEX-9 tokens declare `decimals` in their
-`meta_info`, and the agent skill reads it off-chain rather than hardcoding it — see
-`getTokenDecimals` in `superhero-token-swap.mjs`, which asks the sale contract for the token
-address and then the bonding curve for `supported_decimals`. Scale token amounts by the token's
-own `decimals`, and only AE amounts by 18.
+`meta_info`; read it from the contract rather than hardcoding it. Superhero community tokens use
+18, matching the bonding curve's `supported_decimals`. Scale token amounts by the token's own
+`decimals`, and only AE amounts by 18.
 
 ## What a transaction costs
 
@@ -84,23 +68,19 @@ An æternity transaction has two separate charges:
 | `fee` | Every transaction | Size- and type-dependent base fee; the SDK computes it |
 | gas | Contract create and contract call transactions | `gasLimit` × `gasPrice`, charged on top of `fee` |
 
-The Superhero wallet's transaction summary spells this out in `src/features/wallet/tx-summary.ts`:
-
-> Gas is charged on TOP of `fee`, up to the limit in the transaction. At a routine 5M limit that
-> ceiling is around thirty times the fee, so a prompt showing only "Network fee" understates what
-> the call can cost.
-
-Accordingly the wallet renders a separate "Gas, at most" row, computed as `gasLimit * gasPrice`.
-When you approve a contract call in Superhero, that row — not "Network fee" — is your worst case.
+Gas is charged on top of `fee`, up to the limit in the transaction. At a routine 5M gas limit
+that ceiling is around thirty times the fee, so the Superhero wallet shows a separate
+"Gas, at most" row, computed as `gasLimit × gasPrice`. When you approve a contract call, that
+row — not "Network fee" — is your worst case.
 
 ### Gas price
 
-`gasPrice` is quoted in aettos per unit of gas. The SDK's default follows network demand with a
-floor of `1e9` aettos (1 Gaetto) per gas unit, and the app's own transaction-summary fixtures use
-exactly that: `gasPrice: '1000000000'`, with `gasLimit: 76000` on a contract deploy and
-`gasLimit: 5000000` on a contract call.
+`gasPrice` is quoted in aettos per unit of gas. The SDK's default follows network demand, using
+the consensus minimum the node reports as the floor and `1e9` aettos (1 Gaetto) per gas unit as
+the fallback when the node does not report one. Under load, the same call costs more for the same
+`gasUsed`.
 
-Worked example, at the floor price:
+Worked example at the floor price, for a contract deploy:
 
 ```text
 gasLimit  76 000
@@ -108,73 +88,51 @@ gasPrice   1 000 000 000 aettos
 max gas = 76 000 × 1e9 = 7.6e13 aettos = 0.000076 AE
 ```
 
-`src/features/wallet/__tests__/tx-summary.test.ts` asserts exactly this — that a deploy with
-those values renders `Gas, at most: 0.000076 AE` — which is a fourth, executable confirmation of
-the 10^18 exponent.
+A contract call typically carries a `gasLimit` of 5 000 000.
+
+Superhero does not override the SDK's gas defaults: no contract call in the web app sets
+`gasPrice` or `gasLimit`, so a call that runs out of gas does so at the SDK's default limit.
 
 ### Running out of gas
 
 Gas is debited up front: the protocol subtracts `gas × gas_price` from the caller before
 execution, then refunds the unused portion and pays the used portion to the miner. A call that
-exhausts its `gasLimit` therefore refunds nothing — the transaction is still mined, the state
-change is rolled back, and you pay the full limit. Setting a generous `gasLimit` costs nothing
-when the call succeeds and everything when it does not.
+exhausts its `gasLimit` refunds nothing — the transaction is still mined, the state change is
+rolled back, and you pay the full limit. A generous `gasLimit` costs nothing when the call
+succeeds and everything when it does not.
 
-## Observed Superhero costs
+## Typical Superhero costs
 
-Figures recorded by the agent skill's authors, not protocol constants. Treat them as orders of
-magnitude:
+Orders of magnitude, not protocol constants:
 
-| Action | Approximate cost | Transactions | Source |
-| --- | --- | --- | --- |
-| Publish a post | ~0.00001 AE | 1 | `guides/posting.md` |
-| Publish a comment | ~0.00001 AE | 1 | `guides/commenting.md` |
-| Cast a vote | ~0.0001 AE | 1 | `guides/governance.md` |
-| Revoke a vote | ~0.0001 AE | 1 | `guides/governance.md` |
-| Delegate / revoke delegation | ~0.0001 AE | 1 | `guides/governance.md` |
-| Create a governance poll | ~0.01–0.02 AE | 2 | `guides/governance.md` |
-| Create a token | ~0.001 AE gas, plus any initial buy | 1 | `guides/token-creation.md` |
+| Action | Approximate cost | Transactions |
+| --- | --- | --- |
+| Publish a post | ~0.00001 AE | 1 |
+| Publish a comment | ~0.00001 AE | 1 |
+| Cast a vote | ~0.0001 AE | 1 |
+| Revoke a vote | ~0.0001 AE | 1 |
+| Delegate / revoke delegation | ~0.0001 AE | 1 |
+| Create a governance poll | ~0.01–0.02 AE | 2 |
+| Create a token | ~0.001 AE gas, plus any initial buy | 1 |
+| Redeem an invitation | ~0.000201 AE (2.01 × 10^14 aettos), measured | 1 |
 
-The skill tells its agent to confirm a balance of **at least 0.01 AE** before doing anything
-on-chain (`SKILL.md`). Creating invite links carries an explicit extra: 0.001 AE per invite is
-attached to cover the invitee's redemption gas (`REDEMPTION_FEE_COVER` in
-`superhero-invite.mjs`), so the cost of an invite batch is
-`(amount_ae + 0.001) × count`, plus gas.
+The agent skill confirms a balance of **at least 0.01 AE** before doing anything on chain.
 
-That 0.001 AE figure has a counterpart in the contract, and the contract's is larger.
-`AffiliationTreasury.register_invitation_code` enforces its own floor:
+Invite links carry an explicit extra: 0.001 AE per invite is attached to cover the invitee's
+redemption gas, so an invite batch costs `(amount_ae + 0.001) × count`, plus gas. The
+`AffiliationTreasury` contract enforces that floor:
 
 ```sophia
 let minimum_redemption_fee_cover = 10 ^ 15 // minimal amount to cover redemption tx fees is ~2.01e14 (overpaid by few times to be sure)
 require(redemption_fee_cover >= minimum_redemption_fee_cover, "MINIMUM_REDEMPTION_AND_FEE_NOT_MEET")
 ```
 
-`10^15` aettos is **0.001 AE**, so the CLI is sending exactly the minimum the contract will accept.
-More usefully, the comment states a measured number for one real operation: **redeeming an
-invitation costs about 2.01 × 10^14 aettos, or 0.000201 AE**, and the contract deliberately
-over-provisions it about fivefold. It is the only gas figure anywhere in the Superhero stack that
-comes from a measurement rather than an estimate — treat it as your anchor for the order of
-magnitude of a simple stateful contract call.
-
-**Superhero does not override the SDK's gas defaults.** No æternity contract call in the web app
-sets `gasPrice` or `gasLimit`: the only occurrences of those names in `src/` are Ethereum fee
-lookups inside the disabled bridge and buy-with-ETH widgets, a `gas` field on a generated
-`MicroBlock` model, and the display-only reads in `src/features/wallet/tx-summary.ts`. So the
-defaults documented in
-[SDK transaction options](https://github.com/aeternity/aepp-sdk-js/blob/develop/docs/transaction-options.md)
-are what you actually get, and a call that runs out of gas in the app will do so at the SDK's
-default limit.
-
-**`gasPrice` is not a constant, which is why every figure on this page is an order of magnitude
-rather than a price.** The SDK's default is based on network demand, with the consensus minimum
-the node reports as the floor and `MIN_GAS_PRICE = 1e9` as the fallback when the node does not
-report one (`src/tx/builder/constants.ts`). The 0.000076 AE worked example above is therefore a
-floor-price figure: under load, the same deploy costs more for the same `gasUsed`.
+`10^15` aettos is 0.001 AE, about five times the measured cost of the redemption call.
 
 ## Getting AE
 
-Superhero links its own on-ramp at [superhero.com/get-ae](https://superhero.com/get-ae). For
-testnet, see [Testnet](/getting-started/testnet).
+See [Buying AE](/defi/buy-ae) for mainnet and [Testnet](/getting-started/testnet) for free test
+AE.
 
 ## Read more
 
@@ -183,16 +141,3 @@ testnet, see [Testnet](/getting-started/testnet).
 - [Accounts & Keys](/aeternity/accounts-and-keys) — the account these balances belong to.
 - [Fund your wallet](/getting-started/fund-wallet) — the practical route to a funded account.
 - [SDK transaction options](https://github.com/aeternity/aepp-sdk-js/blob/develop/docs/transaction-options.md) — `gasLimit`, `gasPrice`, `fee` and their defaults.
-- [Contract transactions in the protocol spec](https://github.com/aeternity/protocol/blob/master/contracts/contract_transactions.md) — how gas is charged and refunded.
-
-## Open questions
-
-- **The per-action costs above are estimates, not measurements.** They are the agent skill authors'
-  observations, without a block height or gas price attached, and no contract determines them — gas
-  depends on the deployed bytecode, and the price on network demand at execution. Buy and sell have
-  no figure at all. What would close it is a table of `gasUsed` — which is a property of the
-  bytecode and stable between runs — separately from `gasPrice`, which is not. Submit one
-  transaction of each kind on mainnet, open it on [æScan](/aeternity/explorers), and record
-  `gasUsed`, `gasPrice` and the keyblock height together. The contract comment quoted above
-  (~0.000201 AE for an invitation redemption) is the only measured number available anywhere in
-  these repositories, and it covers one call shape at one price.

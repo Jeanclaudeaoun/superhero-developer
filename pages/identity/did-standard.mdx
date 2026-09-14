@@ -1,180 +1,52 @@
 ---
-title: "DIDs and the W3C Standard"
-description: "How SuperheroID maps onto the W3C decentralized identifier specification."
+title: "Identity and DIDs"
+description: "How a SuperheroID — an æternity address plus AddressLink providers — maps onto the concepts in W3C DID Core."
 ---
 
-# DIDs and the W3C Standard
+# Identity and DIDs
 
-Superhero markets SuperheroID as "following the W3C standard for decentralized identifiers".
-This page is for readers who already know DID Core and want to know exactly how far that claim
-goes. The short version: the substance of the model lines up reasonably well — a self-controlled
-identifier, cryptographic verification material, and signed assertions — but **no DID method
-name, DID syntax, DID document or resolver is defined anywhere in the Superhero repositories**.
-The identity contract does reserve a DID-shaped namespace, and nothing fills it. Take the claim
-as a statement of design intent, not as a conformance claim you can test.
+A SuperheroID is an æternity address plus the provider links attached to it in the
+`AddressLink` contract. There is no separate identifier scheme: the `ak_…` address is the
+identifier, the Ed25519 key it encodes is the verification material, and the links are the
+claims. For readers who know
+[Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did/), the model maps onto DID
+Core concepts like this:
 
-## What DID Core requires
+| DID Core concept | Superhero equivalent |
+| --- | --- |
+| DID subject and controller | The æternity account, an `ak_…` address |
+| Verification method | The Ed25519 public key the address encodes; signatures verified on chain with `Crypto.verify_sig` |
+| Authentication | Wallet signed messages, using the æternity signed-message prefix, with a contract-held nonce |
+| `alsoKnownAs` | The `x`, `nostr` and `prefaens` links in `AddressLink` |
+| Service endpoint | The `nostr` key used for chat; the `site` link |
+| Verifiable data registry | `AddressLink` state plus AENS |
+| Update and deactivate | `link` and `unlink`, per provider |
 
-Per [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did/), a DID is a URI that
-associates a DID subject with a DID document. The document expresses cryptographic material,
-verification methods and services, giving a DID controller the means to prove control. A DID is
-resolvable through a **DID method**: a named scheme, registered in the
-[DID Specification Registries](https://www.w3.org/TR/2024/NOTE-did-spec-registries-20240516/),
-that defines the identifier syntax and the create, read, update and deactivate operations.
+Superhero does not define a DID method, DID syntax, DID document or resolver. If you need a DID
+for interoperability with an external system, derive a `did:key` from the account's Ed25519 key
+or publish a `did:web` document yourself. `AddressLink` also exposes a DID-keyed namespace
+(`link_did`, `resolve_did_controller` and friends) in which the `did` is an opaque string — see
+[AddressLink](/identity/profile-registry).
 
-Three things are therefore load-bearing for any compliance claim:
+## Verifying a SuperheroID
 
-1. A method name, giving identifiers of the form `did:` plus the method name plus a
-   method-specific identifier.
-2. A resolution procedure that turns such an identifier into a DID document.
-3. A DID document with verification methods, and optionally services and `alsoKnownAs`.
-
-## What Superhero actually has
-
-| DID Core concept | Superhero equivalent | Status |
-| --- | --- | --- |
-| DID subject and controller | The æternity account, an `ak_…` address | Present |
-| Verification method | The Ed25519 public key the address encodes; signatures verified on-chain with `Crypto.verify_sig` | Present |
-| Authentication | Wallet signed messages, using the æternity signed-message prefix, with a contract-held nonce | Present |
-| Assertion / credential | The `x` link — but the OAuth evidence is off chain and discarded | Present in name only |
-| `alsoKnownAs` | The `x`, `nostr` and `prefaens` links in `AddressLink` | Present in substance |
-| Service endpoint | The `nostr` key used for chat; the `site` link | Present in substance |
-| Verifiable data registry | `AddressLink` state plus AENS | Present |
-| Update / deactivate operations | `link` and `unlink`, per provider | Present in substance |
-| DID method name | — | **Not defined anywhere** |
-| DID syntax | — | **Not defined anywhere** |
-| DID document | — | **Not produced by any endpoint** |
-| DID resolver | — | **None found** |
-
-Every row marked present is real and checkable. Every row marked missing is missing: grepping
-the web app, the backend and the agent skill for `did:`, `DID`, `W3C` or "decentralized
-identifier" turns up the landing-page copy and nothing else. `GET /api/profile/{address}`
-returns a plain profile aggregate, not a DID document, and there is no `.well-known` DID route
-in the server.
-
-The assertion row is weaker than it was. The registry design the whitepaper describes put a
-backend-signer attestation on chain, which a third party could verify against a published
-signer key — a genuine, if single-issuer, verifiable credential. `AddressLink` records only the
-subject's own consent signature; the OAuth check that justified it is never published. So the
-one row that looked like a credential is now closer to a self-assertion countersigned by a
-gatekeeper. See [Verifying Your X Account](/identity/x-verification).
-
-## The contract reserves a DID namespace and nothing fills it
-
-This is new and worth stating exactly, because it is the closest thing to a DID in the system.
-
-`AddressLink.aci.json` defines six entrypoints in a DID-keyed namespace, parallel to the
-address-keyed and AENS-name-keyed ones:
-
-```text
-link_did(did : string, controller : address, provider : string, value : string, nonce : int, sig : signature)
-unlink_did(did : string, controller : address, provider : string, nonce : int, sig : signature)
-get_nonce_did(did : string, controller : address) : int
-get_links_did(did : string, controller : address) : map(string, string)
-get_link_did(did : string, controller : address, provider : string) : option(string)
-resolve_did_controller(did : string) : option(address)
-```
-
-The shape is right — a controller address, a link map, and a resolver from identifier to
-controller is most of what a minimal DID method needs. But:
-
-- **`did` is an opaque `string`.** The contract imposes no syntax, no method prefix and no
-  validation. Any string is a valid key.
-- **Nothing calls them.** Grepping `superhero-api` for `link_did`, `resolve_did_controller`,
-  `get_nonce_did` or `get_links_did` returns no hits. The address-links plugin filters on
-  `link`, `unlink`, `link_principal` and `unlink_principal` only, so a `link_did` transaction
-  would not even be indexed.
-- **No document is produced.** `get_links_did` returns a provider-to-value map, not a DID
-  document with `verificationMethod` and `service` entries.
-
-So the contract has a slot for a DID method and no method is defined, registered, populated or
-resolved. Treat it as reserved capacity, not as an implementation.
-
-## An illustrative mapping
-
-The following is **illustrative only**. It is not a resolvable document, not a registered
-method, and not produced by any Superhero surface. It exists to show what the existing state
-would correspond to if somebody did define a method.
-
-```text
-Illustrative — NOT a real Superhero DID document.
-
-id                  <- the ak_… account address
-verificationMethod  <- Ed25519 public key decoded from the ak_… address
-authentication      <- that key, used via the aeternity signed-message scheme
-alsoKnownAs         <- the prefaens and x links from AddressLink.get_links(addr)
-service             <- the nostr link for chat; the site link
-```
-
-If you need a DID today for interoperability with an external system, the honest options are to
-derive a `did:key` from the account's Ed25519 key — which is deterministic and needs no
-registry — or to publish a `did:web` document yourself. Neither is what Superhero does.
-
-## Verifying a SuperheroID without a resolver
-
-The absence of a DID method does not stop independent verification; it just means you do the
-resolution yourself. In practice:
-
-1. **Prove control of the address.** Ask for a signed message and verify it against the
-   `ak_…` public key using the æternity signed-message construction. This is exactly what the
-   app's own address-link flows do before submitting anything.
+1. **Prove control of the address.** Ask for a signed message and verify it against the `ak_…`
+   public key using the æternity signed-message construction.
 2. **Check a `.chain` name.** Resolve it through AENS on any node or middleware and compare its
-   `account_pubkey` pointer to the address. This needs no Superhero infrastructure at all, and
-   for a `prefaens` link the contract already performed the same check with `AENSv2.lookup`.
+   `account_pubkey` pointer to the address. For a `prefaens` link the contract already performed
+   the same check with `AENSv2.lookup`.
 3. **Read the links.** `AddressLink.get_links(addr)` returns the provider-to-value map as a
    dry-run call, and `resolve(provider, value)` walks it backwards. Both are free reads against
    consensus state.
-4. **Check an X handle.** You cannot, from chain data. The chain records the address's consent
-   to a handle string; the OAuth evidence lives only inside Superhero's backend and is
-   discarded after submission. This is the weakest link in the model — see
+4. **X handle.** The chain records the address's consent to a handle string; the OAuth check
+   was performed by Superhero's backend. See
    [Verifying Your X Account](/identity/x-verification).
-5. **Check authorship of content.** A post's author is the address that signed the transaction,
-   recorded by the `Tipping` contract; it does not depend on the identity layer at all.
+5. **Authorship of content.** A post's author is the address that signed the transaction,
+   recorded by the `Tipping` contract, independent of the identity layer.
 
-## Where the model is genuinely strong, and where it is not
+## Related
 
-Strong: the identifier is a key you hold, there is no account to be suspended, every link is
-consensus state readable by anyone, every link is authorised by a signature over a
-nonce-bearing message, and unlinking needs nothing but your own key.
-
-Weak, relative to DID Core:
-
-- **No method**, so nothing interoperates with a DID resolver.
-- **The X claim is not verifiable from the chain**, which is a regression from the registry
-  design the whitepaper describes. That class of claim is now trusted rather than federated.
-- **Writes are gatekept.** Only the provider-namespace owner may submit a `link`, so a link is
-  self-authorised but not self-published. If the provider wallet stops submitting, you cannot
-  add a link — though your existing links stay and you can still unlink.
-- **No key rotation or deactivation story** for the identifier itself. Losing the seed loses
-  the identity; there is no controller-change operation for an address-keyed subject. The
-  DID-keyed namespace does have a `controller` argument, which is where such an operation would
-  naturally live — and it is unused.
-
-## Open questions
-
-- **Is there a DID method name, and was `link_did` built for a specific one?** No `did:` string,
-  method specification or resolver appears in the web app, the backend or the agent skill, yet
-  `AddressLink` carries a complete DID-keyed namespace nobody calls. Ask Superhero what that
-  namespace was designed for, and whether a method is registered or intended for registration
-  in the DID Specification Registries.
-- **Is a DID document served anywhere?** No endpoint in `superhero-api` returns one, no
-  `.well-known` route exists in `superhero/server`, and `get_links_did` returns a link map
-  rather than a document. Nothing would produce one today.
-- **What does "W3C standard compliant" mean here operationally?** Until a method exists, the
-  claim cannot be tested against the DID Core conformance criteria. Anyone relying on it for an
-  integration should ask for the method specification first — and, given the X regression
-  above, should ask specifically which claims are meant to be independently verifiable.
-
-## Read more
-
-- [SuperheroID](/identity/superhero-id) — the product-level description and what it links.
-- [The AddressLink contract](/identity/profile-registry) — the verifiable data registry behind
-  the model, including the unused DID namespace.
-- [Verifying Your X Account](/identity/x-verification) — the one signed assertion in the system,
-  and its single issuer.
+- [SuperheroID](/identity/superhero-id) — what an identity links.
+- [AddressLink](/identity/profile-registry) — the contract behind every link.
 - [Accounts and keys](/aeternity/accounts-and-keys) — where the Ed25519 key behind an `ak_`
   address comes from.
-- [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did/) — the normative
-  specification the claim refers to.
-- [DID Specification Registries](https://www.w3.org/TR/2024/NOTE-did-spec-registries-20240516/) —
-  where a Superhero method would have to be registered to be discoverable.

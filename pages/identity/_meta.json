@@ -1,10 +1,10 @@
 {
   "index": "Overview",
   "superhero-id": "SuperheroID",
-  "profile-registry": "The AddressLink Contract",
-  "names": "Names: Custom, Chain and X",
+  "profile-registry": "AddressLink",
+  "names": "Names",
   "chain-names": "Chain Names (AENS)",
   "x-verification": "Verifying Your X Account",
   "profiles": "Profiles & Accounts",
-  "did-standard": "DIDs and the W3C Standard"
+  "did-standard": "Identity and DIDs"
 }

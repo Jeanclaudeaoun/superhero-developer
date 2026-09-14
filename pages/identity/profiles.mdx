@@ -1,13 +1,12 @@
 ---
 title: "Profiles & Accounts"
-description: "What an account page shows and how to edit your own."
+description: "What an account page shows, where each field comes from, how to edit your own, and how the leaderboards rank accounts."
 ---
 
 # Profiles & Accounts
 
-Every æternity address has a profile page on Superhero whether or not anyone has ever set it
-up. This page documents what those pages show, where each field comes from, how you edit your
-own, and how the leaderboards rank accounts.
+Every æternity address has a profile page on Superhero, whether or not anyone has set it up.
+The page merges on-chain links, the API's account aggregate and trading statistics.
 
 ## The two profile surfaces
 
@@ -19,30 +18,30 @@ own, and how the leaderboards rank accounts.
 | `/trends/accounts/:address` | The Trendminer view of an account, focused on trading |
 | `/trends/leaderboard` | Ranked accounts by portfolio performance |
 
-Live: the social profile is at `https://superhero.com/users/` followed by an `ak_` address.
+The social profile is live at `https://superhero.com/users/` followed by an `ak_` address.
 
 ## The header
 
 | Element | Source |
 | --- | --- |
 | Display name | The linked preferred AENS name, else `public_name`, else the AENS name resolved for the address, else a shortened `ak_…` |
-| Verified badge | Rendered when an X link resolves for the account |
+| Verified badge | Rendered when an X link exists for the account |
 | Bio | `links.bio`, falling back to `profile.bio` and then the account's own `bio` |
 | Website | `links.site` |
 | Avatar | The profile's `avatarurl`, with a deterministic generated fallback |
 | Balances and counts | The account aggregate — holdings count and total created tokens |
 
-The account aggregate served by `GET /api/accounts/{address}` carries `address`, `bio`,
+The account aggregate from `GET /api/accounts/{address}` carries `address`, `bio`,
 `chain_name`, `chain_name_updated_at`, an embedded `profile`, `public_name`, `holdings_count`,
 and a `links` object keyed by the `AddressLink` provider ids — `x`, `nostr`, `bio`, `site` and
 `prefaens`. The `links` object is authoritative: the client reads it first and treats the flat
 fields as fallbacks for older records.
 
-The endpoint also self-heals the chain name. If `chain_name_updated_at` is older than the
+The endpoint also keeps the chain name fresh. If `chain_name_updated_at` is older than the
 staleness window, or has never been set, it re-reads the name from the middleware, returns the
-fresh value, and writes it back asynchronously. An hourly sweep in `AccountService` covers the
-same ground for accounts nobody is currently viewing, so a lapsed or transferred `.chain` name
-disappears from a profile within about an hour.
+fresh value, and writes it back asynchronously. An hourly sweep covers accounts nobody is
+viewing, so a lapsed or transferred `.chain` name disappears from a profile within about an
+hour.
 
 ## The tabs
 
@@ -56,31 +55,30 @@ omits the parameter):
 | Created | `created` | Tokens the account created |
 | Transactions | `transactions` | The account's trades, with the token expanded |
 
-All four datasets are prefetched in the background when the page loads, so switching tabs is
-instant. The feed tab merges posts from `GET /api/posts?account_address=…` with trade and
-token-creation activity items.
+All four datasets are prefetched when the page loads. The feed tab merges posts from
+`GET /api/posts?account_address=…` with trade and token-creation activity items.
 
-## On-chain versus API
+## On chain versus API
 
 | Field | Where it lives |
 | --- | --- |
 | Preferred AENS name, bio, website, X handle, Nostr key | `AddressLink` contract state, as provider links — signed by you, submitted by the backend |
 | AENS name ownership and pointers | æternity AENS |
-| Chain name shown on a profile | Derived from the middleware and cached in `accounts.chain_name` — not a contract link |
-| Fullname, avatar URL, legacy username, `chain_expires_at` | The frozen `profile_cache` table. Its writer, the ProfileRegistry indexer, was removed. |
+| Chain name shown on a profile | Resolved from the middleware and cached on the account — not a contract link |
+| Fullname, avatar URL, legacy username, `chain_expires_at` | Legacy profile fields, read-only |
 | Follower and following counts | The social-graph tables, when that feature is enabled |
 | Posts and comments | `Tipping` v3 contract, indexed by the API |
 | Balances, portfolio history, leaderboard stats | Computed by the API from chain data |
 
-There is no field on a profile that the API can change on its own behalf. Everything a user
-controls is behind a wallet signature they produced — though note that the *submission* of that
-signature is done by Superhero's provider wallet, the only account permitted to write those
-provider namespaces. See [The AddressLink contract](/identity/profile-registry).
+Every field a user controls is written behind a wallet signature they produced. The
+transaction carrying that signature is submitted by Superhero's provider wallet, the only
+account permitted to write those provider namespaces. See
+[AddressLink](/identity/profile-registry).
 
 ## Editing your own profile
 
-The editor is the **Edit SuperheroID** action on your own profile. It is one modal over several
-independent operations, not a single save:
+Open **Edit SuperheroID** on your own profile. It is one modal over several independent
+operations:
 
 | Field | How it is written |
 | --- | --- |
@@ -91,20 +89,14 @@ independent operations, not a single save:
 | Nostr key | The same pair under `/api/address-links/nostr/`, with a signed kind-22242 event as the extra proof |
 
 Each link has a matching unlink: `/unclaim` returns a message and nonce, you sign it, and
-`/unclaim/submit` relays the removal. Because the operations are independent, a partial failure
-is possible — the bio can save while the website call fails — and the editor reloads its state
-afterwards rather than assuming the form is authoritative.
+`/unclaim/submit` relays the removal. Because the operations are independent, the editor
+reloads its state after saving rather than assuming the form is authoritative.
 
 Every claim reads the contract's own `get_nonce(address)`, and the nonce advances on each link
-or unlink. If two devices claim at once the second submit fails with a nonce mismatch and has
+or unlink. If two devices claim at once, the second submit fails with a nonce mismatch and has
 to restart from claim.
 
-**Fullname, avatar and the legacy username are not editable.** The app's REST inventory lists
-`POST /api/profile/{address}/challenge` and `PATCH /api/profile/{address}` as a deprecated
-legacy pair, but neither route exists in `superhero-api` at all — the profile controller has
-only the two read endpoints, the profile feed, the X-invite endpoints, the two progress
-endpoints and the `chain-name` claim flow. Those three fields live in the frozen `profile_cache`
-table and no live endpoint writes them.
+Fullname, avatar and the legacy username are read-only.
 
 ## Leaderboards
 
@@ -123,17 +115,14 @@ Each row carries `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_
 `buy_count`, `sell_count`, `volume_usd`, `created_tokens_count`, `owned_trends_count` and a
 `portfolio_value_usd_sparkline` of timestamp-value pairs.
 
-Two details worth knowing before you read a ranking. The default sort direction is descending
-for every metric except maximum drawdown (`mdd`), which sorts ascending because a smaller
-drawdown is better. And the ranking is portfolio performance only — it says nothing about
-posting, tipping or governance participation.
+The default sort direction is descending for every metric except maximum drawdown (`mdd`),
+which sorts ascending because a smaller drawdown is better.
 
 ## The account index
 
 `/trends/accounts` reads `GET /api/accounts`, which pages at 1 to 100 rows and accepts a
-`search` term matched against the address, `accounts.chain_name` and the cached
-`public_name` / `username` / `fullname`. The ranking is trading activity, and `order_by` takes
-exactly nine values — anything else is a 400:
+`search` term matched against the address, `chain_name`, `public_name`, `username` and
+`fullname`. `order_by` takes exactly nine values — anything else is a `400`:
 
 | `order_by` | Ranks by |
 | --- | --- |
@@ -147,36 +136,30 @@ exactly nine values — anything else is a 400:
 | `total_revoked_invitation_count` | Invitations revoked |
 | `created_at` | When the account row first appeared |
 
-`order_direction` is `ASC` or `DESC`, defaulting to `DESC`. There is one more filter worth
-knowing: `has_nostr=true` returns only accounts that have linked a Nostr key, which is what a
-chat-contact suggester wants.
+`order_direction` is `ASC` or `DESC`, defaulting to `DESC`. `has_nostr=true` returns only
+accounts that have linked a Nostr key — useful for a chat-contact suggester.
 
-Note what is absent — nothing ranks by posting, commenting, tipping or governance. Both the
-account index and the leaderboard are trading surfaces.
+Both the account index and the leaderboard rank trading activity only; nothing ranks by
+posting, commenting, tipping or governance.
 
 ## How `public_name` is computed
 
-Server-side, by a fixed four-step ladder in `ProfileReadService`, with no per-account
-preference involved:
+Server-side, by a fixed four-step ladder with no per-account preference:
 
 ```text
 prefered_aens_name   (links.prefaens — the AENS name the user explicitly linked)
-chain_name           (accounts.chain_name, derived from the middleware)
-username             (the frozen registry-era cache field)
+chain_name           (resolved from the middleware)
+username             (the legacy profile field)
 address              (the ak_… itself)
 ```
 
-The registry's `display_source` preference has no successor — the field is not in the response
-and there is nothing to set. See [Names](/identity/names).
+See [Names](/identity/names).
 
-## Read more
+## Related
 
 - [SuperheroID](/identity/superhero-id) — what the profile is a view onto.
-- [Names: Custom, Chain and X](/identity/names) — which name types still exist and how one is
-  resolved for display.
-- [The AddressLink contract](/identity/profile-registry) — the contract behind every editable
-  field on this page.
+- [Names](/identity/names) — the name types and how one is resolved for display.
+- [AddressLink](/identity/profile-registry) — the contract behind every editable field.
 - [Verifying Your X Account](/identity/x-verification) — the X link, and what its badge proves.
-- [Profile API](/api-reference/profile) — the endpoint-level reference for everything on this page.
+- [Profile API](/api-reference/profile) — the endpoint-level reference.
 - [Portfolio](/tokens/portfolio) — the holdings and performance numbers the profile surfaces.
-- [Superhero](https://superhero.com/) — open any post author's name to land on their profile.

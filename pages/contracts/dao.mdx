@@ -1,19 +1,17 @@
 ---
 title: "DAO"
-description: "The treasury and governance contract for one community: vote creation and execution."
+description: "The treasury and governance contract for one community: creating votes, executing them, and receiving sale proceeds."
 ---
 
 # DAO
 
-`DAO.aes` is deployed by the factory as part of every community. It is simultaneously the
-**owner** and the **beneficiary** of that community's token sale, so it receives the DAO half
-of the bonding curve spread and holds administrative authority over the sale. It is also the
-contract that creates votes and executes them.
+`DAO.aes` is deployed by the factory as part of every community. It is both the **owner** and
+the **beneficiary** of that community's token sale, so it receives the DAO half of the bonding
+curve spread and holds administrative authority over the sale. It is also the contract that
+creates votes and executes them.
 
 Resolve a community's DAO from its sale contract's state (`sale.get_state().dao_contract`) or
-from the `CreateCommunity` event. The ACI lives inside
-`superhero-agent-skill/contracts/CommunityFactory.aci.json`; the source is
-`bcl-contracts/contracts/DAO.aes`, which everything on this page is read from.
+from the `CreateCommunity` event. Its interface is inlined in `CommunityFactory.aci.json`.
 
 ## Entrypoints
 
@@ -47,8 +45,8 @@ record state =
   , factory      : Factory }
 ```
 
-The `bool` in each `votes` entry is the "already applied" flag. `apply_vote_subject` refuses
-to run twice on the same entry by checking it.
+The `bool` in each `votes` entry is the "already applied" flag. `apply_vote_subject` checks it
+and refuses to run twice on the same entry.
 
 ## Events
 
@@ -80,17 +78,12 @@ require(Option.default(0, token.balance(Call.caller)) >= minimum_token_threshold
         "ADD_VOTE_TOKEN_HOLDER_MISSMATCH")
 ```
 
-That is a **plain balance read at call time**. No allowance is created, nothing is locked, and
-nothing is escrowed. You may sell the tokens in the very next block and the proposal stands.
-The only stake in the system is what individual voters lock when they call `DAOVote.vote` —
-proposing costs 555 AE and a momentary balance, nothing more.
+The threshold is a balance check at call time. Proposing locks no tokens; only voters lock
+stake, when they call `DAOVote.vote`.
 
-**`add_vote` does not validate the subject at all.** It stores whatever `metadata` you hand it
-and deploys a `DAOVote` around it. In particular, a `VotePayout` or `VotePayoutAmount` for more
-AE than the treasury holds is accepted, deployed, and can pass — the arithmetic that would
-catch it does not exist. The failure surfaces only at execution: `apply_vote_subject` reaches
-`Chain.spend(receiver, amount)` with an amount the contract cannot cover and the whole
-application aborts, burning the execution window. Check the treasury balance yourself before
+`add_vote` does not check a payout amount against the treasury balance. A `VotePayout` or
+`VotePayoutAmount` for more AE than the DAO holds is accepted and can pass, and then fails at
+execution when `apply_vote_subject` reaches `Chain.spend`. Check the treasury balance before
 proposing an amount.
 
 ```javascript
@@ -115,8 +108,8 @@ record metadata =
   , link        : string }
 ```
 
-`description` and `link` are free text — the contract does not validate the link. `subject` is
-the variant that determines what executing the vote actually does:
+`description` is capped at 300 characters; `link` is free text. `subject` is the variant that
+determines what executing the vote does:
 
 ```sophia
 datatype subject =
@@ -133,15 +126,13 @@ In JavaScript each is a one-key object whose value is an array of the constructo
 arguments — `{ VotePayoutAmount: ['ak_...', '1000000000000000000'] }`, and for the map-valued
 one, `{ ChangeMetaInfo: [new Map([['description', 'new text']])] }`.
 
-The Superhero app currently surfaces a subset in its create-vote form: `VotePayout`,
-`ChangeDAO`, `AddModerator` and `DeleteModerator`. `VotePayoutAmount` is commented out in
-`TokenDaosListView.tsx` with the note "two fields" — a UI limitation, not a contract one. All
-seven subjects are callable directly.
+The Superhero app's create-vote form offers `VotePayout`, `ChangeDAO`, `AddModerator` and
+`DeleteModerator`. All seven subjects are callable directly.
 
 ## Executing a vote
 
-`apply_vote_subject(vote_seq_id)` is what turns a passed vote into an actual state change. It
-is **permissionless**: any account, or a script, can call it. The DAO does the checking:
+`apply_vote_subject(vote_seq_id)` turns a passed vote into a state change. Any account can
+call it; the DAO does the checking:
 
 ```text
 let (applied, vote) = state.votes[vote_seq_id]
@@ -152,12 +143,11 @@ switch(vote.final_vote_state())
   ...
 ```
 
-### Quorum and supermajority live here, not in `DAOVote`
+### Quorum and supermajority
 
-This is the part most often misplaced. `DAOVote.final_vote_state()` does **no** threshold
-arithmetic — it returns `Some(vote_state)` once `Chain.block_height >= close_height` and `None`
-before that, and nothing else. Every percentage check is in `DAO.apply_vote_subject`, and this
-is the whole of it:
+`DAOVote.final_vote_state()` does no threshold arithmetic — it returns `Some(vote_state)` once
+`Chain.block_height >= close_height` and `None` before that. Every percentage check is in
+`DAO.apply_vote_subject`:
 
 ```sophia
 let total_vote_stake = vote_state[true] + vote_state[false]
@@ -173,22 +163,16 @@ let stake_percentage = (total_vote_stake * 100) / token_total_supply
 require(stake_percentage >= 10, "GREATER_10_PERCENT_STAKE_REQUIRED")
 ```
 
-Read that carefully, because the details are not what the round numbers suggest:
-
 - **The supermajority is measured against votes cast, not supply.** `in_favor_percentage` is
   `yes / (yes + no)`. Abstaining does not count against a proposal.
-- **Quorum is measured against `total_supply()` read at execution time.** Not at vote creation,
-  not at close height — at the moment `apply_vote_subject` runs. The source says so in a
-  comment: "the total token supply can change after the vote has closed, thus impacting this
-  check, therefore we keep the application timeout short to minimize the security impact."
-  Buys before execution inflate supply and can pull a passing vote below quorum; sells shrink
-  it and can push a failing vote above.
+- **Quorum is measured against `total_supply()` read at execution time** — not at vote
+  creation and not at close height. Buys before execution raise the denominator; sells lower
+  it. The short application window limits the effect.
 - **Both are integer divisions, truncated before comparison.** With 200 tokens of stake, 110
-  yes votes give `(110 * 100) / 200 = 55` and pass; 109 give `54` and fail. There is no
-  rounding in the proposer's favour.
+  yes votes give `(110 * 100) / 200 = 55` and pass; 109 give `54` and fail.
 - **Both comparisons are `>=`.** Exactly 55% and exactly 10% pass.
 
-So the full precondition set for execution is seven gates, in source order:
+The full precondition set for execution, in source order:
 
 | Gate | Abort string | Meaning |
 | --- | --- | --- |
@@ -200,65 +184,49 @@ So the full precondition set for execution is seven gates, in source order:
 | At least 55% in favour | `GREATER_55_PERCENT_AGREEMENT_REQUIRED` | `yes * 100 / (yes + no) >= 55` |
 | At least 10% participation | `GREATER_10_PERCENT_STAKE_REQUIRED` | `(yes + no) * 100 / total_supply >= 10` |
 
-### What happens after the window closes
+### The execution window
 
-Nothing. A vote that passed but was not applied within `vote_timeout` key blocks after its
-close height can never be applied — `apply_vote_subject` will abort with
-`VOTE_RESULT_TIMEOUTED` forever after. The proposal has to be opened again, at the cost of
-another 555 AE.
+A vote that passed but was not applied within `vote_timeout` key blocks after its close height
+can no longer be applied — `apply_vote_subject` aborts with `VOTE_RESULT_TIMEOUTED` from then
+on. To retry, open the proposal again, at the cost of another 555 AE.
 
-The window is **960 key blocks**, set once in `init` and never changed:
+The window is **960 key blocks**, set once in `init`:
 
 ```sophia
 vote_timeout = (60 / 3) * 24 * 2   // 2 days: (60 / 3) key blocks per hour, 24 hours, 2 days
 ```
 
-At æternity's roughly three-minute key block time that is about two days, which is what the
-whitepaper quotes. `dao.vote_timeout()` returns the raw key-block count. There is no vote
-subject that changes it, so every DAO the factory has ever deployed carries the same 960.
+At æternity's roughly three-minute key block time that is about two days. `dao.vote_timeout()`
+returns the raw key-block count. No vote subject changes it, so every DAO the factory deploys
+carries the same 960.
 
-Because execution is permissionless and time-bounded, someone has to actually do it. If you
-care about a proposal passing, plan to call `apply_vote_subject` yourself once the vote
-closes rather than assuming a keeper will.
+Execution is open to any account and nobody is obliged to do it. If you care about a proposal
+passing, call `apply_vote_subject` yourself once the vote closes.
 
 ## Receiving sale proceeds
 
 `record_sale_transaction(buyer, buy_price)` is payable and is how the token sale pays the DAO
-its half of the spread. The buyer address and the price come along as metadata so a
-replacement DAO can implement its own split or accounting logic, which is the whole point of
-the `ReplaceableDAO` interface — proceeds arrive through a contract call rather than a bare
+its half of the spread on every buy. The buyer address and the price come along as arguments
+so a replacement DAO can implement its own split or accounting — that is the point of the
+`ReplaceableDAO` interface: proceeds arrive through a contract call rather than a bare
 `Chain.spend`.
 
-In the stock `DAO.aes` the body is empty. This is the entire implementation:
-
-```sophia
-payable stateful entrypoint record_sale_transaction(buyer : address, buy_price : int) = ()
-```
-
-Two consequences a caller should know:
-
-- **It is not permissioned.** There is no `require` on `Call.caller`, so any account or
-  contract may call it, with any arguments, and any amount of AE. Doing so is simply a donation
-  to the DAO treasury: the AE arrives, the arguments are discarded, and no event fires. Nothing
-  about the buyer or the price is recorded on chain by this contract — an indexer that wants
-  per-buy attribution must read the sale contract's `Buy` event instead.
-- **That permissiveness is deliberate.** The sale contract calls it with `protected = true` so
-  that a misbehaving or replaced DAO cannot block a buy, and the token sale's `verify_dao`
-  probes it with `value = 0` at construction time purely to check the entrypoint exists. A
-  replacement DAO is free to add accounting here; the stock one does not.
+The stock `DAO.aes` accepts the AE and records nothing further; no event fires. For per-buy
+attribution, read the sale contract's `Buy` event. The sale calls this entrypoint with
+`protected = true`, so a DAO that aborts here cannot block a buy.
 
 Users never need to call this.
 
 ## The `ChangeDAO` safeguard
 
-`is_dao()` returns `true`. It exists solely so that a `ChangeDAO` vote can check its target
-before transferring ownership, beneficiary rights and the treasury balance. A target that
-does not implement `is_dao() = true` cannot receive a DAO migration, which prevents the
-treasury being voted into a plain account or an unrelated contract by mistake.
+`is_dao()` returns `true`. It exists so that a `ChangeDAO` vote can check its target before
+transferring ownership, beneficiary rights and the treasury balance. A target that does not
+implement `is_dao() = true` cannot receive a DAO migration, which prevents the treasury being
+voted into a plain account or an unrelated contract by mistake.
 
-`ChangeDAO` carries a second guard that is easy to miss. After moving the balance and
-reassigning the sale's beneficiary and owner, it requires the new DAO to point at the *same*
-community management contract:
+`ChangeDAO` carries a second guard. After moving the balance and reassigning the sale's
+beneficiary and owner, it requires the new DAO to point at the *same* community management
+contract:
 
 ```sophia
 require(get_community_management() == new_dao.get_community_management(),
@@ -266,8 +234,8 @@ require(get_community_management() == new_dao.get_community_management(),
 ```
 
 Only then does it hand community management's ownership over. A replacement DAO that resolves
-a different community management contract aborts the whole migration. The source notes this is
-an initial check only — once installed, a custom DAO can change it.
+a different community management contract aborts the whole migration. This is an initial
+check only — once installed, a custom DAO can change it.
 
 ## `set_token_sale` is creator-only and one-shot
 
@@ -277,13 +245,12 @@ require(Option.is_none(state.token_sale), "TOKEN_SALE_ALREADY_SET")
 ```
 
 The factory calls it in the same transaction as the DAO's deployment, to break the
-sale-needs-DAO / DAO-needs-sale cycle. It can never be called again, by anyone.
+sale-needs-DAO / DAO-needs-sale cycle. It can never be called again.
 
-## Read more
+## Related
 
 - [DAOVote](/contracts/dao-vote) — the proposal contract `add_vote` deploys
 - [CommunityManagement](/contracts/community-management) — the source of the token threshold `add_vote` checks
 - [Proposals](/dao/proposals) — the subjects explained for a non-developer audience
 - [Quorum and thresholds](/dao/quorum-and-thresholds) — the passing conditions
 - [Replaceable DAO](/dao/replaceable-dao) — the migration path `ChangeDAO` implements
-- [Community DAOs on superhero.com](https://superhero.com/trends/daos) — the live DAO list

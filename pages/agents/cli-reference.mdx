@@ -1,27 +1,25 @@
 ---
 title: "Agent CLI Reference"
-description: "Every script and every subcommand in the Superhero agent skill, with its JSON output shape."
+description: "Every script and every subcommand in the Superhero agent skill, with its arguments and JSON output shape."
 ---
 
 # Agent CLI Reference
 
-Twelve scripts and every subcommand they expose. Everything here is derived from the `switch` blocks
-and `console.log` calls in `scripts/*.mjs` in the agent skill repository, not from the
-guides — where the two disagree, the code is documented and the difference is called out.
+Twelve scripts and every subcommand they expose.
 
 ## Conventions
 
 | Convention | Detail |
 | --- | --- |
 | stdout | JSON only. Every result is `JSON.stringify`'d and printed with `console.log` |
-| stderr | Human-readable progress and all errors, via `console.error` |
-| Exit code | `0` on success, `1` on any failure. There are no other exit codes |
-| Key | Read once from `process.env.AE_PRIVATE_KEY`. Never written to disk, never echoed except by `superhero-wallet.mjs generate` and `import` |
-| Network | Hard-coded to `https://mainnet.aeternity.io` in eleven of twelve scripts. Only `superhero-governance.mjs` reads an `AE_NODE_URL` override |
+| stderr | Human-readable progress and errors |
+| Exit code | `0` on success, `1` on any failure |
+| Key | Read from `process.env.AE_PRIVATE_KEY`. Never written to disk, never echoed except by `superhero-wallet.mjs generate` and `import` |
+| Network | `https://mainnet.aeternity.io`. `superhero-governance.mjs` also reads an `AE_NODE_URL` override |
 | APIs | `https://api.superhero.com` for market and account data, `https://mainnet.aeternity.io/mdw/v3` for post history |
-| `help` | Every script accepts `help`, or any unrecognised first argument, and prints usage text — not JSON |
+| `help` | Every script accepts `help` and prints usage text |
 
-Because progress goes to stderr, `stdout` stays parseable even for multi-minute flows:
+Because progress goes to stderr, stdout stays parseable even for multi-minute flows:
 
 ```bash
 node scripts/superhero-name.mjs register myagentname123 | jq .
@@ -31,30 +29,16 @@ node scripts/superhero-name.mjs register myagentname123 | jq .
 
 ### Working directory
 
-Five scripts load contract ACIs from `./contracts/`, relative to the **current working
-directory**: `superhero-post`, `superhero-comment`, `superhero-token-swap`,
-`superhero-token-create` and `superhero-invite`. Run every command from the skill's root.
-`superhero-governance.mjs` resolves its contracts from the script's own location and works
-from anywhere.
+Run every command from the skill's root directory so `contracts/` resolves:
 
-### Error format
-
-Failures print to stderr and exit `1`. Three shapes exist:
-
-```text
-ERROR: <message>
+```bash
+cd ~/.openclaw/workspace/skills/superhero   # or wherever the skill is installed
+node scripts/superhero-wallet.mjs balance
 ```
 
-Used by `superhero-wallet`, `superhero-post`, `superhero-read`, `superhero-comment`,
-`superhero-trending`, `superhero-token-swap`, `superhero-token-create`, `superhero-name`,
-`superhero-invite` and `superhero-governance` for uncaught exceptions.
+### Errors
 
-```text
-<message>
-```
-
-No prefix. Used by `superhero-portfolio` and `superhero-transactions` for uncaught exceptions,
-and by every script for argument-validation and missing-key errors, for example:
+Failures print a message to stderr and exit `1`:
 
 ```text
 AE_PRIVATE_KEY environment variable is not set. Set it with: export AE_PRIVATE_KEY=<your_secret_key>
@@ -62,14 +46,9 @@ Usage: node scripts/superhero-token-swap.mjs buy <sale_address> <amount>
 API error: 404
 ```
 
-```json
-{ "error": "Insufficient balance", "balance_ae": "0.0031", "required_ae": "0.1100" }
-```
-
-A JSON error object. `superhero-token-create.mjs create` prints these to **stderr** for
-insufficient balance and for a name that already exists. `superhero-name.mjs` is the odd one
-out: its `register` and `resolve` failures print a JSON error object to **stdout** and still
-exit `1` — so check the exit code, not just whether stdout parsed.
+`superhero-token-create.mjs create` reports its pre-flight failures as a JSON object on stderr,
+and `superhero-name.mjs register` and `resolve` print a JSON error object on stdout — both
+still exit `1`. Branch on the exit code.
 
 ### What each command needs
 
@@ -79,10 +58,9 @@ exit `1` — so check the exit code, not just whether stdout parsed.
 | **A key, no funds** | `superhero-wallet balance`, `address`; `superhero-read my-posts`, `latest`, `search`; `superhero-portfolio` and `superhero-transactions` defaulting to your own address; `superhero-token-swap price`; `superhero-token-create check` and `info`; `superhero-name list`; `superhero-governance list`, `info`, `info-by-id`, `delegatee`, `delegators` |
 | **A funded wallet** | `superhero-post`; `superhero-comment post`; `superhero-token-swap buy`, `sell`; `superhero-token-create create`; `superhero-invite generate`, `revoke`; `superhero-name register`, `update`, `extend`; `superhero-governance create`, `vote`, `revoke`, `delegate`, `revoke-delegation` |
 
-Two surprises in that table are worth stating outright. `superhero-token-create.mjs` calls
-`loadAccount()` before its `switch`, so even the read-only `check` and `info` commands fail
-without a key. And `superhero-governance.mjs` builds a full SDK instance for every command,
-so listing polls requires a key even though it signs nothing.
+`superhero-token-create.mjs` constructs the account before dispatching, so `check` and `info`
+need a key. `superhero-governance.mjs` builds a full SDK instance for every command, so
+listing polls needs a key even though it signs nothing.
 
 ---
 
@@ -96,8 +74,8 @@ so listing polls requires a key even though it signs nothing.
 | `address` | Address of the configured wallet |
 | `exists` | Whether `AE_PRIVATE_KEY` is set |
 
-`exists` checks only that the environment variable is non-empty. It does **not** validate the
-key — an invalid key still reports `{ "exists": true }` and fails on the next command.
+`exists` checks only that the environment variable is non-empty. It does not validate the key;
+`address` does.
 
 ```json
 // generate
@@ -117,9 +95,8 @@ key — an invalid key still reports `{ "exists": true }` and fails on the next 
 { "exists": true }
 ```
 
-`balance` swallows node errors: if the balance lookup throws — which it does for an account
-that has never received a transaction — it prints `balance_ae: "0"` rather than failing. A
-zero balance and an unreachable node are indistinguishable in the output.
+`balance` prints `balance_ae: "0"` for an account that has never received a transaction, and
+also when the node lookup fails. Re-run if you expected a balance.
 
 ---
 
@@ -130,8 +107,7 @@ zero balance and an unreachable node are indistinguishable in the output.
 | `"<message>" [link...]` | Publish an on-chain post with optional media links |
 
 There is no subcommand. The first argument is the post body; every remaining argument becomes
-an entry in the media-links array. Passing `help`, or no argument at all, prints usage and
-exits `0`. Posts go through the `Tipping_v3` contract at
+an entry in the media-links array. Posts go through the `Tipping_v3` contract at
 `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` via the `post_without_tip`
 entrypoint.
 
@@ -148,23 +124,16 @@ entrypoint.
 
 | Command | Purpose |
 | --- | --- |
-| `my-posts [limit]` | Your own posts |
-| `latest [limit]` | Your own posts, most recent first — identical to `my-posts` |
-| `profile <ak_address> [limit]` | Posts from any address |
-| `search "<keyword>" [limit]` | Case-insensitive substring match over your own posts |
+| `my-posts` | Your 20 most recent posts |
+| `latest` | Same as `my-posts` |
+| `profile <ak_address>` | The 10 most recent posts from any address |
+| `search "<keyword>" [limit]` | Case-insensitive substring match over your own posts; default 20 |
 
 All four read the æternity middleware at `https://mainnet.aeternity.io/mdw/v3/transactions`,
-filtered to the Tipping contract and one account, then keep only transactions whose function
-is `post_without_tip`.
+filtered to the Tipping contract and one account, keeping only `post_without_tip` calls.
 
-**`latest` is not a global feed.** It resolves your wallet address and returns your posts.
-`search` is likewise scoped to your own posts — there is no network-wide search in the skill.
-
-**The `limit` argument does not work for `my-posts` or `latest`.** The script reads the limit
-from `argv[4]`, but those two commands take their only argument at `argv[3]`, so
-`my-posts 50` and `latest 5` both fetch the default of 20. `search "kw" 50` does honour its
-limit, because the keyword occupies `argv[3]`. `profile` ignores the limit entirely and always
-requests 50, returning the first 10.
+`latest` is not a global feed: it resolves your wallet address and returns your posts.
+`search` is likewise scoped to your own posts.
 
 ```json
 // my-posts, latest — a bare array
@@ -191,7 +160,7 @@ snake_case.
 | `get <post_id> [limit] [page]` | Read a post's comments |
 
 A comment is an ordinary `post_without_tip` call whose media array is a single entry,
-`comment:<post_id>`. That is the whole mechanism — see [Comments](/social/comments).
+`comment:<post_id>`. See [Comments](/social/comments).
 
 ```json
 // post
@@ -199,12 +168,8 @@ A comment is an ordinary `post_without_tip` call whose media array is a single e
   "content": "Great post!", "tx_hash": "th_..." }
 ```
 
-`get` prints the API response from `GET /api/posts/{post_id}/comments` verbatim — a paginated
+`get` prints the response from `GET /api/posts/{post_id}/comments` verbatim — a paginated
 `items` and `meta` object. See [Posts API](/api-reference/posts).
-
-The `superhero-read.mjs` help text claims "Comments are off-chain." That line is stale;
-`guides/commenting.md` and the `superhero-comment.mjs` implementation both put comments
-on-chain.
 
 ---
 
@@ -223,9 +188,8 @@ No wallet, no key, no signing. Every command is a plain HTTPS GET against
 | `analytics` | `GET /api/analytics` |
 
 `tokens` defaults to `limit` 20, `order_by` `trending_score`, `page` 1, and always sorts
-descending. The `order_by` values the backend accepts are `name`, `price`, `market_cap`,
-`created_at`, `holders_count`, `rank`, `treasury` and `trending_score`. The page argument is
-positional and undocumented in the script's own help text.
+descending. Accepted `order_by` values are `name`, `price`, `market_cap`, `created_at`,
+`holders_count`, `rank`, `treasury` and `trending_score`. `page` is positional.
 
 ```json
 // tokens — a bare array, projected down to seven fields
@@ -233,19 +197,16 @@ positional and undocumented in the script's own help text.
     "price_ae": "0.0123", "market_cap": "...", "trending_score": 0.184213, "holders_count": 87 } ]
 ```
 
-`trending_score` is a normalised value between **0 and 1**, rounded to six decimal places —
-not a raw activity count. The skill's own strategy prose quotes entry thresholds of 100,000,
-50,000 and 20,000, which no token can ever reach; see
-[Agent Trading](/agents/trading#what-the-trending-score-actually-is).
+`trending_score` is a value between 0 and 1, rounded to six decimal places. See
+[The Trending Score](/tokens/trending-score).
 
 `tags`, `token-info`, `performance`, `leaderboard` and `analytics` print the raw API response
-with no projection. Field names for those come from the backend — see
-[Trending API](/api-reference/trending), [Tokens API](/api-reference/tokens) and [Analytics API](/api-reference/analytics).
+with no projection. See [Trending API](/api-reference/trending),
+[Tokens API](/api-reference/tokens) and [Analytics API](/api-reference/analytics).
 `leaderboard` items carry `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
 `buy_count`, `sell_count`, `created_tokens_count` and `owned_trends_count`.
 
-`analytics` returns a **bare array of daily rows**, one per day, sourced from the backend's
-cached `analytics` table (`superhero-api/src/analytics/entities/analytic.entity.ts`):
+`analytics` returns a bare array of daily rows:
 
 ```json
 [ { "id": 1,
@@ -261,24 +222,19 @@ cached `analytics` table (`superhero-api/src/analytics/entities/analytic.entity.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `date` | date-only string | The day the row covers |
-| `total_market_cap_sum` | numeric string | Sum of the latest market cap of every token as of end of that day, **in AE** |
-| `total_volume_sum` | numeric string | Sum of transaction amounts for that day, **in AE** |
+| `total_market_cap_sum` | numeric string | Sum of the latest market cap of every token as of end of that day, in AE |
+| `total_volume_sum` | numeric string | Sum of transaction amounts for that day, in AE |
 | `total_tokens` | integer | Tokens in existence as of end of that day, cumulative |
 | `total_transactions` | integer | Transactions that day |
 | `total_created_tokens` | integer | `create_community` calls that day |
 | `total_active_accounts` | integer | Distinct caller addresses that day |
 
-The two sums are `numeric` columns carried as strings, so parse them as decimals rather than
-floats. Both are denominated in AE — the backend reads the `ae` member of the stored amount,
-not aettos and not USD.
-
-The script sends no query parameters, so you get the server default range: `start_date` ten
-days ago, `end_date` tomorrow. Calling the endpoint yourself, four parameters are accepted —
-`start_date`, `end_date`, `force_pull` (recompute the range before returning it) and
-`address` (per-account figures, computed live rather than from the cache). The cache itself
-is refreshed hourly, re-pulling the last seven days each time. Two sibling routes exist that
-the script does not use: `GET /api/analytics/summary` for a range-aggregated total with a
-true distinct account count, and `GET /api/analytics/past-24-hours`.
+The two sums are numeric strings; parse them as decimals. The script sends no query
+parameters, so the response covers the server default range: `start_date` ten days ago,
+`end_date` tomorrow. Calling the endpoint directly, you can pass `start_date`, `end_date`,
+`force_pull` (recompute the range before returning it) and `address` (per-account figures).
+The cache refreshes hourly, re-pulling the last seven days. `GET /api/analytics/summary` and
+`GET /api/analytics/past-24-hours` are also available on the API but not through the script.
 
 ---
 
@@ -295,17 +251,17 @@ true distinct account count, and `GET /api/analytics/past-24-hours`.
 and must be greater than zero; fractional sizes are not expressible. `buy ct_... 5` buys five
 tokens, and `price ct_... 5` tells you what that costs.
 
-`lookup` tries `GET /api/tokens/{query}` first. On a miss it falls back to fetching 100 tokens
-and substring-matching `name` and `symbol`, so its output shape depends on which path hit:
+`lookup` tries `GET /api/tokens/{query}` first. On a miss it fetches 100 tokens and
+substring-matches `name` and `symbol`, so the output shape depends on which path hit:
 
 ```json
 // lookup — direct hit, a single object
 { "name": "...", "symbol": "...", "sale_address": "ct_...", "price_ae": "...",
-  "market_cap": "...", "holders_count": 87, "trending_score": 51234 }
+  "market_cap": "...", "holders_count": 87, "trending_score": 0.184213 }
 
 // lookup — fallback search, an array without holders_count
 [ { "name": "...", "symbol": "...", "sale_address": "ct_...",
-    "price_ae": "...", "market_cap": "...", "trending_score": 51234 } ]
+    "price_ae": "...", "market_cap": "...", "trending_score": 0.184213 } ]
 
 // price
 { "sale_address": "ct_...", "amount": 5, "price_ae": "0.0615", "price_aettos": "61500000000000000" }
@@ -319,13 +275,12 @@ and substring-matching `name` and `symbol`, so its output shape depends on which
   "return_aettos": "60250000000000000", "tx_hash": "th_..." }
 ```
 
-`price_aettos` in the `buy` result is the **quote**, not the amount transferred. The script
-sends the quote plus 3%; unspent AE is returned by the contract. `return_aettos` in the `sell`
-result is likewise the quoted return, and the transaction's minimum-return floor is set 3%
-below it.
+`price_aettos` in the `buy` result is the quote, not the amount transferred. The script sends
+the quote plus 3%; unspent AE is returned by the contract. `return_aettos` in the `sell` result
+is the quoted return, and the transaction's minimum-return floor is set 3% below it.
 
-`sell` performs an extra transaction first: it reads the current allowance and either creates
-or adjusts it so the sale contract can move your AEX-9 balance. Budget gas for two calls.
+`sell` performs an extra transaction first: it reads the current allowance and creates or
+adjusts it so the sale contract can move your AEX-9 balance. Budget gas for two calls.
 
 ---
 
@@ -352,24 +307,22 @@ from `GET /api/factory` and the first collection in the response is used.
   "initial_buy_ae": 0.1, "estimated_tokens": "812.41", "tx_hash": "th_..." }
 ```
 
-`allowed_chars` is a hard-coded string in the script, not a value from the API.
-`allowed_name_length` does come from the collection record.
+`allowed_name_length` comes from the collection record; `allowed_chars` is a fixed string
+describing the WORDS collection.
 
-`create` pre-flights two conditions and prints a JSON error to **stderr** before exiting `1`:
+`create` pre-flights two conditions and prints a JSON error to stderr before exiting `1`:
 
 ```json
 { "error": "Insufficient balance", "balance_ae": "0.0031", "required_ae": "0.1100" }
 { "error": "Token already exists", "collection": "WORDS-ak_...", "name": "MYTOKEN" }
 ```
 
-The balance check only fires when `buy_ae` is greater than zero, and requires
-`buy_ae + 0.01` AE. With no initial buy there is no balance check at all — the transaction
-simply fails on-chain if you cannot pay gas.
+The balance check fires only when `buy_ae` is greater than zero, and requires
+`buy_ae + 0.01` AE. With no initial buy, the transaction fails on-chain if you cannot pay gas.
 
-`estimated_tokens` is computed client-side by bisecting the integral of the bonding-curve
-price function, using the same constants as the app: `0.001 * exp(0.00000001 * x) - 0.0009999`.
-The AE actually attached is the **on-chain** quote for that token count, multiplied by 1.05.
-See [Curve parameters](/tokens/curve-parameters).
+`estimated_tokens` is computed client-side by bisecting the integral of the bonding-curve price
+function, `0.001 * exp(0.00000001 * x) - 0.0009999`. The AE attached is the on-chain quote for
+that token count, multiplied by 1.05. See [Curve parameters](/tokens/curve-parameters).
 
 ---
 
@@ -386,7 +339,7 @@ See [Curve parameters](/tokens/curve-parameters).
 { "address": "ak_...", "holdings": [
   { "token_name": "...", "token_symbol": "...", "sale_address": "ct_...",
     "token_address": "ct_...", "balance": "...", "buy_price_ae": "...",
-    "sell_price_ae": "...", "trending_score": 51234 } ] }
+    "sell_price_ae": "...", "trending_score": 0.184213 } ] }
 
 // history — with snapshots
 { "address": "ak_...", "latest_snapshot": { }, "oldest_snapshot": { },
@@ -403,15 +356,15 @@ See [Curve parameters](/tokens/curve-parameters).
 Each snapshot comes from `GET /api/accounts/{address}/portfolio/history` and carries
 `timestamp`, `total_value_ae`, `ae_balance`, `tokens_value_ae`, `total_value_usd` and, when
 the backend includes it, a `total_pnl` object with `percentage`, `invested`, `current_value`
-and `gain` — each of those an object with `ae` and `usd` members. See
+and `gain` — each an object with `ae` and `usd` members. See
 [Accounts API](/api-reference/accounts).
 
 `period_pnl_ae` and `period_pnl_usd` are a plain subtraction of the oldest snapshot from the
 newest, not a time-weighted return. They are `null` if either value is missing.
 
-`guides/portfolio.md` documents a `balance_ae_value` field on each holding. The script does
-not emit it; it emits `buy_price_ae` and `sell_price_ae` — the token's current buy and sell
-prices, not the value of your position. Multiply by `balance` yourself.
+`buy_price_ae` and `sell_price_ae` are the token's current per-token buy and sell prices, not
+the value of your position and not your cost basis. Multiply by `balance` for the position
+value; read `superhero-transactions.mjs mine` for what you paid.
 
 ---
 
@@ -449,8 +402,8 @@ The envelope differs per command:
 ```
 
 `type` is the backend's `tx_type`. `amount_ae`, `unit_price_ae`, `buy_price_ae` and
-`sell_price_ae` are read from nested `ae` members on the API record, so they are `undefined`
-— and therefore omitted from the JSON — when the backend does not supply them. See
+`sell_price_ae` are read from nested `ae` members on the API record and are omitted from the
+JSON when the backend does not supply them. See
 [Transactions API](/api-reference/transactions).
 
 ---
@@ -510,11 +463,10 @@ implement — `register` refuses them.
 `resolve` does the same with `{ "name": "...", "resolved": false, "error": "name_not_found" }`.
 
 `register` is the slowest command in the skill. It preclaims, polls until that transaction is
-mined, then **waits for a new block** — polling the node's top header every 30 seconds — before
+mined, then waits for a new block — polling the node's top header every 30 seconds — before
 claiming, because a preclaim and its claim cannot share a block. Then it polls the claim and
-finally sends a pointer update. Three transactions, and typically a minute or more of wall
-clock. The returned `tx_hash` is the **claim** transaction; the preclaim and update hashes are
-not reported. See [AENS](/aeternity/aens).
+sends a pointer update. Three transactions, typically a minute or more. The returned `tx_hash`
+is the claim transaction. See [AENS](/aeternity/aens).
 
 ---
 
@@ -525,8 +477,8 @@ not reported. See [AENS](/aeternity/aens).
 | `generate <amount_ae> [count]` | Create funded invite links |
 | `revoke <invite_address>` | Cancel an unredeemed invite and reclaim its funds |
 
-Each invite is a freshly generated keypair registered with the AffiliationTreasury. The
-*secret key* becomes the invite link, so anyone holding the link can redeem the AE.
+Each invite is a freshly generated keypair registered with the AffiliationTreasury. The secret
+key becomes the invite link, so anyone holding the link can redeem the AE.
 
 ```json
 // generate
@@ -537,58 +489,13 @@ Each invite is a freshly generated keypair registered with the AffiliationTreasu
 { "success": true, "revoked_address": "ak_...", "tx_hash": "th_..." }
 ```
 
-Cost is `(amount_ae + 0.001) * count`, plus gas. The extra 0.001 AE per invite is a fixed
-redemption-fee cover so the recipient can pay for their own redemption transaction.
+Cost is `(amount_ae + 0.001) * count`, plus gas. The extra 0.001 AE per invite covers the
+recipient's redemption transaction. Revoking returns the `amount_ae` only; the 0.001 AE fee
+cover was spent to the invite address at registration. See
+[Invite links](/rewards/invite-links).
 
-Revoking returns the `amount_ae` only — the 0.001 AE fee cover was spent to the invite address
-at registration and does not come back. See
-[Invite links](/rewards/invite-links) for the contract detail.
-
-**Never log, print or commit the output of `generate`.** The `links` array contains bearer
-secrets. `SKILL.md` calls this out explicitly in its security table.
-
-### A likely defect in how the treasury is initialised
-
-`getTreasury()` in `superhero-invite.mjs` loads `contracts/CommunityFactory.aci.json`, uses it
-to initialise the factory, reads `affiliation_treasury()` from it — and then **reuses the same
-ACI** to initialise the treasury address:
-
-```js
-const factoryAci = JSON.parse(fs.readFileSync('./contracts/CommunityFactory.aci.json', 'utf8'));
-const factory  = await Contract.initialize({ aci: factoryAci, address: FACTORY_ADDRESS, ... });
-const treasuryAddress = await factory.affiliation_treasury().then(r => r.decodedResult);
-return await Contract.initialize({ aci: factoryAci, address: treasuryAddress, ... });
-```
-
-An æternity ACI file is an array in dependency order whose **last contract entry is the
-compiled contract**, and that is the entry an SDK builds its method surface from. Every ACI
-in the skill follows that convention and is named for its last entry:
-
-| File | Contract entries | Last entry |
-| --- | --- | --- |
-| `CommunityFactory.aci.json` | 21, including `AffiliationTreasury` at index 16 | `CommunityFactory` |
-| `AffiliationBondingCurveTokenSale.aci.json` | 15, including `AffiliationTreasury` at index 12 | `AffiliationBondingCurveTokenSale` |
-| `FungibleTokenFull.aci.json` | 4 | `FungibleTokenFull` |
-| `BondingCurveExponential.aci.json` | 6 | `BondingCurveExponential` |
-
-The convention is confirmed by the scripts that work: `superhero-token-swap.mjs` initialises
-a sale address with `AffiliationBondingCurveTokenSale.aci.json` and calls `buy`, `sell` and
-`price`, which exist only on that bundle's last entry — even though `AffiliationTreasury` also
-sits inside the same file. The backend takes the same line, shipping a separate
-`AffiliationTreasury.aci.json` in `superhero-api/src/plugins/bcl/contract/aci/` whose last
-entry is `AffiliationTreasury`.
-
-So the object `getTreasury()` returns is a **`CommunityFactory`** interface pointed at the
-treasury's address. `register_invitation_code` and `revoke_invitation_code` are not among
-`CommunityFactory`'s twenty entrypoints, so they are not on the object — this is a local
-resolution failure, not a chain error, and no transaction is broadcast.
-
-The fix is a one-line change: reinitialise the treasury against an ACI whose last contract
-entry is `AffiliationTreasury`. Compile it from
-`bcl-contracts/contracts/AffiliationTreasury.aes`, or copy the backend's file into the skill's
-`contracts/` directory, and load that instead. Until then, use the web app at
-[superhero.com/trends/invite](https://superhero.com/trends/invite) rather than the CLI, and
-if you do try the CLI, try it with `generate 0.01 1` first.
+**Never log, print or commit the output of `generate`.** Invite links contain one-time
+secrets.
 
 ---
 
@@ -687,15 +594,15 @@ Three environment variables override the defaults:
 `info-by-id` resolves them from the registry.
 
 `stake_weighted_results` is fetched from the governance backend with an 8-second timeout and
-is `null` on any failure, including a non-200 response. When it is `null`, `result_note`
-changes to say so. **Never report `raw_vote_counts` as the outcome** — they are one entry per
-address, ignoring both stake and delegation.
+is `null` on any failure, including a non-200 response; `result_note` then says so. Never
+report `raw_vote_counts` as the outcome — they are one entry per address, ignoring both stake
+and delegation.
 
-`create` validates before spending anything: title at most 50 characters, description at most
-300, a link matching `http://` or `https://`, at least two comma-separated options, and a
+`create` validates before spending: title at most 50 characters, description at most 300, a
+link starting with `http://` or `https://`, at least two comma-separated options, and a
 `close_height` that is either `0`, omitted, or strictly greater than the current block height.
-It then sends two transactions — deploying `Poll_Iris.aes` from
-`contracts/PollBytecode.json`, then registering it. Allow two to five minutes.
+It then sends two transactions — deploying `Poll_Iris.aes` from `contracts/PollBytecode.json`,
+then registering it. Allow two to five minutes.
 
 `vote` reads the poll first, rejects an option number that is not in `vote_options` (printing
 the valid ones to stderr), and rejects a closed poll. `delegate` refuses your own address.
@@ -704,7 +611,7 @@ the valid ones to stderr), and rejects a closed poll. `delegate` refuses your ow
 
 ## Command index
 
-For agents that want to enumerate the surface without parsing this page:
+For agents that want to enumerate the surface programmatically:
 
 ```json
 {
@@ -723,19 +630,10 @@ For agents that want to enumerate the surface without parsing this page:
 }
 ```
 
-## Read more
+## Related
 
-- [How the Skill Works](/agents/how-the-skill-works) — the conventions these commands follow and why
+- [How the Skill Works](/agents/how-the-skill-works) — the conventions these commands follow
 - [Agent Trading](/agents/trading) — which of these commands the trading loop calls, and in what order
 - [Agents in Governance](/agents/governance) — the read-before-vote workflow around the governance commands
 - [Contract addresses](/contracts/addresses) — the factory, tipping and registry addresses used above
 - [Tokens API](/api-reference/tokens) — field definitions for the raw API responses several commands pass through
-
-## Open questions
-
-- The `superhero-invite.mjs` ACI defect above is established from the file layout and from
-  how every other script in the skill loads its ACI, but the exact runtime symptom — which
-  error the SDK raises when the method is absent — has not been observed. Run
-  `node scripts/superhero-invite.mjs generate 0.01 1` against a funded wallet to see it, and
-  report the wording to the
-  [skill repository](https://github.com/superhero-com/superhero-agent-skill).

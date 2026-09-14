@@ -14,9 +14,6 @@ liquidity, and no counterparty to find: you are trading with the contract itself
 enough reserve to buy the entire supply back. **Getting in early is not a metaphor here — it is
 arithmetic.**
 
-By the end of this section you will be able to launch a token, price a trade by hand, and say
-exactly where every fraction of the fee goes.
-
 ## The numbers to remember
 
 | Fact | Value |
@@ -39,15 +36,14 @@ exactly where every fraction of the fee goes.
 3. **[Fees & Slippage](/tokens/fees-and-slippage)** — the three things that separate the price you see from the price you get.
 4. **[Risks](/tokens/risks)** — read before you buy anything.
 
-Want to do rather than read? Launch a token at
-[superhero.com/trends/create](https://superhero.com/trends/create) or buy one from
-[the trending list](https://superhero.com/trends/tokens).
+To launch a token now, open [superhero.com/trends/create](https://superhero.com/trends/create); to
+buy one, start from [the trending list](https://superhero.com/trends/tokens).
 
 ## In this section
 
 | Page | What it covers |
 | --- | --- |
-| [Community Tokens](/tokens/overview) | What a token is, which five contracts it deploys, and what holding one gets you |
+| [Community Tokens](/tokens/overview) | What a token is, which contracts it deploys, and what holding one gets you |
 | [Bonding Curves](/tokens/bonding-curve) | The curve formula, its integral, worked numeric examples, slippage, and how it compares with linear and constant-product curves |
 | [Curve Parameters & Units](/tokens/curve-parameters) | Aettos, token decimals, `Frac.frac`, and a reference implementation that matches the contract |
 | [Create a Token (Dashboard)](/tokens/create-from-dashboard) | The web form: both input modes, name normalisation, collection derivation, costs and failure modes |
@@ -55,19 +51,16 @@ Want to do rather than read? Launch a token at
 | [Collections & Naming Rules](/tokens/collections-and-naming) | Namespaces, character rules, and why a name was rejected |
 | [Buying & Selling](/tokens/buying-and-selling) | Quoting, `minimal_return_required`, AEX-9 allowances, and a complete SDK trade |
 | [Fees & Slippage](/tokens/fees-and-slippage) | The 1% spread, curve slippage with worked numbers, slippage guards, and gas |
-| [Reading a Token Page](/tokens/token-page) | What each panel tells you, and why market cap is not what it looks like |
-| [The Trending Score](/tokens/trending-score) | The momentum signal, what is known about it, and what is not |
-| [Portfolio & PnL](/tokens/portfolio) | Holdings, snapshots, PnL fields, and why a position is worth less than it says |
+| [Reading a Token Page](/tokens/token-page) | What each panel tells you, and how to read market cap on a bonding curve |
+| [The Trending Score](/tokens/trending-score) | The momentum signal: formula, weights, caps, eligibility gate and refresh cadence |
+| [Portfolio & PnL](/tokens/portfolio) | Holdings, snapshots, PnL fields, and why a large position is worth less than its quoted value |
 | [Transaction History](/tokens/transactions) | Querying trades by token, account or both, and verifying them on-chain |
-| [Risks](/tokens/risks) | The 1% starting loss, reflexivity, thin communities, contract risk and audit status |
+| [Risks](/tokens/risks) | The 1% starting loss, reflexivity, thin communities and contract risk |
 
-## Read more
+## Related
 
 - [Value flow](/concepts/value-flow) — how AE moves through the whole platform, of which the curve is one part
 - [DAO overview](/dao/overview) — the treasury every token creates, and who controls it
 - [Affiliation rewards](/rewards/affiliation) — where the other half of the spread goes
-- [Token sale contract](/contracts/token-sale) — the entrypoint-level reference behind this section
-- [Tokens API](/api-reference/tokens) — the REST surface for everything documented here
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — every live community token
-- [Create a token](https://superhero.com/trends/create) — the launch form
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the primary source for the curve, the spread and the deployment sequence
+- [Token sale contract](/contracts/token-sale) — the entrypoint-level reference for the sale contract
+- [Tokens API](/api-reference/tokens) — the REST surface for tokens, prices and rankings

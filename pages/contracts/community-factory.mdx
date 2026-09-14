@@ -11,27 +11,26 @@ mints ProtocolDAO tokens on every buy, and is the canonical place to look up the
 bonding curve and affiliation treasury addresses.
 
 It is deployed once per network and reused for every collection and community after that.
-Mainnet `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`, testnet
-`ct_vLKrYRCthfViqUuWFKGYgz7kxhvrsdAoKhZPXqzxcaEFRkZy1`.
 
-The ACI is `superhero-agent-skill/contracts/CommunityFactory.aci.json`. Because the compiler
-inlines every referenced contract, that one file also carries `DAO`, `DAOVote`,
+| Network | Address |
+| --- | --- |
+| Mainnet | `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` |
+| Testnet | `ct_vLKrYRCthfViqUuWFKGYgz7kxhvrsdAoKhZPXqzxcaEFRkZy1` |
+
+`CommunityFactory.aci.json` also carries the inlined interfaces of `DAO`, `DAOVote`,
 `CommunityManagement`, `AffiliationTreasury`, `VoteSubjects`, `Frac` and `FungibleTokenFull`.
-The source is `bcl-contracts/contracts/CommunityFactory.aes`.
 
-Four values are literals in the source or fixed passthroughs, so you never need a node to know
-them:
+Four values are fixed, so you never need a node to know them:
 
-| Call | Returns | Where it comes from |
+| Call | Returns | Note |
 | --- | --- | --- |
 | `factory_type()` | `"AFFILIATION_COMMUNITY_FACTORY"` | literal |
 | `version()` | `1` | literal |
-| `fee_percentage()` | `500` | passthrough to `AffiliationTreasury.get_affiliation_fee_percentage()`, itself a hardcoded `500` |
-| `fee_precision()` | `100000` | passthrough to `get_affiliation_fee_precision()`, which is `1 * 10 ^ 5` |
+| `fee_percentage()` | `500` | passthrough to `AffiliationTreasury.get_affiliation_fee_percentage()` |
+| `fee_precision()` | `100000` | passthrough to `AffiliationTreasury.get_affiliation_fee_precision()` |
 
-`fee_percentage() / fee_precision()` is therefore `500 / 100000` — **0.5%** — which is what the
-Superhero app's `createCommunity.ts` computes. Keep dividing the two rather than hardcoding
-0.005; both are passthroughs and a treasury redeployment could move them.
+`fee_percentage() / fee_precision()` is `500 / 100000` — **0.5%**. Divide the two rather than
+hardcoding 0.005; both are passthroughs and a treasury redeployment could move them.
 
 ## Entrypoints
 
@@ -94,20 +93,18 @@ const chars = await factory.allowed_name_chars(collectionId).then((r) => r.decod
 // [ { CharRangeFromTo: [ 65n, 90n ] }, { CharRangeFromTo: [ 48n, 57n ] }, { SingleChar: [ 45n ] } ]
 ```
 
-`CommunityManagement.meta_info` is simply `map(string, string)` — free-form key/value
-metadata with no schema enforced on chain. The Superhero app writes four keys when it creates
-a token (`superhero/src/features/trending/views/CreateTokenView.tsx`):
+`CommunityManagement.meta_info` is `map(string, string)` — free-form key/value metadata with
+no schema enforced on chain. The Superhero app writes four keys when it creates a token:
 
-| Key | Value written by the app |
+| Key | Value |
 | --- | --- |
 | `collection` | the collection slug, e.g. `word` |
 | `description` | free text, rendered on the token page |
 | `website` | a URL |
 | `twitter` | an X handle or URL |
 
-Every one of those is optional and the contract validates none of them. Pass a `Map`, not an
-object — an empty `new Map()` is valid, and that is what the agent skill's
-`superhero-token-create.mjs` sends.
+All four are optional and the contract validates none of them. Pass a `Map`, not an
+object — an empty `new Map()` is valid.
 
 ## Events
 
@@ -124,12 +121,12 @@ it instead of making three follow-up reads.
 
 ## Creating a collection
 
-`create_collection` registers a naming namespace. Two things about it are easy to get wrong.
+`create_collection` registers a naming namespace.
 
-**It costs exactly 555 AE, and the AE is burned.** The public Sophia source requires
-`Call.value == 555 * (10 ^ 18)` and aborts with `COLLECTION_CREATION_DONATION_MISMATCH`
-otherwise, then spends the full amount to
-`ak_11111111111111111111111111111111273Yts`, the æternity burn address. Nobody receives it.
+**It costs exactly 555 AE, and the AE is burned.** The contract requires
+`Call.value == 555 * (10 ^ 18)`, aborts with `COLLECTION_CREATION_DONATION_MISMATCH`
+otherwise, then spends the full amount to `ak_11111111111111111111111111111111273Yts`, the
+æternity burn address.
 
 **The stored collection id is not the name you passed.** The contract concatenates the name,
 a dash, and the caller's address:
@@ -139,17 +136,13 @@ create_collection("WORDS", ...) called by ak_alice...
   → stored as "WORDS-ak_alice..."
 ```
 
-That returned string is the id every later call must use. It is also why collection ids in
-the Superhero API are typed as `${string}-${Encoded.AccountAddress}`. Creating a collection
-whose name already exists aborts with `collection_ALREADY_EXISTS` — note the lowercase first
-letter, which is a typo in the source, not in this page.
+That returned string is the id every later call must use, and it is why collection ids in the
+Superhero API are typed as `${string}-${Encoded.AccountAddress}`. Creating a collection whose
+name already exists aborts with `collection_ALREADY_EXISTS` (note the lowercase first letter).
 
-Note also what `create_collection` does *not* check: there is no owner gate, no allowlist and
-no governance step. Anyone willing to burn 555 AE may register a collection with any naming
-rules they like. The four collections the Superhero backend serves on mainnet — `WORDS`,
-`CHINESE`, `ARABIC` and `RUSSIAN`, listed with their exact code-point ranges in
-`superhero-api/src/configs/contracts.ts` — are a curated allowlist maintained off chain, not a
-restriction the contract enforces.
+Any account may register a collection, with any naming rules. The collections the Superhero
+app lists on mainnet — `WORDS`, `CHINESE`, `ARABIC` and `RUSSIAN` — are a curated set
+maintained in the API.
 
 ## Creating a community
 
@@ -165,7 +158,7 @@ restriction the contract enforces.
 4. Deploys an `AffiliationBondingCurveTokenSale`, which in turn deploys the community's AEX-9
    token, pointing at the shared bonding curve and affiliation treasury. The `name` argument is
    used as **both** the token's name and its symbol.
-5. Calls `dao.set_token_sale(sale)` and `community_management.set_owner(dao)` — closing the
+5. Calls `dao.set_token_sale(sale)` and `community_management.set_owner(dao)`, closing the
    circle that neither constructor could close alone.
 6. Optionally executes an initial buy of `initial_buy_count` tokens with the attached AE.
 7. Registers the sale in the collection's `token_sale_registry`, in `known_token_sales`, and in
@@ -192,8 +185,7 @@ const [daoAddress, tokenSaleAddress, communityManagementAddress] = result.decode
 `initial_buy_count` is a **token count in base units**, not an AE amount. Community tokens use
 18 decimals, so buying 5 whole tokens means passing `5 * 10^18`.
 
-To go the other way — "I want to spend 0.1 AE" — you have to invert the bonding curve. The
-agent skill does it in two steps, and this is the pattern to copy:
+To go the other way — "I want to spend 0.1 AE" — invert the bonding curve in two steps:
 
 ```javascript
 // 1. Estimate a token count from an AE amount with client-side curve math.
@@ -213,9 +205,9 @@ const amount = new BigNumber(onChainPrice.toString())
   .toFixed(0, BigNumber.ROUND_CEIL);
 ```
 
-The client-side estimate only picks a count; the chain always sets the price. Pass
-`0n` as the supply to `calculate_buy_price` because a brand-new community starts at zero
-supply. Overpayment is refunded by the sale contract, so the buffer is safe.
+The client-side estimate only picks a count; the chain always sets the price. Pass `0n` as
+the supply to `calculate_buy_price` because a brand-new community starts at zero supply.
+Overpayment is refunded by the sale contract, so the buffer is safe.
 
 Pass `initial_buy_count` as `0` and attach no AE to create a token with zero supply.
 
@@ -229,24 +221,22 @@ require(Set.member(Call.caller, state.known_token_sales), "NOT_KNOWN_TOKEN_SALE"
 state.protocol_dao_token.mint(receiver, buy_value * protocol_dao_token_multiplier)
 ```
 
-That membership check is what stops an arbitrary contract minting protocol tokens: only sales
-the factory itself deployed are in `known_token_sales`.
+Only sales the factory itself deployed are in `known_token_sales`, so no other contract can
+mint protocol tokens.
 
-The multiplier is a literal in the contract, matching the whitepaper and the app's
-`PROTOCOL_DAO_TOKEN_AE_RATIO`:
+The multiplier is a literal in the contract:
 
 ```sophia
 // mints protocol DAO tokens at a rate of 1000 times the buy value.
 let protocol_dao_token_multiplier = 1000
 ```
 
-So a 1 AE buy mints 1,000 ProtocolDAO tokens to the buyer. The base is the net AE the buyer
-actually paid — `Call.value` minus any overpayment refund — which includes the affiliation fee,
-not just the curve price.
+A 1 AE buy mints 1,000 ProtocolDAO tokens to the buyer. The base is the net AE the buyer
+paid — `Call.value` minus any overpayment refund — which includes the affiliation fee, not
+just the curve price.
 
-**An initial buy at creation does still mint them.** The sale skips its callback when the
-caller is the factory, which the source comments as reentrancy avoidance, but `create_community`
-then performs the mint itself on the very next line:
+**An initial buy at creation also mints them.** The sale skips its callback when the caller is
+the factory, and `create_community` performs the mint itself instead:
 
 ```sophia
 bonding_curve_token_sale.buy_with_affiliation(value = Call.value - overpaid_refund,
@@ -255,20 +245,19 @@ bonding_curve_token_sale.token_contract().transfer(Call.caller, initial_buy_coun
 state.protocol_dao_token.mint(Call.caller, (Call.value - overpaid_refund) * protocol_dao_token_multiplier)
 ```
 
-The `transfer` on the middle line is there for the same reason: the sale mints community tokens
+The `transfer` on the middle line exists for the same reason: the sale mints community tokens
 to *its* `Call.caller`, which during creation is the factory, so the factory forwards them to
-you. Net effect for a creator doing an initial buy: you receive the tokens and the ProtocolDAO
-tokens exactly as an ordinary buyer would, by a different route.
+you. A creator doing an initial buy receives the tokens and the ProtocolDAO tokens exactly as
+an ordinary buyer would.
 
 The factory refunds overpayment before the buy, against
 `bonding_curve_token_sale.price(initial_buy_count)`, and aborts with
 `VALUE_HAS_TO_BE_GREATER_THAN_BUY_PRICE` if you attach less than that.
 
-## Read more
+## Related
 
 - [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the sale contract this factory deploys
 - [CommunityManagement](/contracts/community-management) — the `meta_info` map and moderator model
 - [Collections and naming](/tokens/collections-and-naming) — the naming rules from a user's point of view
 - [Create a token from the CLI](/tokens/create-from-cli) — a working end-to-end creation flow
 - [Deployed Addresses](/contracts/addresses) — factory addresses and runtime resolution
-- [Create a token on superhero.com](https://superhero.com/trends/create) — the app flow this contract backs

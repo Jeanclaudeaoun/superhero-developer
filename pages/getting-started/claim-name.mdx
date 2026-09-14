@@ -7,41 +7,37 @@ description: "Turn your ak_ address into a human-readable on-chain username, fre
 
 A `.chain` name is an æternity Naming System (AENS) record that points at your account, so people
 see `yourname.chain` instead of `ak_2a1j2Mk4…`. Superhero sponsors one free claim per address, and
-the rule that decides whether yours is free is the name's length.
+the name's length decides whether yours is free.
 
-## The two rules that matter
+## The two rules
 
 - **The name must be longer than 12 characters**, excluding the `.chain` suffix. Names of 12
-  characters or fewer go to auction instead of registering instantly — that is an AENS protocol rule,
-  not a Superhero policy.
-- **One sponsored claim per address.** Further names can be claimed directly in Superhero Wallet —
-  the browser extension, the native mobile app, or the web wallet at `wallet.superhero.com`.
+  characters or fewer go to auction instead of registering instantly — an AENS protocol rule.
+- **One sponsored claim per address.** Further names are claimed directly in Superhero Wallet — the
+  browser extension, the mobile app, or the web wallet at `wallet.superhero.com`.
 
-The app's own hint text says it plainly: *"Use letters, numbers, or hyphens. Names longer than 12
-characters are free."* The claim field shows a live counter against 13 characters as you type.
+The claim field shows a live counter against 13 characters as you type.
 
 ### Allowed characters
 
 Lowercase letters, digits and hyphens. A name cannot start or end with a hyphen, and the label is at
-most 63 characters. The app validates this before it will let you submit.
+most 63 characters. The app validates this before you can submit.
 
 ## Claim it in the app
 
-1. Open your profile and edit it, then choose to claim a `.chain` name.
-2. Type the name you want. The field checks availability as you type and tells you whether the name
-   is sponsored (**Free**) or has a price.
-3. If the name is 13 or more characters, it shows **Free**. If it is shorter, it shows an approximate
-   AE price with the note *"Paid from your wallet"* — that is the self-funded path, not the sponsored
-   one.
+1. Open your profile, edit it, and choose to claim a `.chain` name.
+2. Type the name you want. The field checks availability as you type and shows whether the name is
+   sponsored (**Free**) or has a price.
+3. A name of 13 or more characters shows **Free**. A shorter one shows an approximate AE price with
+   the note *"Paid from your wallet"* — the self-funded path, not the sponsored one.
 4. Press **Claim**. Your wallet asks you to sign a message — this proves you control the address
    without spending anything.
-5. The app reports *"Claim submitted. Waiting for sponsorship and transfer…"* and then tracks the
+5. The app reports *"Claim submitted. Waiting for sponsorship and transfer…"* and tracks the
    claim's progress.
 
 ### What happens behind that message
 
-The sponsored claim is executed by Superhero's backend on your behalf and reported back as a series
-of steps:
+Superhero's backend executes the sponsored claim on your behalf and reports each step:
 
 | Step | What is happening |
 | --- | --- |
@@ -52,23 +48,21 @@ of steps:
 | `update` | The name's pointer is set |
 | `transfer` | The name is transferred to **your** address |
 
-The transfer step is the important one: the sponsor pays and then hands ownership to you. When it
-completes, the name is yours, not Superhero's.
+The sponsor pays and then hands ownership to you. When the transfer completes, the name is yours,
+not Superhero's.
 
-### What the price means when a name is not free
+### When a name is not free
 
-For a name short enough to need paying for, the figure shown is the **preclaim transaction fee plus
-the claim's execution cost**, which includes the protocol's minimum name fee for a name of that
-length. The app computes it the same way Superhero Wallet's own claim screen does, so the two agree.
-
-Short names are expensive by design — that is the AENS mechanism for allocating scarce names, and it
-is why the free tier starts at 13 characters.
+For a name short enough to pay for, the figure shown is the **preclaim transaction fee plus the
+claim's execution cost**, which includes the protocol's minimum name fee for a name of that length.
+Short names are expensive by design — that is how AENS allocates scarce names, and why the free tier
+starts at 13 characters.
 
 ### Errors you may see
 
 | Message | Meaning |
 | --- | --- |
-| "Sponsored claims require more than 12 characters before .chain" | Your name is auction-length; pick a longer one or pay |
+| "Sponsored claims require more than 12 characters before .chain" | Your name is auction-length; pick a longer one |
 | "This wallet already has a sponsored .chain name" | You have used your one free claim |
 | "You already have a sponsored .chain claim in progress" | Wait for the current one to finish |
 | "That .chain name is already taken" | Registered by someone else |
@@ -78,16 +72,15 @@ is why the free tier starts at 13 characters.
 
 ## Claim it from the command line
 
-An agent or a script registers a name itself, paying its own fees. The same three protocol steps run
-in one command:
+An agent or a script registers a name itself and pays its own fees:
 
 ```bash
 node scripts/superhero-name.mjs available myagentname123
 node scripts/superhero-name.mjs register myagentname123
 ```
 
-`register` refuses outright if the name is 12 characters or fewer — the CLI does not support the
-auction path — and then runs:
+`register` refuses a name of 12 characters or fewer (the CLI does not support the auction path),
+then runs:
 
 1. **Preclaim**, and wait for it to be mined.
 2. **Wait for a different block.** AENS requires the claim to land in a later block than its
@@ -107,95 +100,65 @@ The rest of the command surface:
 | `lookup <address>` | Every name owned by an address |
 | `list` | Your own names |
 
-Names are lowercased and get `.chain` appended automatically if you leave it off. Registration costs
-gas plus the name fee, so run `available` first.
+Names are lowercased and get `.chain` appended automatically if you leave it off. Registration
+costs gas plus the name fee, so run `available` first.
 
-The script targets **mainnet** with hardcoded endpoints — see [Using Testnet](/getting-started/testnet).
+The script targets **mainnet** — see [Using Testnet](/getting-started/testnet).
 
-## Short names: not from Superhero, at all
+## Short names
 
-A correction worth making explicitly, because it is easy to assume otherwise from a field that
-accepts typing: **the app never prices, quotes or bids on a name of 12 characters or fewer.** All
-three surfaces refuse, each at its own layer:
-
-| Surface | Where it refuses |
-| --- | --- |
-| Profile claim field | `validateChainName` returns `chainNameClaimTooShort` for `name.length <= 12` — and the self-funded price is computed only *after* validation passes, so a short name never even gets a figure (`src/components/modals/ProfileEditModal.tsx`) |
-| Sponsored claim (backend) | `SponsoredChainNameLabelPipe` requires at least `PROFILE_CHAIN_NAME_MIN_LABEL_LENGTH` = 13 characters, and also restricts the label to `[a-z0-9-]` because the sponsor flow stores the label verbatim and never normalises it (`superhero-api/src/profile/validation/`) |
-| Agent CLI | `register` aborts with `name_too_short_auction_required` |
+Superhero never prices, quotes or bids on a name of 12 characters or fewer. The profile claim field
+rejects it, the sponsored-claim backend requires at least 13 characters (and restricts the label to
+`[a-z0-9-]`), and the agent CLI aborts with `name_too_short_auction_required`.
 
 To bid on a short name, use Superhero Wallet's own claim screen, another æternity wallet, or
-`@aeternity/aepp-sdk` directly. [AENS on æternity](/aeternity/aens) documents the auction —
-including the Ceres rule that every bid extends the auction by up to 120 key blocks, and
+`@aeternity/aepp-sdk` directly. [AENS on æternity](/aeternity/aens) covers the auction — including
+the Ceres rule that every bid extends the auction by up to 120 key blocks — and
 `getMinimumNameFee(name)` as the way to compute a starting bid.
 
 ## Superhero Wallet's name manager
 
 The standalone wallet — extension, mobile app, or `wallet.superhero.com` — has a full AENS section
-that superhero.com does not, under **Account details → Names**, with three tabs: *My names*,
-*Auctions* and *Register name*. It is the same feature set on all three surfaces.
+under **Account details → Names**, with three tabs:
 
 | Tab | What it does |
 | --- | --- |
 | Register name | Claims a name, showing the price when one is payable, with an **Auto extend name** checkbox at claim time |
-| Auctions | Lists names currently at auction and lets you place a bid, showing the minimum bid and the bid history |
-| My names | Per name: set the default (display) name, set a pointer to an `ak_`, `ct_`, `ok_` or `ch_` target, transfer it to another account, extend it, and toggle auto-extend |
+| Auctions | Lists names at auction and lets you place a bid, showing the minimum bid and the bid history |
+| My names | Per name: set the default (display) name, set a pointer to an `ak_`, `ct_`, `ok_` or `ch_` target, transfer it, extend it, and toggle auto-extend |
 
-Its constants match the protocol rules described above, from
-`superhero-wallet/src/protocols/aeternity/config.ts`: the domain is `.chain`, a label is at most 63
-characters, a name of **12 characters or fewer plus the suffix** goes to auction, and a bid must beat
-the standing one by a ratio of **1.05**.
+Its rules match the protocol: the domain is `.chain`, a label is at most 63 characters, a name of 12
+characters or fewer goes to auction, and a bid must beat the standing one by a ratio of **1.05**.
 
-### It will renew a name for you
+### Auto-extend
 
-This is the one thing on this page that the Superhero web app genuinely cannot do. Tick **Auto
-extend** on a name and Superhero Wallet extends it for you: on every new block it checks your names
-and sends a `NameUpdateTx` for any that is auto-extending, unexpired, and within
-`AUTO_EXTEND_NAME_BLOCKS_INTERVAL` = **17,000 blocks** of its expiry height
-(`extendExpiringOwnedNames` in `src/protocols/aeternity/composables/aeNames.ts`). The same 17,000-block
-window drives an **Expiring** badge in the names list, so even without auto-extend the wallet warns
-you.
+Tick **Auto extend** on a name and Superhero Wallet renews it for you: on every new block it checks
+your names and sends a `NameUpdateTx` for any that is auto-extending, unexpired, and within
+**17,000 blocks** of its expiry height. The same window drives an **Expiring** badge in the names
+list, so the wallet warns you even without auto-extend.
 
-Two caveats. The extension has to be running for the check to happen — this is a client-side timer,
-not a service — and the extension costs a transaction fee each time. Neither is a substitute for
-knowing your own expiry height.
+Two caveats: the wallet has to be running for the check to happen — it is a client-side timer, not
+a service — and each extension costs a transaction fee. superhero.com itself does not renew names or
+warn you about expiry.
 
 ## After you have one
 
-**Point it where you want.** The registration flow sets the `account_pubkey` pointer to your address.
-You can repoint it later with `update`, which preserves existing pointers rather than replacing them.
-Superhero Wallet's *Set pointer* control does the same thing with a form.
+**Point it where you want.** Registration sets the `account_pubkey` pointer to your address. Repoint
+it later with `update`, which preserves existing pointers rather than replacing them. Superhero
+Wallet's *Set pointer* control does the same thing with a form.
 
 **Use it as your display name.** A `.chain` name can be your profile's display source, so it appears
-instead of your address across the app. You have to own one before you can select that option.
+instead of your address across the app. You must own one before you can select that option.
 
 **Keep it alive.** AENS names have a time to live measured in blocks and expire if not extended. Use
 `extend` before the expiry height, which `available` reports as `expires_at_height` — or hold the
-name in Superhero Wallet with auto-extend on, which is the only automatic renewal any Superhero
-software offers. superhero.com itself will not warn you.
+name in Superhero Wallet with auto-extend on.
 
-## Read more
+## Related
 
 - [Chain Names](/identity/chain-names) — how names integrate with Superhero identity and profiles.
 - [Superhero ID](/identity/superhero-id) — the wider identity model a name plugs into.
 - [AENS on æternity](/aeternity/aens) — the naming system at the protocol level, including auctions.
 - [Profiles](/identity/profiles) — setting the name as your display source.
-- [Web Wallet](/wallets/web-wallet) — the no-install surface where the name manager above is available.
-- [Superhero FAQ](https://superhero.com/faq) — the sponsored-claim answer in the project's own words.
-- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the upstream specification, including the commitment scheme and the Lima and Ceres upgrades.
-
-## Open questions
-
-Half of what used to be here is answered above: **Superhero Wallet does warn you and can auto-extend**
-(a 17,000-block window), while superhero.com and `superhero-api` do neither — there is no expiry job
-anywhere in the backend. What is left is the protocol constant and the lapse behaviour.
-
-- **What is a name's default TTL in blocks?** Still a protocol question, and the wallet does not
-  settle it: it lets the SDK choose the TTL when extending (`extendTtl(undefined, …)`), and the
-  literal `nameTtl: 50000` in `getNameExtendFee` is a dummy value used only to build a throwaway
-  transaction for fee estimation. The authoritative figure is in
-  [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md) and in the SDK's own default.
-- **What happens to a lapsed name's pointer, and to a profile using it as its display source?** The
-  protocol side (whether pointers are cleared, and whether the name re-enters auction) is in AENS.md.
-  The Superhero side — whether a profile silently falls back to the address or keeps showing a dead
-  name — is not determinable from the repositories and would need a lapsed name to observe.
+- [Web Wallet](/wallets/web-wallet) — the no-install surface where the name manager is available.
+- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the upstream specification.

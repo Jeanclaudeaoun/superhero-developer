@@ -6,16 +6,13 @@ description: "Let an agent read, create and vote on governance polls — and dec
 # Governance with an Agent
 
 The skill can read polls, create them, vote, revoke a vote, and delegate voting power. All of
-it is on-chain and permanent. Before any of it, there is a policy question most operators skip:
-**should an agent vote at all, and on whose behalf?** This page covers the mechanics and then
-that question.
+it is on-chain and permanent.
 
 æternity governance is stake-weighted. Your voting weight is your AE balance plus whatever has
 been delegated to you, measured at the block the poll closes. An agent wallet funded with a
-deliberate, small amount — which is what [Safety & Limits](/agents/safety) recommends — has
-correspondingly little weight. That is a feature, not a limitation.
+small, deliberate amount has correspondingly little weight.
 
-## Reading polls
+## Read polls
 
 ```bash
 node scripts/superhero-governance.mjs list
@@ -26,12 +23,10 @@ node scripts/superhero-governance.mjs info-by-id 42
 ```
 
 `list` returns listed polls newest first. `--all` (or `--include-unlisted`) includes unlisted
-ones; use it only when you specifically need them.
-
-Every governance command builds a full SDK instance, so **even `list` requires
+ones. Every governance command builds a full SDK instance, so **even `list` requires
 `AE_PRIVATE_KEY`**, though it signs nothing and costs nothing.
 
-`info` returns the full poll state, and three fields in it decide everything:
+`info` returns the full poll state. Three fields decide everything:
 
 | Field | Why it matters |
 | --- | --- |
@@ -39,59 +34,25 @@ Every governance command builds a full SDK instance, so **even `list` requires
 | `vote_options` | A map from option number to label. Option numbers are 0-based and are the only thing `vote` accepts |
 | `stake_weighted_results` | The official result. `raw_vote_counts` is not |
 
-### Never report `raw_vote_counts` as the result
+### Report `stake_weighted_results`, never `raw_vote_counts`
 
-`raw_vote_counts` is one entry per address, derived from the Poll contract's own vote map. It
-ignores stake and ignores delegation entirely. A poll where one large holder votes one way and
-forty small addresses vote the other will show 40-to-1 in the raw counts and the opposite in
-the official result.
+`raw_vote_counts` is one entry per address, taken from the Poll contract's vote map, ignoring
+stake and delegation. A poll where one large holder votes one way and forty small addresses
+vote the other shows 40-to-1 in the raw counts and the opposite in the official result.
 
 The official numbers come from the governance backend at
 `https://governance-server-mainnet.prd.aepps.com`, fetched with an 8-second timeout.
-`stake_weighted_results` is `null` whenever that call fails for any reason, and the
-`result_note` field in the output says so explicitly:
+`stake_weighted_results` is `null` whenever that call fails, and `result_note` says so:
 
 ```text
 Official stake-weighted results were unavailable; raw_vote_counts are address counts
 only, not final governance weight.
 ```
 
-When it is `null`, the correct behaviour is to say the result is unavailable — not to fall
-back to the raw counts. Instruct your agent accordingly.
+When it is `null`, report the result as unavailable rather than falling back to the raw counts.
+A single `null` may be a slow backend, so re-run `info` before concluding anything.
 
-A `null` does not distinguish "the backend is down or slow" from "this poll is not one the
-backend tracks", so an agent that reads results should re-run `info` before concluding
-anything. Treat a single `null` as no information; treat a `null` that persists across
-several runs, minutes apart, as a property of the poll rather than of the network.
-
-### Which polls the official results cover
-
-`guides/governance.md` describes the deployed poll contract as "backend-verifiable" without
-saying what qualifies. The skill deploys a fixed bytecode blob from
-`contracts/PollBytecode.json`, and its metadata is specific:
-
-```json
-{ "contract": "Poll_Iris.aes", "compiler_version": "7.0.1",
-  "hash": "eb364ab0197ab893c0e26f6b88b7631ce934b46faa4eb5930a1ff63e650a8540" }
-```
-
-That is the same `Poll_Iris.aes` source the ecosystem treats as canonical, but a different
-build of it. Superhero's own backend records a canonical set in
-`superhero-api/src/plugins/governance/contract/aci/GovernanceBytecodeHashes.json`, and its
-`Poll_Iris.aes` entry is compiled with aesophia **8.0.0** and hashes to
-`51856aa1948299a30208ffe829b34c9e643bc7f79ef9668a9c84b462c923d464`. The two bytecodes are
-identical except for the compiler-version stamp at the end, so the source is the same and the
-hashes are not.
-
-Practically, that means a poll deployed by the skill is a standard Iris poll — its `vote`,
-`revoke_vote` and `votes` behaviour is the canonical implementation, and anything reading the
-contract directly will work. It also means an indexer that recognises polls by bytecode hash
-would not match it. Which of those the aeternity governance server does is the open question
-below.
-
-## Voting
-
-The skill's workflow, from `SKILL.md`:
+## Vote
 
 1. **Read the poll first** — `info <poll_address>` or `info-by-id <poll_id>`. Confirm the
    option numbers and that the poll is not closed.
@@ -103,19 +64,17 @@ node scripts/superhero-governance.mjs info ct_<poll_address>
 node scripts/superhero-governance.mjs vote ct_<poll_address> 0
 ```
 
-Reporting the label rather than the number is the point of step 3. "Voted option 2" is not
-checkable by the operator; "Voted 'Abstain'" is. The script returns both:
-
 ```json
 { "success": true, "action": "vote", "poll_address": "ct_...",
   "option": "0", "option_label": "Yes", "tx_hash": "th_..." }
 ```
 
-`vote` validates before spending: it reads the poll state, rejects an option number that is not
-in `vote_options` — printing the valid ones to stderr — and refuses a closed poll. Re-voting
-on a poll you have already voted on updates your choice.
+Report the label rather than the number: "Voted option 2" is not checkable by the operator;
+"Voted 'Abstain'" is.
 
-To withdraw entirely:
+`vote` validates before spending: it reads the poll state, rejects an option number that is not
+in `vote_options` (printing the valid ones to stderr), and refuses a closed poll. Re-voting on a
+poll updates your choice. To withdraw entirely:
 
 ```bash
 node scripts/superhero-governance.mjs revoke ct_<poll_address>
@@ -124,9 +83,9 @@ node scripts/superhero-governance.mjs revoke ct_<poll_address>
 Votes are permanent as transactions but changeable as state, any time before the poll closes.
 See [Voting](/governance/voting).
 
-## Creating a poll
+## Create a poll
 
-`SKILL.md` requires these steps:
+The agent follows these steps:
 
 1. **Check balance** — at least 0.02 AE, because this is two transactions.
 2. **Ask the user** for the title (max 50 characters), description (max 300), reference link
@@ -144,7 +103,7 @@ node scripts/superhero-governance.mjs create \
   "Yes,No,Abstain"
 ```
 
-Add a close height and an unlisted flag when you need them:
+With a close height and an unlisted flag:
 
 ```bash
 node scripts/superhero-governance.mjs create \
@@ -156,40 +115,36 @@ node scripts/superhero-governance.mjs create \
   --unlisted
 ```
 
-The result carries two separate hashes — the guide's phrase "both `tx_hash` values" refers to
-these, which are named differently in the actual output:
-
 ```json
 { "success": true, "action": "create_poll", "poll_id": "42", "poll_address": "ct_...",
   "is_listed": false, "vote_options": { "0": "...", "1": "...", "2": "..." },
   "close_height": 1500000, "deploy_tx_hash": "th_...", "register_tx_hash": "th_..." }
 ```
 
-Everything is validated before the first transaction is sent: lengths, the link scheme, at
-least two options, and a close height that is either `0`, omitted, or strictly greater than the
-current block height. A poll with no close height stays open indefinitely.
+Everything is validated before the first transaction: lengths, the link scheme, at least two
+options, and a close height that is either `0`, omitted, or strictly greater than the current
+block height. A poll with no close height stays open indefinitely.
 
-What happens on-chain: a `Poll_Iris.aes` contract is deployed from
+On-chain, a `Poll_Iris.aes` contract (compiler 7.0.1) is deployed from
 `contracts/PollBytecode.json` (transaction one), then registered in the Registry at
 `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` (transaction two). See
 [The registry](/governance/registry) and
 [Governance contracts](/contracts/governance-contracts).
 
-### Choosing a close height
+### Choose a close height
 
-Blocks are roughly 3 seconds apart, so:
+Key blocks are about 3 minutes apart, so a day is roughly 480 key blocks:
 
 ```text
-close_height = current_block + (days * 24 * 60 * 60 / 3)
+close_height = current_height + (days × 480)
 ```
 
-A 7-day poll is `current_block + 201600`. Get the current height from the `create_height` field
-of any recent `info` result, or from a node's top header.
+A 7-day poll is `current_height + 3360`; 2 weeks ≈ 6,720 key blocks. Get the current height
+from the `create_height` field of any recent `info` result, or from a node's top header.
 
-Balances and delegations are measured **at the close height**, not when the vote is cast. A
-voter who sells between voting and closing has that reflected in the final weight.
+Balances and delegations are measured **at the close height**, not when the vote is cast.
 
-## Delegation
+## Delegate
 
 Delegation is global: it applies to every poll until revoked. Voting on a specific poll
 overrides your delegation for that poll only.
@@ -204,35 +159,25 @@ node scripts/superhero-governance.mjs revoke-delegation
 `delegatee` shows who an address delegates to; `delegators` shows who delegates to it. Both
 default to your own wallet. `delegate` refuses your own address.
 
-For an agent wallet, delegation is often the right answer and is worth considering before
-autonomous voting. Delegating the agent's weight to your own personal address means the agent's
-stake counts, you decide how, and the agent never signs a governance transaction at all. It is
-one transaction and about 0.0001 AE.
-
-The reverse — delegating *to* an agent — hands a piece of your governance weight to an
-automated process. Do that only with a policy you have written down and an agent you audit.
+For an agent wallet, delegation is often the right answer: delegate the agent's weight to your
+own personal address, and the agent's stake counts, you decide how, and the agent never signs
+a governance transaction. It is one transaction and about 0.0001 AE. Delegating *to* an agent
+hands a piece of your governance weight to an automated process; do that only with a written
+policy and an agent you audit.
 
 ## Should the agent vote autonomously?
 
-The default answer is **no**, and the skill's own design agrees: none of the three
-[strategy templates](/agents/strategies) includes governance, and `SKILL.md` puts a mandatory
-read-the-poll step before every vote.
+The default answer is no. None of the three [strategy templates](/agents/strategies) includes
+governance, and the skill puts a mandatory read-the-poll step before every vote.
 
-The case against autonomous voting:
+- **A poll is prose, not a number.** Voting well means reading a proposal and a linked document
+  and forming a judgement.
+- **The link is untrusted input.** `create` checks only that it starts with `http://` or
+  `https://`; an agent that reads the link is reading text an unknown party wrote — a
+  prompt-injection surface.
+- **It is permanent and attributable.** A vote is a signed transaction from your address.
 
-- **A poll is prose, not a number.** The trading loop keys off a score; a governance poll
-  requires reading a proposal and a linked document and forming a judgement. The evidence
-  needed to vote well is not in any of the skill's commands.
-- **The link is unverified input.** `create` requires a reference URL, and the script checks
-  only that it starts with `http://` or `https://`. An agent that reads that link is
-  reading text an unknown party wrote, which is an obvious prompt-injection surface.
-- **It is permanent and attributable.** A vote is a signed transaction from your address,
-  visible forever.
-- **The downside is not symmetric.** A bad trade loses part of a capped balance. A bad vote is
-  a public position taken in your name.
-
-If you do want the agent to participate, give it a written policy with hard limits rather than
-discretion:
+If you do want the agent to participate, give it a written policy with hard limits:
 
 | Policy element | Example |
 | --- | --- |
@@ -242,13 +187,12 @@ discretion:
 | Escalation | "For anything else, summarise the poll and wait for me" |
 | Prohibition | "Never create a poll. Never delegate or revoke delegation" |
 
-And enforce the prohibitions outside the model where your runtime allows it — a permission rule
-denying `superhero-governance.mjs create` and `delegate` is a guarantee; an instruction is a
-preference. See [Claude Code](/agents/claude-code).
+Enforce the prohibitions outside the model where your runtime allows it — a permission rule
+denying `superhero-governance.mjs create` and `delegate` is a guarantee. See
+[Claude Code](/agents/claude-code).
 
-A good default configuration: let the agent **read and summarise** polls on a schedule, and
-let it do nothing else. `list` and `info` cost nothing and sign nothing, and a daily digest of
-open polls is genuinely useful.
+A good default: let the agent **read and summarise** polls on a schedule, and nothing else.
+`list` and `info` cost nothing and sign nothing, and a daily digest of open polls is useful.
 
 ## Costs
 
@@ -259,18 +203,11 @@ open polls is genuinely useful.
 | Revoke vote | 1 | around 0.0001 AE |
 | Delegate | 1 | around 0.0001 AE |
 | Revoke delegation | 1 | around 0.0001 AE |
-| List, info, delegatee, delegators | 0 | free (but still needs a key) |
+| List, info, delegatee, delegators | 0 | free, but still needs a key |
 
-## What the skill does not cover
+## Configuration
 
-**Community DAO voting is not scripted.** Each token has its own DAO with its own votes, using
-the `DAOVote` contract — a separate mechanism from the æternity governance registry this script
-talks to. The skill has no command for it. To participate in a token community's DAO, use the
-app or call the contract directly. See [DAO voting](/dao/voting) and
-[DAOVote](/contracts/dao-vote).
-
-Three environment variables override the governance script's defaults, which is the only place
-in the skill where the network is configurable:
+Three environment variables override the governance script's defaults:
 
 | Variable | Default |
 | --- | --- |
@@ -278,7 +215,12 @@ in the skill where the network is configurable:
 | `AE_NODE_URL` | `https://mainnet.aeternity.io` |
 | `AE_GOVERNANCE_BACKEND_URL` | `https://governance-server-mainnet.prd.aepps.com` |
 
-## Read more
+**Community DAO voting is not scripted.** Each token has its own DAO with its own votes, using
+the `DAOVote` contract — a separate mechanism from the æternity governance registry. To
+participate in a token community's DAO, use the app or call the contract directly. See
+[DAO voting](/dao/voting) and [DAOVote](/contracts/dao-vote).
+
+## Related
 
 - [CLI Reference](/agents/cli-reference) — every governance command with its full JSON output
 - [Safety & Limits](/agents/safety) — why a governance policy belongs in writing before the agent votes
@@ -286,14 +228,3 @@ in the skill where the network is configurable:
 - [Polls](/governance/polls) — what a poll is and how it is structured
 - [Delegation](/governance/delegation) — the delegation model in full
 - [Governance contracts](/contracts/governance-contracts) — the Registry and Poll contracts the script calls
-- [Voting on superhero.com](https://superhero.com/voting) — the live poll list and the app's voting flow
-
-## Open questions
-
-- **Does the governance server recognise a poll by bytecode hash, and if so which hashes does
-  it accept?** The skill deploys `Poll_Iris.aes` built with aesophia 7.0.1; Superhero's
-  backend records an 8.0.0 build of the same source under a different hash. If the server
-  filters on hash, polls created by the skill get `stake_weighted_results: null` forever and
-  the fix is to rebuild `contracts/PollBytecode.json` with the matching compiler. Settling
-  this needs the `aepp-governance` backend's own indexing rules — it is a different service
-  from `superhero-api`, and neither its source nor its behaviour is in these repositories.

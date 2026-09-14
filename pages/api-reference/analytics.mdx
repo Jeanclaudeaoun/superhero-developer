@@ -6,9 +6,7 @@ description: "Platform-wide metrics: trade volume, market cap, active users, tok
 # Analytics API
 
 Aggregate numbers for dashboards, and the AE exchange rates every fiat figure in the API is built
-on. These endpoints are mostly bare arrays and scalars rather than the paginated envelope used
-elsewhere, and several of them are defined but never called by the web app — that is flagged per
-endpoint below.
+on. Most of these endpoints return bare arrays or scalars rather than the paginated envelope.
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
 
@@ -20,37 +18,34 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | `GET /api/analytics/summary` | `start_date`, `end_date`, `address` | `total_unique_accounts` over a range |
 | `GET /api/analytics` | `start_date`, `end_date`, `force_pull`, `address` | Array of daily summary objects |
 | `GET /api/analytics/preview` | — | An HTML dashboard, not JSON |
-| `GET /api/analytics/daily-trade-volume` | `start_date`, `end_date`, `token_address`, `account_address` | `DailyTradeVolumeResultDto[]` |
-| `GET /api/analytics/daily-unique-active-users` | `start_date`, `end_date`, `token_address` | `DailyUniqueActiveUsersResultDto[]` |
-| `GET /api/analytics/daily-created-tokens-count` | `start_date`, `end_date` | `DailyTokenCountDto[]` |
-| `GET /api/analytics/daily-market-cap-sum` | `start_date`, `end_date` | `DailyMarketCapSumDto[]` |
-| `GET /api/analytics/total-market-cap` | — | `MarketCapSumDto`, the one figure here in aettos |
+| `GET /api/analytics/daily-trade-volume` | `start_date`, `end_date`, `token_address`, `account_address` | Daily volume series |
+| `GET /api/analytics/daily-unique-active-users` | `start_date`, `end_date`, `token_address` | Daily active-user series |
+| `GET /api/analytics/daily-created-tokens-count` | `start_date`, `end_date` | Daily token-creation series |
+| `GET /api/analytics/daily-market-cap-sum` | `start_date`, `end_date` | Daily market-cap series |
+| `GET /api/analytics/total-market-cap` | — | `sum` and `sum_data`, in **aettos** |
 | `GET /api/analytics/total-created-tokens` | — | A bare number |
-| `GET /api/analytics/total-unique-users` | `token_sale_addresses` | `TotalUniqueUsersResultDto` |
+| `GET /api/analytics/total-unique-users` | `token_sale_addresses` | `total_users` |
 | `GET /api/analytics/challenge` | `addresses`, `start_date`, `end_date` | Per-account, per-day activity grid |
 | `GET /api/analytics/challenge/preview` | — | An HTML dashboard, not JSON |
 | `GET /api/coins/aeternity/rates` | — | Currency code to rate map |
 | `GET /api/coins/aeternity/history` | `currency`, `interval`, `days` | Array of `[timestamp_ms, price]` pairs |
 | `GET /api/coins/aeternity/market-data` | `currency` | Market data object |
 
-Posting activity has its own set under `/api/posts/analytics*`, and referral activity under
+Posting activity has its own set under `/api/posts/analytics*` and referral activity under
 `/api/bcl-affiliation/analytics*` — see [Posts](/api-reference/posts) and
 [Invitations & Affiliations](/api-reference/invitations-and-affiliations).
 
-**Date parameters here are snake_case** (`start_date`, `end_date`), unlike the camelCase ones on
-the account endpoints. Format is `YYYY-MM-DD`.
+Date parameters are snake_case `start_date` / `end_date` in `YYYY-MM-DD` format.
 
 ## `GET /api/analytics/past-24-hours`
 
-The platform summary card. It returns **one object**, not an array, with exactly seven fields —
-`CacheDailyAnalyticsDataService.getDateAnalytics` in
-`superhero-api/src/analytics/services/cache-daily-analytics-data.service.ts` builds it:
+Returns **one object** with seven fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `date` | string | `YYYY-MM-DD` of the start of the window — that is, *yesterday's* date, since the window opens 24 hours ago |
-| `total_market_cap_sum` | string | Sum of every token's most recent known market cap, **in AE** |
-| `total_volume_sum` | string | Sum of trade `amount.ae` inside the window, in AE |
+| `date` | string | `YYYY-MM-DD` of the start of the window — yesterday's date |
+| `total_market_cap_sum` | string | Sum of every token's last-traded market cap, in **AE** |
+| `total_volume_sum` | string | Sum of trade `amount.ae` inside the window, in **AE** |
 | `total_tokens` | number | Tokens created at any time before the window closes — a running total, not a 24-hour delta |
 | `total_transactions` | number | Trades inside the window |
 | `total_created_tokens` | number | Trades inside the window whose `tx_type` is `create_community` |
@@ -60,57 +55,35 @@ The platform summary card. It returns **one object**, not an array, with exactly
 curl -s "https://api.superhero.com/api/analytics/past-24-hours"
 ```
 
-An optional `address` parameter scopes every field to one account: the transaction aggregates
-filter on `address`, `total_tokens` counts tokens that account created, and the market-cap sum is
+An optional `address` scopes every field to one account: the transaction aggregates filter on
+`address`, `total_tokens` counts tokens that account created, and the market-cap sum is
 restricted to tokens with that `creator_address`.
 
-Two things about this payload catch people out.
+`total_tokens` is cumulative; the 24-hour creation count is `total_created_tokens`.
 
-**`total_tokens` is cumulative, not windowed.** It is `COUNT(*) FROM token WHERE created_at <
-endOfWindow`. The 24-hour figure you probably want is `total_created_tokens`.
-
-**`total_market_cap_sum` is in AE, and it is not the same quantity as
-`GET /api/analytics/total-market-cap`.** It is computed from the `transactions` table:
-
-```sql
-SELECT COALESCE(SUM(cap.market_cap), 0)
-FROM (
-  SELECT DISTINCT ON (sale_address)
-    CAST(NULLIF(market_cap->>'ae','NaN') AS decimal) AS market_cap
-  FROM transactions WHERE created_at <= $1
-  ORDER BY sale_address, created_at DESC
-) cap
-```
-
-— the *last traded* market cap of each token, and transaction market caps are stored in AE.
-`GET /api/analytics/total-market-cap` instead sums the `token.market_cap` column, which holds the
-*currently synced* market cap in aettos. So the two differ in **both** scale and method:
+`total_market_cap_sum` and `GET /api/analytics/total-market-cap` measure different quantities on
+different scales:
 
 | | `past-24-hours.total_market_cap_sum` | `total-market-cap.sum` |
 | --- | --- | --- |
-| Source | last trade per token | the live-synced `token.market_cap` column |
-| Unit | AE | aettos |
-| Includes tokens never traded | no | yes |
-| Includes `unlisted` tokens | yes | no |
+| Source | Last trade per token | The live-synced token `market_cap` |
+| Unit | **AE** | **aettos** |
+| Includes tokens never traded | No | Yes |
+| Includes `unlisted` tokens | Yes | No |
 
-Dividing one by 1e18 will *approximately* line them up, and they will still disagree — do not use
-one to validate the other. Pick whichever definition your dashboard means and stay with it.
-
-Both values arrive as JSON **strings**, because they are Postgres `numeric`/`decimal` columns.
-That is a serialisation artefact, not a hint that they are big integers.
+Both values arrive as JSON strings because they are decimal columns; `total_market_cap_sum` is
+not a big integer.
 
 ## Daily series
 
-Four endpoints return a **bare JSON array** — one element per day, no pagination envelope.
+Four endpoints return a **bare JSON array** with one element per day.
 
 ### `GET /api/analytics/daily-trade-volume`
-
-`DailyTradeVolumeResultDto`:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `date` | string | The day |
-| `volume_ae` | number | Volume in **AE** — already whole units, no 1e18 division |
+| `volume_ae` | number | Volume in **AE** — no 1e18 division |
 | `transaction_count` | number | Trades that day |
 
 Filter with `token_address` for one market or `account_address` for one trader.
@@ -119,97 +92,67 @@ Filter with `token_address` for one market or `account_address` for one trader.
 curl -s "https://api.superhero.com/api/analytics/daily-trade-volume?start_date=2026-08-01&end_date=2026-09-01"
 ```
 
-This is the one series endpoint with a live caller: the global stats panel requests the last seven
-days and sums `volume_ae` across the array to show a 7-day volume figure. It confirms both the
-bare-array shape and that `volume_ae` is a plain AE number.
-
 ### `GET /api/analytics/daily-unique-active-users`
 
-`DailyUniqueActiveUsersResultDto`: `date` and `active_users` (number). Takes `token_address` to
-scope to one market.
+`date` and `active_users` (number). Takes `token_address` to scope to one market.
 
 ### `GET /api/analytics/daily-created-tokens-count`
 
-`DailyTokenCountDto`: `date` in `YYYY-MM-DD` and `count` (number).
+`date` in `YYYY-MM-DD` and `count` (number).
 
 ### `GET /api/analytics/daily-market-cap-sum`
 
-`DailyMarketCapSumDto`: `date` (`YYYY-MM-DD`) and `sum`. One element per day, ascending.
+`date` (`YYYY-MM-DD`) and `sum`, one element per day, ascending. **`sum` is in AE, not
+aettos** — it is the last-trade-per-token sum described under `past-24-hours`, computed at each
+day's end. Do not divide by 1e18.
 
-**`sum` is in AE, not aettos.** It is the same last-trade-per-token query described under
-`past-24-hours`, run once per day with that day's end as the cut-off, so it reads
-`transactions.market_cap->>'ae'` — already whole AE. The string type is a Postgres `decimal`
-serialisation, not a big integer. Do not divide by 1e18.
-
-Two limits worth knowing:
-
-- The range is clamped to **365 days**. A wider `start_date` is moved forward, not rejected.
+- The range is clamped to **365 days**; a wider `start_date` is moved forward, not rejected.
 - With neither date, `start_date` and `end_date` both default to today, so you get a single row.
-- Days are queried in batches of 20, one round trip per day — a full year is 365 aggregate
-  queries. It is not a cheap call; it is cached for 20 seconds.
-
-**`token_sale_addresses` is accepted and ignored.** The controller normalises the parameter and
-then never passes it to `getMarketCapSum(date)`, which takes only a date. Every response is the
-platform-wide sum. If you need a per-token series, build it from
-`GET /api/tokens/{address}/history`.
+- Each day is an aggregate query; a full year is 365 of them. Cached for 20 seconds.
+- `token_sale_addresses` is accepted but the series is always platform-wide. For a per-token
+  series use `GET /api/tokens/{address}/history`.
 
 ## Totals
 
 | Endpoint | Shape | Counts |
 | --- | --- | --- |
-| `GET /api/analytics/total-market-cap` | `sum` (string, **aettos**) and `sum_data` (a `PriceDto`, also in aettos) | `SUM(token.market_cap)` over `unlisted = false` tokens, from every factory |
+| `GET /api/analytics/total-market-cap` | `sum` (string, **aettos**) and `sum_data` (a `PriceDto`, also in aettos) | Sum of token `market_cap` over `unlisted = false` tokens, from every factory |
 | `GET /api/analytics/total-created-tokens` | A bare JSON number | Tokens whose `factory_address` is the **current** factory |
-| `GET /api/analytics/total-unique-users` | `total_users` (number) | `COUNT(DISTINCT transactions.address)`, all time |
+| `GET /api/analytics/total-unique-users` | `total_users` (number) | Distinct trader addresses, all time |
 
 ```bash
 curl -s "https://api.superhero.com/api/analytics/total-created-tokens"
 ```
 
-**`total-market-cap` is the one market-cap figure in this API that is in aettos** — divide by
-1e18. It sums the `token.market_cap` column directly, so it includes tokens that have never
-traded and excludes unlisted ones. `sum_data` is the same aettos value multiplied through the AE
-fiat rates, so every one of its currency keys is on the aettos scale too.
+`total-market-cap` is the one market-cap figure in the API in aettos — divide by 1e18. `sum_data`
+is the same aettos value multiplied through the AE fiat rates, so every currency key is on the
+aettos scale too.
 
 `total-unique-users` accepts `token_sale_addresses` (at most 100; more is a 400) to restrict the
-count to traders of those tokens. Unknown addresses are dropped, and if none of them resolves to
-a token the answer is `{ "total_users": 0 }`. It is cached for 20 seconds.
+count to traders of those tokens. Unknown addresses are dropped; if none resolves to a token the
+answer is `{ "total_users": 0 }`. Cached for 20 seconds.
 
-`total-created-tokens` is scoped to the current factory, so it will not match `total_tokens` from
-`past-24-hours`, which counts every token in the table.
+`total-created-tokens` is scoped to the current factory, so it does not match `total_tokens`
+from `past-24-hours`, which counts every token.
 
 ## AE price and fiat rates
 
-`GET /api/coins/aeternity/rates` is the one analytics endpoint the whole app depends on. It
-returns a flat map of currency code to rate:
+`GET /api/coins/aeternity/rates` returns a flat map of currency code to rate:
 
 ```json
 { "usd": 0.0312, "eur": 0.0287, "aud": 0.0471, "brl": 0.1683,
   "cad": 0.0428, "chf": 0.0249, "gbp": 0.0243, "xau": 0.0000094 }
 ```
 
-The web app lowercases every key, discards any value that is not a finite number, and polls this
-endpoint to keep prices live. It is what turns the `ae` field of any `PriceDto` into a fiat
-figure when the API has not already supplied one.
-
 ```bash
 curl -s "https://api.superhero.com/api/coins/aeternity/rates"
 ```
 
-The map has **exactly eight keys** — `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp`, `xau` — one
-for each `convertTo` currency other than `ae` itself. The backend builds the upstream request as
-`vs_currencies=<the CURRENCIES list joined by commas>` and refuses to cache a partial answer
-(`isCompleteCurrencyRates` requires every code), so a response either has all eight or is replaced
-by the last known good snapshot.
+The map has exactly eight keys — `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp`, `xau` — one for
+each `convertTo` currency other than `ae`. A response either has all eight or is replaced by the
+last known good snapshot. `xau` is troy ounces of gold.
 
-A `cny` key appears in the web-app repository's own documentation of this endpoint. It is not in
-`CURRENCIES`, it is not a valid `convertTo` value, and nothing in the backend would produce it.
-Read defensively anyway — the app lowercases every key and discards any value that is not a finite
-number — but do not build a currency picker from this map expecting more than the eight.
-
-`xau` is troy ounces of gold, not a currency; treat it accordingly when formatting.
-
-`GET /api/coins/aeternity/history` gives the AE price series as an array of
-`[timestamp_ms, price]` pairs:
+`GET /api/coins/aeternity/history` gives the AE price series as `[timestamp_ms, price]` pairs:
 
 | Parameter | Notes |
 | --- | --- |
@@ -221,9 +164,8 @@ number — but do not build a currency picker from this map expecting more than 
 curl -s "https://api.superhero.com/api/coins/aeternity/history?currency=usd&interval=daily&days=90"
 ```
 
-`GET /api/coins/aeternity/market-data?currency=usd` returns the broader market picture, in
-**camelCase** — the only camelCase response body in the API, because it is CoinGecko's coin-market
-shape passed through:
+`GET /api/coins/aeternity/market-data?currency=usd` returns the broader market picture in
+**camelCase** — the only camelCase response body in the API:
 
 ```text
 id · symbol · name · lastUpdated
@@ -238,19 +180,15 @@ roi
 dataSource · isFallback
 ```
 
-`image` and `marketCapRank` are stripped from the upstream payload before it is returned. Every
-figure is denominated in `currency`, which defaults to `usd`.
-
-The last two keys are Superhero's own: `dataSource` is `coingecko` or `fallback`, and
-`isFallback` says the server is serving the last known good snapshot because CoinGecko was
-unreachable. **Check them before treating the numbers as current** — the endpoint deliberately
-returns stale data rather than an empty object when the upstream is down.
+Every figure is denominated in `currency`, default `usd`. `dataSource` is `coingecko` or
+`fallback`, and `isFallback` says the server is serving the last known good snapshot because the
+upstream was unreachable. Check them before treating the numbers as current.
 
 ## `GET /api/analytics` and `GET /api/analytics/summary`
 
-`GET /api/analytics` returns an **array**, one element per day, of the same seven fields
-documented under `past-24-hours`. Rows read from the cached table carry an extra `id`; rows
-computed live (the `address`-scoped path) do not. Do not key on `id`.
+`GET /api/analytics` returns an **array**, one element per day, of the same seven fields as
+`past-24-hours`. Rows read from the cached table carry an extra `id`; rows computed live (the
+`address`-scoped path) do not. Do not key on `id`.
 
 | Parameter | Default | Notes |
 | --- | --- | --- |
@@ -259,35 +197,28 @@ computed live (the `address`-scoped path) do not. Do not key on `id`.
 | `address` | — | Scopes every figure to one account |
 | `force_pull` | `false` | Recompute and rewrite the cached rows for the range before answering |
 
-Without `address` the rows come from the cached `analytics` table. With `address` they are always
-computed live, because that table stores only global aggregates — so an address-scoped call is
-slower and always current.
+Without `address` the rows come from the cached daily table. With `address` they are computed
+live, so an address-scoped call is slower and always current.
 
-`GET /api/analytics/summary` is much smaller: it returns `{ "total_unique_accounts": <n> }` for
-the range, and it is a **true distinct count** over the whole range rather than a sum of per-day
-distincts, so it does not over-count a trader who was active on several days. Both dates are
-optional; omitting them makes it all-time.
+`GET /api/analytics/summary` returns `{ "total_unique_accounts": <n> }` for the range — a true
+distinct count over the whole range, not a sum of per-day distincts. Both dates are optional;
+omitting them makes it all-time.
 
-## How fresh are these numbers?
+## Freshness
 
 | Endpoint | Freshness |
 | --- | --- |
-| `past-24-hours`, `summary` | Computed live on every request. No cache. |
-| `analytics` without `force_pull` | Read from the `analytics` table, which a cron rebuilds **hourly**, re-pulling the last 7 days each tick |
+| `past-24-hours`, `summary` | Computed live on every request |
+| `analytics` without `force_pull` | Read from the daily table, rebuilt **hourly** (re-pulling the last 7 days each tick) |
 | `analytics` with `force_pull=true` | Recomputed synchronously for the whole requested range first — slow for a wide range |
-| `analytics` with `address` | Always live, `force_pull` irrelevant |
+| `analytics` with `address` | Always live; `force_pull` irrelevant |
 | `daily-market-cap-sum`, `total-unique-users` | Live, cached 20 seconds |
 | `daily-trade-volume`, `daily-unique-active-users`, `daily-created-tokens-count`, `total-market-cap`, `total-created-tokens` | Live on every request, uncached |
-| `coins/aeternity/*` | From the `coin_prices` snapshot, refreshed from CoinGecko every **10 minutes** |
-
-So `force_pull` is not a hint that the rest are stale caches of unknown age — most of them are not
-cached at all. It exists because the single `analytics` table is the one materialised thing here,
-and a backfill gap in it needs a way to be closed on demand.
+| `coins/aeternity/*` | From a snapshot refreshed from CoinGecko every **10 minutes** |
 
 ## `GET /api/analytics/challenge`
 
-A per-account, per-day activity grid, for comparing a small set of traders over a period — a
-leaderboard for a campaign rather than a platform metric.
+A per-account, per-day activity grid for comparing a small set of traders over a period.
 
 | Parameter | Notes |
 | --- | --- |
@@ -295,8 +226,12 @@ leaderboard for a campaign rather than a platform metric.
 | `start_date` | Default 14 days ago |
 | `end_date` | Default today |
 
-It returns a flat array with one row per address per day, **zero-filled** — every address gets a
-row for every day in the range whether or not it did anything:
+```bash
+curl -s "https://api.superhero.com/api/analytics/challenge?addresses=ak_FIRST_ADDRESS,ak_SECOND_ADDRESS&start_date=2026-09-01&end_date=2026-09-14"
+```
+
+Returns a flat array with one row per address per day, **zero-filled** — every address gets a
+row for every day in the range:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -304,31 +239,17 @@ row for every day in the range whether or not it did anything:
 | `date` | string | `YYYY-MM-DD` |
 | `total_posts` | number | Posts that day |
 | `total_trades` | number | Trades that day |
-| `total_volume_ae` | number | Trade volume that day, in AE |
+| `total_volume_ae` | number | Trade volume that day, in **AE** |
 | `created_tokens` | number | Tokens created that day |
-| `pnl_ae` | number | Realised PnL for the day, in AE |
+| `pnl_ae` | number | Realised PnL for the day, in **AE** |
 | `pnl_usd` | number | The same in USD |
 
-```bash
-curl -s "https://api.superhero.com/api/analytics/challenge?addresses=ak_FIRST_ADDRESS,ak_SECOND_ADDRESS&start_date=2026-09-01&end_date=2026-09-14"
-```
+`GET /api/analytics/challenge/preview` and `GET /api/analytics/preview` are server-rendered HTML
+dashboards, not JSON.
 
-`GET /api/analytics/challenge/preview` and `GET /api/analytics/preview` are **server-rendered HTML
-dashboards**, not JSON — they are Handlebars views. Do not parse them.
+## Related
 
-## Which of these are actually exercised
-
-Three endpoints have live callers in the web app: `past-24-hours`, `daily-trade-volume` and
-`coins/aeternity/rates`. The others are defined but not invoked by the app — the agent skill's
-`superhero-trending.mjs analytics` command calls bare `/api/analytics`.
-
-Every shape on this page is now read off the backend's own controllers and services rather than
-inferred from a caller, so the field lists are the implementation, not a guess.
-
-## Read more
-
-- [API Conventions](/api-reference/conventions) — why some of these are arrays and some are scalars, and the units rule
+- [API Conventions](/api-reference/conventions) — the units rule and the non-envelope response shapes
 - [Tokens API](/api-reference/tokens) — per-token history, the fine-grained counterpart to these aggregates
 - [Accounts API](/api-reference/accounts) — per-account portfolio history and trading statistics
 - [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — the referral analytics endpoints
-- [api.superhero.com](https://api.superhero.com) — the live mainnet base URL

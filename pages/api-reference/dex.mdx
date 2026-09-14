@@ -5,34 +5,12 @@ description: "Token, pair, route and transaction data for the æternity AMM, ser
 
 # DEX API
 
-The DEX endpoints cover the constant-product AMM that Superhero's swap UI runs on: listed tokens
-and their prices, liquidity pairs and their reserves, swap routes between any two tokens, and
-every swap and liquidity event. They are the counterpart to the bonding-curve endpoints under
-[Tokens](/api-reference/tokens) — different market structure, different data.
+The DEX endpoints cover the constant-product AMM behind Superhero's swap UI: listed tokens and
+their prices, liquidity pairs and their reserves, swap routes between any two tokens, and every
+swap and liquidity event. They are the counterpart to the bonding-curve endpoints under
+[Tokens](/api-reference/tokens).
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
-
-## These are served from the Superhero API, not a separate backend
-
-`src/config.ts` still defines `DEX_BACKEND_URL` for both networks
-(`https://dex-backend-mainnet.prd.service.aepps.com` and its testnet twin), and it is dead
-configuration — no request in the web app uses it. The client that used to talk to that service
-was rewritten against the unified API, and says so:
-
-> Historically this hit the standalone "dex-backend" service (`CONFIG.DEX_BACKEND_URL`). It now
-> talks to the unified superhero-api (`CONFIG.SUPERHERO_API_URL`, the same base the generated
-> OpenAPI client uses) under the `/api/dex/*` routes.
-
-Point at `https://api.superhero.com/api/dex/*`. The responses are paginated and nested where the
-old service returned flat arrays, which is why the web app's adapter walks every page and
-flattens the result before handing it to the UI.
-
-The backend confirms the migration from the other side. `SwapRoutesController` is documented in
-its own source as *"Replicates the legacy DEX backend's `/swap-routes/:from/:to` endpoint that the
-swap UI uses to quote a trade"*, and `SwapRoutePairDto` says it matches *"the legacy dex-backend
-`PairWithLiquidityAndTokenAddresses` contract"* — address-form tokens, reserves under
-`liquidityInfo`, and a `synchronized` flag. So the shapes you get here were deliberately built to
-be drop-in replacements for that service's, and the word the source uses for it is **legacy**.
 
 ## Endpoints
 
@@ -42,7 +20,7 @@ be drop-in replacements for that service's, and the word the source uses for it 
 | --- | --- | --- |
 | `GET /api/dex/tokens` | `order_by`, `order_direction`, `listed`, `search`, `limit`, `page` | Paginated `DexTokenDto` |
 | `GET /api/dex/tokens/{address}` | — | One `DexTokenDto` |
-| `GET /api/dex/tokens/{address}/price` | — | Token plus current price and price metadata |
+| `GET /api/dex/tokens/{address}/price` | — | Token plus current price |
 | `GET /api/dex/tokens/{address}/price/analysis` | `base_token`, `debug` | Liquidity-weighted price with confidence metrics |
 | `GET /api/dex/tokens/{address}/summary` | — | `DexTokenSummaryDto` |
 | `GET /api/dex/tokens/{address}/history` | `interval`, `convertTo`, `limit`, `page` | OHLCV candles |
@@ -84,20 +62,19 @@ be drop-in replacements for that service's, and the word the source uses for it 
 | `price` | `PriceDto` | Current price, all nine currencies. An object, not a string |
 | `summary` | `DexTokenSummaryDto` or null | Aggregated volume and change across all pools. Null when not computed |
 
-Two differences from the bonding-curve `TokenDto` worth internalising: `decimals` is a **number**
-here and a **string** there, and `price` is a **`PriceDto` object** here and a **decimal string**
-there. Do not share a parser between the two.
+`decimals` is a **number** here and a **string** on the bonding-curve `TokenDto`; `price` is a
+**`PriceDto` object** here and a **decimal string** there. Do not share a parser between the two.
 
-`order_by` on the list accepts: `pairs_count`, `name`, `symbol`, `created_at`, `price`, `tvl`,
-`24hchange`, `24hvolume`, `7dchange`, `7dvolume`, `30dchange`, `30dvolume`. Pass `listed=true` to
-restrict to curated tokens, `listed=false` for the rest, and omit it for everything.
+`order_by` accepts `pairs_count`, `name`, `symbol`, `created_at`, `price`, `tvl`, `24hchange`,
+`24hvolume`, `7dchange`, `7dvolume`, `30dchange`, `30dvolume`. Pass `listed=true` to restrict to
+curated tokens, `listed=false` for the rest, and omit it for everything.
 
 ```bash
 curl -s "https://api.superhero.com/api/dex/tokens?listed=true&order_by=tvl&order_direction=DESC&limit=20"
 ```
 
-`DexTokenSummaryDto` carries `address`, `total_volume` (a `PriceDto`) and `change` — a
-`DexTokenChangeData` keyed by period, or null.
+`DexTokenSummaryDto` carries `address`, `total_volume` (a `PriceDto`) and `change` — a map keyed
+by period, or null.
 
 ## `PairDto`
 
@@ -106,14 +83,18 @@ curl -s "https://api.superhero.com/api/dex/tokens?listed=true&order_by=tvl&order
 | `address` | string | `ct_...` of the pair contract |
 | `token0` | `DexTokenDto` | First token, fully inlined |
 | `token1` | `DexTokenDto` | Second token, fully inlined |
-| `reserve0` | string | Reserve of `token0`, in that token's base units |
-| `reserve1` | string | Reserve of `token1`, in that token's base units |
-| `total_supply` | string | LP token supply |
+| `reserve0` | string | Reserve of `token0`, in that token's **base units** |
+| `reserve1` | string | Reserve of `token1`, in that token's **base units** |
+| `total_supply` | string | LP token supply, in **base units** |
 | `transactions_count` | number | Lifetime transactions on the pair |
 | `created_at` | string | ISO 8601 |
 
-Reserves and LP supply are big-integer strings in base units — divide each by 10 raised to its own
-token's `decimals`, which may differ between the two sides.
+Reserves and LP supply are big-integer strings in base units — divide each by 10 raised to its
+own token's `decimals`, which may differ between the two sides.
+
+```bash
+curl -s "https://api.superhero.com/api/dex/pairs?order_by=transactions_count&order_direction=DESC&limit=20"
+```
 
 `PairSummaryDto` adds volume and price change over 24h, 7d and 30d:
 
@@ -123,14 +104,10 @@ token's `decimals`, which may differ between the two sides.
 | `volume_token` | string | Which token volume is denominated in |
 | `token_position` | string | Whether that token is position 0 or 1 |
 | `total_volume` | `PriceDto` | Lifetime volume |
-| `change` | `ChangeData` or null | `24h`, `7d` and `30d`, each with `volume` (a `PriceDto`) and `price_change` (`percentage` and `value`, both strings) |
+| `change` | object or null | `24h`, `7d` and `30d`, each with `volume` (a `PriceDto`) and `price_change` (`percentage` and `value`, both strings) |
 
-Pass `?token=ct_...` to choose the denominating side; without it the endpoint defaults to WAE when
-one side of the pair is WAE.
-
-```bash
-curl -s "https://api.superhero.com/api/dex/pairs?order_by=transactions_count&order_direction=DESC&limit=20"
-```
+Pass `?token=ct_...` to choose the denominating side; without it the endpoint defaults to WAE
+when one side of the pair is WAE.
 
 ## `PairTransactionDto`
 
@@ -143,7 +120,7 @@ One row per swap or liquidity event.
 | `block_height` | number | Inclusion height |
 | `pair` | `PairDto` | The pair, inlined |
 | `tx_type` | string | The router entrypoint that was called — see below |
-| `reserve0` / `reserve1` | string | Reserves **after** the transaction |
+| `reserve0` / `reserve1` | string | Reserves **after** the transaction, in base units |
 | `ratio0` | string | Price of `token0` quoted in `token1` — `reserve0 / reserve1` |
 | `ratio1` | string | Price of `token1` quoted in `token0` |
 | `total_supply` | string | LP supply after the transaction |
@@ -156,14 +133,9 @@ One row per swap or liquidity event.
 
 `LiquidityInfoDto` is `type` (`PairMint` or `PairBurn`) plus `amount0` and `amount1`.
 
-### `tx_type` on DEX transactions
+### `tx_type`
 
-`tx_type` is **the name of the router entrypoint that was called**, stored verbatim from
-`transaction.tx.function` by `DexSyncService.saveDexPairTransaction`. The DTO's `swap`,
-`add_liquidity`, `remove_liquidity` are illustrative prose in a Swagger description, not values
-the column ever holds. The real set is the DEX half of `TX_FUNCTIONS` in
-`superhero-api/src/configs/constants.ts`, and it is the complete list of functions the sync layer
-indexes at all:
+`tx_type` is the name of the router entrypoint that was called. The complete set:
 
 ```text
 swap_exact_tokens_for_tokens     add_liquidity
@@ -174,59 +146,49 @@ swap_exact_ae_for_tokens
 swap_ae_for_exact_tokens
 ```
 
-The `tx_type` query parameter is an exact-match filter (`tx_type = :txType`), so
-`?tx_type=swap` matches **nothing**. To select all swaps you need six requests, or you filter
-client-side on the `swap_` prefix — the backend's own volume queries do exactly that, with an
-`IN (...)` list of the six.
+The `tx_type` query parameter is an exact-match filter, so `?tx_type=swap` matches nothing. To
+select all swaps, make six requests or filter client-side on the `swap_` prefix.
 
-`PairMint` and `PairBurn` are a different vocabulary entirely: they are the **event names** the
-pair contract emits, and they appear only inside `pair_mint_info.type`. They are never `tx_type`
-values. The mapping is straightforward — an `add_liquidity*` transaction carries a `PairMint`
-event, a `remove_liquidity*` transaction a `PairBurn`.
+`PairMint` and `PairBurn` are the pair contract's **event names** and appear only inside
+`pair_mint_info.type`. An `add_liquidity*` transaction carries a `PairMint` event, a
+`remove_liquidity*` transaction a `PairBurn`.
 
-Note that the date filters on this endpoint are `from_date` and `to_date` — a third spelling,
-distinct from both the snake_case `start_date` and the camelCase `startDate` used elsewhere. Both
-are ISO 8601 and both bounds are inclusive. `order_by` accepts only `created_at` (the default) or
-`tx_type`; anything else is a 400.
+Date filters on this endpoint are `from_date` and `to_date`, both ISO 8601, both bounds
+inclusive. `order_by` accepts `created_at` (the default) or `tx_type`; anything else is a 400.
 
 ```bash
 # Every "exact tokens in" swap, newest first
 curl -s "https://api.superhero.com/api/dex/transactions?tx_type=swap_exact_tokens_for_tokens&limit=20&order_direction=DESC"
 ```
 
-Fetch a single one by hash as a **path segment** here — `GET /api/dex/transactions/{txHash}` —
+Fetch a single transaction by hash as a path segment — `GET /api/dex/transactions/{txHash}` —
 unlike the bonding-curve equivalent, which takes a `tx_hash` query parameter.
 
-## Routing a swap
+## `GET /api/dex/swap-routes/{from_token}/{to_token}`
 
-`GET /api/dex/swap-routes/{from_token}/{to_token}` is what the swap UI quotes against. It returns
-**an array of routes, each of which is an ordered array of pairs**, covering direct and
-single-hop paths. An empty array means no route exists.
-
-Each pair in a route is a `SwapRoutePairDto`:
+Returns **an array of routes, each an ordered array of pairs**, covering direct and single-hop
+paths. An empty array means no route exists.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `address` | string | The pair contract |
 | `synchronized` | boolean | Whether the pair has usable non-zero reserves on both sides |
 | `token0` / `token1` | string | The two token addresses |
-| `liquidityInfo` | `RouteLiquidityInfoDto` | Reserve information for quoting |
+| `liquidityInfo` | object | Reserve information for quoting |
 
-**A route containing an unsynchronized pair is not quotable** — check `synchronized` on every hop
-before pricing a route.
+A route containing an unsynchronized pair is not quotable — check `synchronized` on every hop.
 
 ```bash
 curl -s "https://api.superhero.com/api/dex/swap-routes/ct_FROM_TOKEN/ct_TO_TOKEN"
 ```
 
-`GET /api/dex/pairs/from/{from_token}/to/{to_token}/providers` is the broader form, documented as
-returning all possible paths including multi-hop.
+`GET /api/dex/pairs/from/{from_token}/to/{to_token}/providers` is the broader form, returning
+all possible paths including multi-hop.
 
-## Price history
+## `GET /api/dex/tokens/{address}/history`
 
-`GET /api/dex/tokens/{address}/history` gives OHLCV for a single token. The series is derived
-from **the deepest pool pairing that token against WAE**, so the price is expressed in AE; if no
-WAE pool exists, the deepest available pool is used instead.
+OHLCV for a single token. The series is derived from the deepest pool pairing that token against
+WAE, so the price is expressed in AE; if no WAE pool exists, the deepest available pool is used.
 
 | Parameter | Notes |
 | --- | --- |
@@ -234,32 +196,24 @@ WAE pool exists, the deepest available pool is used instead.
 | `convertTo` | Default `ae`. Fiat conversion uses the AE-to-currency rate as of each candle's own timestamp |
 | `limit`, `page` | Standard pagination |
 
-Requesting a fiat `convertTo` for a token **without a WAE-quoted pool returns HTTP 400**. That is
-the one explicitly documented 400 in the whole API.
+Requesting a fiat `convertTo` for a token without a WAE-quoted pool returns 400.
 
 `GET /api/dex/pairs/{address}/history` is the pair-level equivalent and adds `from_token`, which
 takes `token0` or `token1` to choose the quoting direction.
 
-## Deeper price analysis
-
-Both of these run the same path-finding; they differ in how much of it they show you.
-
-### `GET /api/dex/tokens/{address}/price`
+## `GET /api/dex/tokens/{address}/price`
 
 ```json
 { "price": "0.0431", "token": {} }
 ```
 
 `token` is the full `DexTokenDto`; `price` is the best price found, **quoted in WAE**, as a
-decimal string. It is `null` — not an error, and not a fabricated `1` — when the token has no
-liquid path to WAE. The value is taken from the deepest-liquidity path, deliberately **not** the
-median, because the median is dragged around by dust pools and multi-hop outliers. A 404 means
-the token itself is unknown to the DEX index, not that it has no price.
+decimal string. It is `null` when the token has no liquid path to WAE. The value comes from the
+deepest-liquidity path, not the median. A 404 means the token is unknown to the DEX index.
 
-### `GET /api/dex/tokens/{address}/price/analysis`
+## `GET /api/dex/tokens/{address}/price/analysis`
 
-The same computation with its working shown
-(`DexTokenService.getTokenPriceWithLiquidityAnalysis`):
+The same computation with its working shown:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -268,64 +222,36 @@ The same computation with its working shown
 | `bestPath` | array of pairs | The route the price came from |
 | `allPaths` | array | Every path considered, each with `path`, `price`, `liquidity` and `confidence` |
 | `liquidityWeightedPrice` | string or null | Weighted across all paths |
-| `medianPrice` | string or null | Median across all paths — exposed for comparison, not used as the answer |
+| `medianPrice` | string or null | Median across all paths, for comparison |
 
 `base_token` defaults to WAE; `debug=true` widens the per-path breakdown. Asking for the base
-token's price against itself short-circuits to `"1"`. A token with no path at all is a 404
-(`No price paths found for token ...`), not a null `price`.
+token's price against itself returns `"1"`. A token with no path at all is a 404
+(`No price paths found for token ...`).
 
-Comparing `price` against `medianPrice` and `liquidityWeightedPrice` is a cheap manipulation
-check: a wide spread between them means the quote rests on one shallow pool.
+A wide spread between `price`, `medianPrice` and `liquidityWeightedPrice` means the quote rests
+on one shallow pool.
 
-## The admin endpoint
+## `PATCH /api/dex/tokens/{address}/listed`
 
-`PATCH /api/dex/tokens/{address}/listed` flips the `listed` flag. Body is
-`{ "listed": true }` or `{ "listed": false }`; it returns the updated `DexTokenDto`, or 404 for an
-unknown token.
+Sets the `listed` flag. Body is `{ "listed": true }` or `{ "listed": false }`; returns the
+updated `DexTokenDto`, or 404 for an unknown token.
 
-It is one of **two** endpoints in the API that take a shared secret, and — this is the part worth
-knowing — the two share a guard and therefore a key. The import is literally
-`import { ApiKeyGuard } from '@/trending-tags/guards/api-key.guard'`, so the value checked here is
-the same `TRENDING_TAGS_API_KEY` that gates `POST /api/trending-tags`. Send it as either
-`x-api-key: YOUR_KEY` or `Authorization: Bearer YOUR_KEY`; a missing, wrong, or server-side-unset
-key is a `401`.
-
-The key is not in any public repository. Everything else that writes uses a wallet signature; see
+Requires the API key, sent as `x-api-key: YOUR_KEY` or `Authorization: Bearer YOUR_KEY`. A
+missing or wrong key is a `401`. Every other write in the API uses a wallet signature — see
 [Conventions](/api-reference/conventions#authentication).
 
-## Pagination on `/api/dex/*` differs from the rest of the API
+## Pagination on `/api/dex/*`
 
-Every DEX list runs its options through `clampPaginationOptions`
-(`superhero-api/src/utils/pagination.ts`) instead of validating them:
+`limit` defaults to 100 and is capped at 100. Unlike the rest of the API, exceeding the cap does
+not error: `limit=500` is silently clamped to 100, `page=0` to 1, and a non-numeric `limit` falls
+back to 100. Read `meta.itemsPerPage` rather than assuming your `limit` was honoured, and never
+infer "no more results" from getting fewer rows than you asked for.
 
-```ts
-export const DEFAULT_PAGE_LIMIT = 100;
-export const MAX_PAGE_LIMIT = 100;
-```
+## Related
 
-So **100 is both the default and the ceiling** — the web app adapter's comment that the API "caps
-each response (default 100)" is right on both counts. The difference from the rest of the API is
-what happens when you exceed it: `limit=500` here is silently **clamped to 100**, and `page=0` is
-clamped to 1, where `/api/tokens` and friends would return a 400. A non-numeric `limit` falls back
-to 100 rather than erroring.
-
-Read `meta.itemsPerPage` rather than assuming your `limit` was honoured, and never infer "no more
-results" from getting fewer rows than you asked for.
-
-## Read more
-
-- [API Conventions](/api-reference/conventions) — pagination, the `limit` cap and the three date-parameter spellings
-- [Tokens API](/api-reference/tokens) — the bonding-curve tokens, and why their DTO differs from `DexTokenDto`
-- [Transactions API](/api-reference/transactions) — bonding-curve trades, the other half of the trading picture
+- [API Conventions](/api-reference/conventions) — pagination, the `limit` cap and the date-parameter spellings
+- [Tokens API](/api-reference/tokens) — the bonding-curve tokens and their `TokenDto`
+- [Transactions API](/api-reference/transactions) — bonding-curve trades
 - [Swap](/defi/swap) — the feature these endpoints back
 - [Pools](/defi/pools) — what a pair is and what providing liquidity means
 - [Wrapped AE](/defi/wrapped-ae) — why WAE is the pricing base for every history series
-- [Swap on superhero.com](https://superhero.com/defi/swap) — the live swap UI
-
-## Open questions
-
-- **Is `dex-backend-mainnet.prd.service.aepps.com` still running?** The Superhero side of the
-  question is settled — nothing calls it, and the API replicates its two contracts under
-  `/api/dex/*`, with the source calling it "legacy". Whether the host itself is still serving is a
-  question for its operators at æternity, not something either repository records. A single
-  request answers it: `curl -sI https://dex-backend-mainnet.prd.service.aepps.com/`.

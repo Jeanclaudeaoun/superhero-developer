@@ -1,33 +1,22 @@
 ---
 title: "Bonding Curves"
-description: "The exponential curve that prices every Superhero community token, with worked numbers."
+description: "The exponential curve that prices every Superhero community token, with the integral worked out and two example buys."
 ---
 
 # Bonding Curves
 
-Every Superhero community token is priced by a single deterministic function of its own supply.
-This page gives you that function, integrates it by hand, and walks two worked buys through the
-arithmetic so you can price a trade yourself and check the app's quote. If you only read one page
-in this section, read this one.
+Every Superhero community token is priced by one deterministic function of its own supply. Buying
+mints new tokens and moves you up the curve; selling burns tokens and moves you down it. Because
+price is computed from supply, there is always a quote and always liquidity — no order book, no
+matching engine, no counterparty on the other side of your trade.
 
-A bonding curve maps circulating supply to price. Buying mints new tokens and moves you up the
-curve; selling burns tokens and moves you down it. Because price is computed from supply, there is
-always a quote and always liquidity — no order book, no matching engine, no counterparty on the
-other side of your trade.
-
-Superhero uses an **exponential** curve, specified in
-`bcl-contracts/contracts/BondingCurveExponential.aes` and implementing the interface in
-`contracts/interfaces/BondingCurve.aes`.
-
-One thing to hold in mind throughout: **the closed form below is the idealised curve, and the
-contract approximates it.** `calculate_price` never evaluates `e^x` — it sums a bounded Maclaurin
-expansion of it in integer arithmetic, capped at 100 terms and at the point where a term floors to
-zero. That is what `curve_type()` means when it returns `"TAYLOR_EXPONENTIAL_V1"`. The approximation
-is extremely tight — the figures worked out below were re-checked against an exact integer replica
-of the Sophia and agree to within `4e-19 AE` at every supply on this page — so you can reason with
-the closed form and still be right. But the number the contract returns is the one you are charged,
-and [Curve Parameters & Units](/tokens/curve-parameters) has the integer replica if you need to
-reproduce it exactly.
+Superhero uses an **exponential** curve, implemented by the `BondingCurveExponential` contract. The
+contract evaluates `e^x` as a bounded Taylor series in integer arithmetic — at most 100 terms, and
+stopping as soon as a term floors to zero — which is what `curve_type()` means when it returns
+`"TAYLOR_EXPONENTIAL_V1"`. The series agrees with the closed form below to within `4e-19 AE` at
+every supply on this page. The integer the contract returns is the price you are charged;
+[Curve Parameters & Units](/tokens/curve-parameters) has a reference implementation that reproduces
+it exactly.
 
 ## The formulas
 
@@ -47,15 +36,14 @@ per token** at that supply. Three constants do all the work:
 | `c` | 0.0009999 | not stored | Offset that pulls the launch price down to a near-zero number |
 
 The contract holds `a` and `k` scaled by `10^18`, plus `initial_price = 10^11` — the spot price at
-supply zero, `0.0000001 AE`. The offset `c` is never stored: it is `a − initial_price`, and the
-arithmetic reconstructs it. See [Curve Parameters & Units](/tokens/curve-parameters) for the full
-constant table.
+supply zero, `0.0000001 AE`. The offset `c` is `a − initial_price` and is never stored. See
+[Curve Parameters & Units](/tokens/curve-parameters) for the full constant table.
 
 At supply 0 the spot price is `0.001 − 0.0009999 = 0.0000001 AE` — one ten-millionth of an AE per
-token. The curve is deliberately almost flat at the start and steep later.
+token. The curve is almost flat at the start and steep later.
 
-What you actually pay is never the spot price. It is the **integral** of the curve across the range
-of supply you are minting into:
+What you pay is never the spot price. It is the **integral** of the curve across the range of supply
+you are minting into:
 
 ```text
 buy price   = ∫ from supply to (supply + amount) of buy(x) dx
@@ -63,7 +51,7 @@ buy price   = ∫ from supply to (supply + amount) of buy(x) dx
 sell return = ∫ from (supply − amount) to supply of sell(x) dx
 ```
 
-And the spread — the community DAO's benefit — is the area between the two curves:
+The spread — the community DAO's share — is the area between the two curves:
 
 ```text
 spread = ∫ from 0 to supply of buy(x) dx  −  ∫ from 0 to supply of sell(x) dx
@@ -71,7 +59,7 @@ spread = ∫ from 0 to supply of buy(x) dx  −  ∫ from 0 to supply of sell(x)
 
 ## Integrating the curve
 
-The antiderivative is elementary. For `F'(x) = a·e^(k·x) − c`:
+For `F'(x) = a·e^(k·x) − c`:
 
 ```text
 F(x) = (a / k) · e^(k · x) − c · x
@@ -107,8 +95,8 @@ cost = 0.000105000017 AE   (about 0.000105 AE)
 ```
 
 The average price paid is `0.000105000017 / 1000 = 1.05000017e-7 AE` per token, against a spot
-price of `1.0e-7 AE` at the moment you started. You paid **5.00% above spot** for a thousand
-tokens — because by the thousandth token the spot price had already risen to `1.10e-7 AE`.
+price of `1.0e-7 AE` when you started. You paid **5.00% above spot** for a thousand tokens, because
+by the thousandth token the spot price had already risen to `1.10e-7 AE`.
 
 ## Worked example 2 — 1,000 tokens at supply 10,000,000
 
@@ -130,21 +118,18 @@ The same thousand tokens now cost **0.10528 AE instead of 0.000105 AE — about 
 Average price `1.052764e-4 AE`, spot price at supply 10,000,000 `1.052709e-4 AE`: this time you
 paid only **0.0052% above spot**.
 
-That inversion surprises people, so it is worth stating plainly: **the same trade size is
-proportionally far more expensive near supply zero than deep into the curve.** Near zero, the
-`−0.0009999` offset has cancelled almost all of `0.001·e^(kx)`, so the tiny residual price doubles
-over a very short span of supply. Further out, the offset is negligible and the curve is locally
-almost linear, so a thousand tokens barely move it.
+**The same trade size is proportionally far more expensive near supply zero than deep into the
+curve.** Near zero, the `−0.0009999` offset has cancelled almost all of `0.001·e^(kx)`, so the tiny
+residual price doubles over a very short span of supply. Further out, the offset is negligible and
+the curve is locally almost linear, so a thousand tokens barely move it.
 
 ## Curve slippage
 
-Slippage here is not a network artefact or a racing bot — it is a property of the integral. You are
-charged the area under a rising curve, but the quoted spot price is only the height at the left-hand
-edge of that area. The bigger the slice, the further the right-hand edge has risen above it, and the
-worse your average fill.
+Slippage on a bonding curve is a property of the integral. You are charged the area under a rising
+curve, but the quoted spot price is only the height at the left-hand edge of that area. The bigger
+the slice, the further the right-hand edge has risen above it, and the worse your average fill.
 
-Three numbers make this concrete. All are buys starting from supply 10,000,000, where spot is
-`1.052709e-4 AE`:
+All of these are buys starting from supply 10,000,000, where spot is `1.052709e-4 AE`:
 
 | Tokens bought | Total AE cost | Average price (AE) | Average vs spot |
 | --- | --- | --- | --- |
@@ -155,14 +140,14 @@ Three numbers make this concrete. All are buys starting from supply 10,000,000, 
 | 50,000,000 | 21,699.788231 | 4.33996e-4 | +312.3% |
 
 Buying 10,000,000 tokens in one transaction doubles the supply, and you pay a 54% premium to the
-price you saw before you clicked. Splitting the same order into ten transactions does **not** help:
-the curve is path-independent, so ten buys of 1,000,000 from a rising supply cost exactly the same
-total as one buy of 10,000,000. The only thing that reduces your average price is buying less, or
-buying when the supply is lower.
+price you saw before you clicked. Splitting the order does **not** help: the curve is
+path-independent, so ten buys of 1,000,000 from a rising supply cost exactly the same total as one
+buy of 10,000,000. The only things that reduce your average price are buying less, or buying when
+the supply is lower.
 
-The same logic runs in reverse on a sell: you receive the area under the *sell* curve as supply
-falls back, so a large sell realises an average price below the spot price you were quoted. That is
-what `minimal_return_required` protects you from — see
+A sell works the same way in reverse: you receive the area under the *sell* curve as supply falls
+back, so a large sell realises an average price below the spot price you were quoted.
+`minimal_return_required` protects you from that — see
 [Buying & Selling](/tokens/buying-and-selling).
 
 ## Shape of the curve
@@ -193,9 +178,8 @@ curve where it separates:
                               supply (tokens)
 ```
 
-The sell curve is almost invisible at this scale, and that is the honest picture: it sits 0.5% below
-the buy curve everywhere. The gap between them is the DAO's cut, and it is small per trade and
-meaningful in aggregate. Spot prices at a few reference supplies:
+The sell curve sits 0.5% below the buy curve everywhere. The gap between them is the DAO's cut —
+small per trade, meaningful in aggregate. Spot prices at a few reference supplies:
 
 | Supply | Buy spot (AE) | Sell spot (AE) |
 | --- | --- | --- |
@@ -213,28 +197,24 @@ which is why the interesting price action is packed into the first couple of hun
 
 The sell curve sits strictly below the buy curve at every supply level, so the AE paid into the sale
 contract always exceeds the AE it could ever be asked to pay out. Selling the entire circulating
-supply back to the curve is always possible; a bank run is structurally impossible rather than
-merely unlikely.
+supply back to the curve is always possible.
 
-At a supply of 10,000,000 tokens, for example, buyers have paid in `518.09 AE` in total, and selling
-every one of those tokens back would return `515.50 AE` — the `2.59 AE` difference is the DAO's
-accumulated spread, and it never has to be given back.
+At a supply of 10,000,000 tokens, buyers have paid in `518.09 AE` in total, and selling every one of
+those tokens back would return `515.50 AE`. The `2.59 AE` difference is the DAO's accumulated
+spread, and it never has to be given back.
 
 ## The spread
 
-The `sell()` curve returns 99.5% of `buy()`, and the affiliation token sale contract adds a further
-0.5% affiliation fee — so the **total spread between buy and sell price is 1% of the curve value**:
-0.5% to the community DAO and 0.5% to the affiliation system.
+The `sell()` curve returns 99.5% of `buy()`, and the sale contract adds a 0.5% affiliation fee on
+buys, so the **total spread between buy and sell price is 1% of the curve value**: 0.5% to the
+community DAO and 0.5% to the affiliation system.
 
-Stated from the buyer's side, where it matters: you hand over `1.005 ×` the curve integral and can
-immediately sell back for `0.995 ×` it, so a round trip at unchanged supply returns
-`0.995 / 1.005 = 0.99502…` of what you paid — a **0.995% loss on an instant round trip**. See
-[Fees & Slippage](/tokens/fees-and-slippage) for the full breakdown and
-[Risks](/tokens/risks) for what that means for a position.
+From the buyer's side: you hand over `1.005 ×` the curve integral and can immediately sell back for
+`0.995 ×` it, so a round trip at unchanged supply returns `0.995 / 1.005 = 0.99502…` of what you
+paid — a **0.995% loss on an instant round trip**. See [Fees & Slippage](/tokens/fees-and-slippage)
+for the full breakdown and [Risks](/tokens/risks) for what that means for a position.
 
 ## Compared with other curve families
-
-If you arrive from another ecosystem, these are the differences that matter:
 
 | Property | Superhero (exponential) | Linear curve | Constant product (Uniswap-style) |
 | --- | --- | --- | --- |
@@ -248,15 +228,13 @@ If you arrive from another ecosystem, these are the differences that matter:
 | Fee model | 1% spread baked into two curves | Implementation-defined | Explicit swap fee (e.g. 0.30%) to LPs |
 | Rug-pull surface | No LP to withdraw | No LP to withdraw | LPs can remove liquidity |
 
-Two practical consequences. First, there is no liquidity to pull: the reserve is held by the sale
-contract and is mathematically sufficient to redeem everything, so the "the team drained the pool"
-failure mode does not exist here. Second, an exponential curve punishes large late buys much harder
-than a constant-product pool of comparable depth — the price impact of doubling the supply is a
-factor of `e^(k·supply)`, not a bounded ratio.
+Two practical consequences. There is no liquidity to pull: the reserve is held by the sale contract
+and is sufficient to redeem everything. And an exponential curve punishes large late buys much
+harder than a constant-product pool of comparable depth — the price impact of doubling the supply
+is a factor of `e^(k·supply)`, not a bounded ratio.
 
-Superhero also runs a separate, conventional AMM for ordinary token pairs; see
-[the DEX](/defi/swap). Community tokens are not traded there — they are traded against their own
-curve.
+Community tokens trade only against their own curve. Superhero's AMM for ordinary token pairs is
+[the DEX](/defi/swap).
 
 ## Reading the curve from the contract
 
@@ -265,60 +243,30 @@ curve.
 | `calculate_buy_price(total_supply, count)` | Cost to buy `count` tokens from `total_supply`, in aettos |
 | `calculate_sell_return(total_supply, sell_tokens)` | AE returned for selling `sell_tokens`, in aettos |
 | `buy_curve(x)` / `sell_curve(x)` | The spot curve value as a `Frac.frac` rational |
-| `buy_price(total_supply)` / `sell_price(total_supply)` | The same value rounded to an integer — see the warning below |
+| `buy_price(total_supply)` / `sell_price(total_supply)` | The same value rounded to an integer — see below |
 | `get_k()`, `get_initial_price()`, `get_minimum_count()` | `10^10`, `10^11`, `10^12` |
-| `get_sell_return_percentage()` | `9950` |
-| `get_sell_return_precision()` | `9950` — a bug; the real precision is `10000` |
+| `get_sell_return_percentage()` | `9950` — the sell factor is `9950 / 10000 = 0.995` |
 | `curve_type()`, `supported_decimals()` | `"TAYLOR_EXPONENTIAL_V1"`, `18` |
 
-Every one of these takes and returns integers in the contract's own units. Before you call any of
-them, read [Curve Parameters & Units](/tokens/curve-parameters) — passing whole tokens where the
-contract expects 18-decimal units is the single most common way to get an answer that is wrong by a
-factor of 10^18.
+Every one of these takes and returns integers in the contract's own units — read
+[Curve Parameters & Units](/tokens/curve-parameters) before calling them. Passing whole tokens
+where the contract expects 18-decimal units gives an answer that is wrong by a factor of 10^18.
 
-Two entrypoints need a health warning:
+`buy_price()` and `sell_price()` round a value like `1.05e-4 AE` per token to an integer, so
+`buy_price()` returns `1` and `sell_price()` returns `0` for every supply under roughly 690 million
+tokens. Use `calculate_buy_price` and `calculate_sell_return` for quotes, or `buy_curve` for the
+exact spot value.
 
-- **`buy_price()` and `sell_price()` are not usable as prices.** They round a value like
-  `1.05e-4 AE` per token to an integer, so `buy_price()` returns `1` and `sell_price()` returns `0`
-  for every supply under roughly 690 million tokens. Use `calculate_buy_price` and
-  `calculate_sell_return`, or `buy_curve` if you want the spot value exactly.
-- **`get_sell_return_precision()` returns the wrong constant** — `9950` instead of `10000`. Deriving
-  the sell factor from the two getters gives `1.0` and overstates sell returns by 0.5%. The
-  contract's own `calculate_sell_return` uses the constants directly and is correct; only off-chain
-  code that trusts the getter pair is affected.
+`get_minimum_count()` returns `10^12`, and every pricing call requires `count >= minimum_count`
+(`MINIMUM_TOKENS_REQUIRED`). Since counts are in 18-decimal units that floor is `10^-6` tokens — a
+guard against a trade rounding to zero inside the integer arithmetic, not an order minimum. It fires
+when a caller passes a whole-token count where the contract expected token decimal units.
 
-`get_minimum_count()` returns `10^12`, and every pricing call begins with
-`require(count >= minimum_count, "MINIMUM_TOKENS_REQUIRED")`. Since counts are in 18-decimal units
-that floor is `10^-6` tokens — a guard against a trade rounding to zero inside the integer
-arithmetic, not a meaningful order minimum. In practice it fires only when a caller passes a
-whole-token count where the contract expected token decimal units.
-
-## A discrepancy worth knowing about
-
-The animated curve on [superhero.com/trends/create](https://superhero.com/trends/create) is drawn
-from a slightly different constant. `src/features/trending/components/BondingCurveGraph.tsx` plots:
-
-```text
-buy(x) = 0.001 · (e^(0.00000001 · x) − 1) + 0.0001
-```
-
-which is the same expression with an offset of `0.0001` rather than `0.0000001` — an illustrative
-launch price a thousand times higher than the real one. The two agree to within a rounding error
-above a few million tokens of supply, so the picture is right, but do not read prices off it near
-supply zero.
-
-Both code paths that actually price a trade — `src/utils/bondingCurve.ts` in the web app and
-`scripts/superhero-token-create.mjs` in the agent skill — use `c = 0.0009999`, matching the
-whitepaper and this page. The in-app explainer text on the same page also describes a *quadratic*
-curve (`price = k × supply²`); that copy does not describe the deployed contract.
-
-## Read more
+## Related
 
 - [Curve Parameters & Units](/tokens/curve-parameters) — the decimals, fixed-point and `Frac.frac` conventions you need before calling any entrypoint above
-- [Fees & Slippage](/tokens/fees-and-slippage) — the 1% spread, the affiliation split and the slippage guards, separated out
+- [Fees & Slippage](/tokens/fees-and-slippage) — the 1% spread, the affiliation split and the slippage guards
 - [Buying & Selling](/tokens/buying-and-selling) — how to execute against the curve and defend a sell with `minimal_return_required`
 - [Bonding curve contract reference](/contracts/bonding-curve) — the entrypoint-level reference for `BondingCurveExponential`
-- [Risks](/tokens/risks) — what the curve's shape means for a position you actually hold
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the primary source for the formulas and the 1% spread
-- [Bonding Curves Explained](https://yos.io/2018/11/10/bonding-curves/) — background on the general mechanism if this is your first one
-- [Uniswap V2: how it works](https://docs.uniswap.org/contracts/v2/concepts/protocol-overview/how-uniswap-works) — the constant-product model this curve is compared against above
+- [Risks](/tokens/risks) — what the curve's shape means for a position you hold
+- [Bonding Curves Explained](https://yos.io/2018/11/10/bonding-curves/) — background on the general mechanism

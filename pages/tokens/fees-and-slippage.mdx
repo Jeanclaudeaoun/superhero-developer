@@ -1,15 +1,14 @@
 ---
 title: "Fees & Slippage"
-description: "Everything that sits between the price you see and the price you get, separated into its three components."
+description: "Everything between the price you see and the price you get: the 1% spread, curve slippage, slippage guards and gas."
 ---
 
 # Fees & Slippage
 
-Three different things move the number. The **curve spread** is a fixed 1% of the curve value, split
-between the community DAO and the affiliation system. **Curve slippage** is the cost of your own
-trade size and depends entirely on how big it is relative to the supply. **Gas** is the æternity
-network fee, and it is the smallest of the three by a wide margin. Keep them apart and the arithmetic
-stops being confusing.
+Three different things move the number. The **curve spread** is a fixed 1% of the curve value,
+split between the community DAO and the affiliation system. **Curve slippage** is the cost of your
+own trade size, and depends on how big it is relative to the supply. **Gas** is the æternity network
+fee, and the smallest of the three by a wide margin.
 
 ## 1. The spread
 
@@ -21,13 +20,12 @@ sell(x) = buy(x) · 0.995
 ```
 
 The sale contract mints against `buy` and redeems against `sell`. The 0.5% difference accrues to the
-community's DAO treasury. On top of that, the affiliation token sale contract charges a further
-**0.5% affiliation fee on buys**, which is why the whitepaper describes the total spread between buy
-and sell price as **1%**.
+community's DAO treasury. On top of that, the sale contract charges a **0.5% affiliation fee on
+buys**, so the total spread between buy and sell price is **1%**.
 
 ### `price()` already includes the affiliation fee
 
-This is settled in `bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`:
+On the sale contract:
 
 ```sophia
 entrypoint price(count : int) : int =
@@ -41,8 +39,6 @@ function affiliation_amount(bonding_curve_price : int) =
   (bonding_curve_price * affiliation_percentage) / state.affiliation_treasury.get_affiliation_fee_precision()
 ```
 
-So:
-
 | Call | What it returns |
 | --- | --- |
 | `BondingCurve.calculate_buy_price(supply, count)` | The bare curve integral |
@@ -50,15 +46,13 @@ So:
 | `TokenSale.sell_return(count)` | `BondingCurve.calculate_sell_return(supply, count)` verbatim — no fee added or removed |
 
 **Attach exactly `price(count)` and you are fully covered.** Do not multiply it by 1.005 again. The
-web app's `calculateBuyPriceWithAffiliationFee` helper applies the 1.005 to the *curve* figure it
-computed off-chain, not to `price()`; the CLI sends `price()` plus a slippage buffer and nothing
-else. Both are correct, and neither double-charges.
+web app applies the 1.005 to the *curve* figure it computes off-chain, not to `price()`; the CLI
+sends `price()` plus a slippage buffer and nothing else. Neither double-charges.
 
-The fee percentage is not hardcoded in the sale — it is read live from the affiliation treasury on
-every call. `AffiliationTreasury.get_affiliation_fee_percentage()` returns `500` and
-`get_affiliation_fee_precision()` returns `10^5`, so the fee is `500 / 100000 = 0.5%`. The treasury
-comments note that `500` is "hardcoded for performance, sum of `affiliation_fee_percentages`" —
-`[300, 125, 50, 25]`, which do indeed sum to 500.
+The fee percentage is read live from the affiliation treasury on every call:
+`AffiliationTreasury.get_affiliation_fee_percentage()` returns `500` and
+`get_affiliation_fee_precision()` returns `10^5`, so the fee is `500 / 100000 = 0.5%`. `500` is the
+sum of the per-level percentages `[300, 125, 50, 25]`.
 
 ### Surplus AE is refunded
 
@@ -71,10 +65,9 @@ let overpaid_refund = Call.value - total_price
 if (overpaid_refund > 0) Chain.spend(Call.caller, overpaid_refund) else ()
 ```
 
-`CommunityFactory.create_community` does the same thing before it forwards the initial buy. So a
-slippage buffer costs you nothing when the price does not move — you get the unused portion back in
-the same transaction. The only cost of a generous buffer is that the AE has to be in your wallet
-when you sign.
+`CommunityFactory.create_community` does the same before it forwards the initial buy. A slippage
+buffer costs you nothing when the price does not move — you get the unused portion back in the same
+transaction. The only cost of a generous buffer is that the AE has to be in your wallet when you sign.
 
 ### Where each AE goes
 
@@ -93,45 +86,27 @@ Buyer also receives:
   └── ProtocolDAO Tokens = 1,000 × AE value
 ```
 
-The four-level split is not paid out of a pool — it is credited per level as the treasury walks up
-the affiliation tree. `AffiliationTreasury.record_sale_transaction(buyer, transaction_value)` calls
-`update_inviters`, which recurses through `get_direct_inviter` crediting `300`, then `125`, then
-`50`, then `25` hundred-thousandths of the transaction value. The recursion stops as soon as an
-account has no inviter recorded.
+The four-level split is credited per level as the treasury walks up the affiliation tree.
+`AffiliationTreasury.record_sale_transaction(buyer, transaction_value)` credits `300`, then `125`,
+then `50`, then `25` hundred-thousandths of the transaction value to successive inviters, and stops
+as soon as an account has no inviter recorded. Levels with no inviter are not paid out; that share
+is burned.
 
-**"Burned" means stranded in the treasury contract, not sent to a burn address.** The sale always
-forwards the full 0.5% to `AffiliationTreasury` as `Call.value`. Whatever `update_inviters` does not
-credit to somebody stays as contract balance, and the only way AE ever leaves that contract is
-`withdraw()`, which pays out `get_accumulated_rewards(Call.caller)` — recorded credits only. No
-entrypoint can reach the uncredited remainder. It is unspendable by anyone, permanently. A buyer
-with no inviter at all therefore burns the whole 0.5%; a buyer whose chain is two deep burns the
-`50 + 25` that levels three and four would have taken.
-
-Two further ways affiliation AE is burned in the same sense:
-
-- **Rewards expire.** `get_accumulated_rewards` sums only the current payout period and the one
-  before it, where a period is 30 days (`payout_period_interval = 2592000000` milliseconds). The
-  contract's own comment: "reward that hasn't or couldn't been withdrawn in the respective periods
-  can never be withdrawn again, thus be considered burned."
-- **`withdraw()` is gated.** It aborts with `MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED` unless the
-  caller has reached `ThresholdReached` — four unique invitees who have each bought at least 10 AE
-  (`unique_invitee_count_threshold = 4`, `unique_invitee_buy_amount_threshold = 10 * 10^18`). An
-  inviter below that bar accrues rewards they cannot claim, and they expire on the same two-period
-  clock.
-
-That design removes the pot of unclaimed funds that would otherwise be an extraction target. It also
-means the affiliation system pays out considerably less than 0.5% of all volume in practice. See
+Credited rewards are withdrawable for the current and the previous 30-day payout period
+(`payout_period_interval = 2592000000` milliseconds) and expire after that. `withdraw()` also
+requires the caller to have reached four unique invitees who each bought at least 10 AE
+(`unique_invitee_count_threshold = 4`, `unique_invitee_buy_amount_threshold = 10 * 10^18`);
+below that bar it aborts with `MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED`. See
 [Affiliation rewards](/rewards/affiliation).
 
-The live percentages are readable on-chain rather than being constants you have to trust:
-`fee_percentage()` and `fee_precision()` on the factory, and
-`get_affiliation_fee_percentage()`, `get_affiliation_fee_precision()` and
+The live percentages are readable on-chain: `fee_percentage()` and `fee_precision()` on the
+factory, and `get_affiliation_fee_percentage()`, `get_affiliation_fee_precision()` and
 `get_affiliation_fee_percentages()` on the affiliation treasury.
 
 ### The DAO's half, exactly
 
-The 0.5% that reaches the community DAO is not a separate transfer computed from a percentage. It is
-the residue after the reserve is set aside, in `buy_with_affiliation_inner`:
+The 0.5% that reaches the community DAO is the residue after the reserve is set aside, in
+`buy_with_affiliation_inner`:
 
 ```sophia
 let reserve = state.bonding_curve.calculate_sell_return(state.token_contract.total_supply(), count)
@@ -142,16 +117,16 @@ state.dao_contract.record_sale_transaction(
 
 `total_supply()` has already been incremented by the mint, so `reserve` is exactly
 `0.995 × bonding_curve_price` — the AE that would be owed if the buyer immediately sold back. The
-DAO gets `bonding_curve_price − reserve`, which is the remaining `0.5%`, and the sale contract keeps
-the reserve. That is the mechanism behind "the reserve is always solvent": the payout obligation is
-computed first and the treasury only receives what is left over.
+DAO gets `bonding_curve_price − reserve`, the remaining `0.5%`, and the sale contract keeps the
+reserve. The payout obligation is computed first and the treasury receives only what is left over,
+which is why the reserve is always solvent.
 
-Both external calls use `protected = true`, so a misbehaving DAO or treasury cannot block a trade —
+Both external calls use `protected = true`, so a failing DAO or treasury call cannot block a trade —
 the value stays in the sale contract instead of reverting the buy.
 
 ### What 1% costs you in practice
 
-Say you buy 1,000 tokens at a supply of 10,000,000 and immediately sell them back:
+Buy 1,000 tokens at a supply of 10,000,000 and immediately sell them back:
 
 ```text
 curve integral for the buy         0.105276443949 AE
@@ -163,9 +138,9 @@ curve integral for the sell        0.105276443949 AE
 difference                         0.001052764439 AE
 ```
 
-That is **1% of the curve value, and 0.995% of the AE you handed over**. Both statements are
-correct; they differ because the fee is added on top of the curve price on the way in. "Every
-position starts about 1% down" is the right mental model — see [Risks](/tokens/risks).
+That is **1% of the curve value, and 0.995% of the AE you handed over**; the two differ because the
+fee is added on top of the curve price on the way in. Every position starts about 1% down — see
+[Risks](/tokens/risks).
 
 The spread is charged on value, not on trade count, so ten small round trips cost the same 1% each
 as one large one. There is no fixed component to amortise.
@@ -186,16 +161,16 @@ Buying from a supply of 10,000,000, where spot is `1.052709e-4 AE`:
 | 10,000,000 | 100% | 1,624.184008 | 1.62418e-4 | +54.3% |
 | 50,000,000 | 500% | 21,699.788231 | 4.33996e-4 | +312% |
 
-A useful rule of thumb from that table: **your premium to spot is roughly half the percentage of the
-supply you are adding**, up to about 10%, and worse than that beyond it.
+Rule of thumb: **your premium to spot is roughly half the percentage of the supply you are adding**,
+up to about 10%, and worse than that beyond it.
 
 Splitting the order does not help. The curve is path-independent — ten buys of 1,000,000 from a
 rising supply cost exactly the same total as one buy of 10,000,000, because the integral is the same
 area either way. The only levers are trade size and the supply you trade at.
 
-Near supply zero the effect is far more violent in relative terms, because the `−0.0009999` offset
-has cancelled almost all of the exponential: buying the first 1,000 tokens of a brand-new token costs
-5% above spot. See [Bonding Curves](/tokens/bonding-curve) for why.
+Near supply zero the effect is far larger in relative terms, because the `−0.0009999` offset has
+cancelled almost all of the exponential: buying the first 1,000 tokens of a brand-new token costs
+5% above spot. See [Bonding Curves](/tokens/bonding-curve).
 
 ## 3. Slippage guards
 
@@ -209,11 +184,10 @@ your fill.
 | `superhero-token-swap.mjs sell` | **3%** | Passes `sell_return(count) × 0.97` as `minimal_return_required` |
 | `superhero-token-create.mjs create` | **5%** | Attaches `calculate_buy_price(0, count) × 1.05`, rounded up |
 
-To change the CLI tolerance you edit `SLIPPAGE_PERCENT` at the top of the swap script — there is no
-flag. To set your own precisely, call the contract directly, as shown in
-[Buying & Selling](/tokens/buying-and-selling).
+To change the CLI tolerance, edit `SLIPPAGE_PERCENT` at the top of the swap script. To set your own
+precisely, call the contract directly, as shown in [Buying & Selling](/tokens/buying-and-selling).
 
-The guards behave asymmetrically, and it is worth knowing which way:
+The guards are asymmetric:
 
 - **On a buy**, the guard is an upper bound on spend. You attach more AE than the quote; anything the trade does not need is refunded in the same transaction, and if the price moved further than your tolerance the call reverts with `AE_AMOUNT_NOT_SUFFICIENT`.
 - **On a sell**, the guard is `minimal_return_required` — a floor on the payout. Below it the call reverts with `MINIMAL_RETURN_NOT_MEET` and your tokens stay where they are.
@@ -225,18 +199,18 @@ the sell floor carefully; be generous with the buy buffer.
 
 Every transaction pays an æternity network fee in AE, independent of everything above.
 
-| Action | Transactions | Documented cost |
+| Action | Transactions | Cost |
 | --- | --- | --- |
-| Create a token | 1 contract call | About 0.001 AE, per the agent skill's token-creation guide |
-| Buy | 1 contract call | Not documented in the repositories |
-| Sell | 2 contract calls — allowance, then sell | Not documented in the repositories |
-| Post | 1 contract call | Not documented in the repositories |
+| Create a token | 1 contract call | About 0.001 AE |
+| Buy | 1 contract call | Depends on contract execution |
+| Sell | 2 contract calls — allowance, then sell | Depends on contract execution |
+| Post | 1 contract call | Depends on contract execution |
 
-Only the creation figure is stated anywhere in the sources, and it is described there as
-approximate. Two things hold regardless: a **sell costs two transactions**, not one,
-because of the allowance step; and the web app never lets you spend your whole balance. Its
-"spendable" figure is `balance − balance × (slippage + 1) / 100 − 0.001 AE`, so at the default 1%
-tolerance it holds back 2% of your balance plus a flat 0.001 AE for the fee.
+Read the exact fee off any mined transaction in [aeScan](https://aescan.io). Two things hold
+regardless: a **sell costs two transactions**, not one, because of the allowance step; and the web
+app never lets you spend your whole balance. Its "spendable" figure is
+`balance − balance × (slippage + 1) / 100 − 0.001 AE`, so at the default 1% tolerance it holds back
+2% of your balance plus a flat 0.001 AE for the fee.
 
 For what the gas is paying for, see [AE and gas](/aeternity/ae-and-gas).
 
@@ -265,16 +239,10 @@ AE returning to your wallet
 Nothing else is charged. There is no listing fee, no withdrawal fee, no maker or taker fee, and no
 fee for holding.
 
-## Read more
+## Related
 
 - [Bonding Curves](/tokens/bonding-curve) — the integral behind every number on this page, worked out by hand
 - [Buying & Selling](/tokens/buying-and-selling) — how to set a guard yourself instead of taking the default
 - [Risks](/tokens/risks) — what a 1% round-trip spread means for a position you intend to hold
 - [Affiliation rewards](/rewards/affiliation) — where the 0.5% affiliation half of the spread ends up
 - [DAO treasury](/dao/treasury) — what the community can do with its half
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the source of the value-flow diagram and the fee percentages
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — quotes on live tokens, with the fee already included in the displayed cost
-
-## Open questions
-
-- **Gas for a buy, a sell and a post is undocumented.** No figure appears in the web app, the whitepaper, the FAQ, the agent skill or the contract repository. Mining one of each and reading the fee off [aeScan](https://aescan.io) would produce real numbers; they will vary with the contract's gas usage, so a range is more honest than a point estimate.

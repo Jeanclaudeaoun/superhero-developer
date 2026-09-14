@@ -1,21 +1,20 @@
 ---
 title: "API Reference"
-description: "The api.superhero.com REST API — base URLs, the full endpoint index, and where each resource is documented."
+description: "Base URLs, authentication and the endpoint index for the api.superhero.com REST API."
 ---
 
 # API Reference
 
-`api.superhero.com` is the read API behind everything on Superhero: tokens and their prices,
-posts and topics, accounts and portfolios, the DEX, trending and analytics. Reads need no
-credential — a bare `curl` gets the same bytes the web app gets. Writes are authorised by wallet
-signature, not by an API key.
+`api.superhero.com` is the read API behind Superhero: tokens and their prices, posts and topics,
+accounts and portfolios, the DEX, trending and analytics. Reads need no credential. Writes are
+authorised by a wallet signature over a server-issued challenge, not by an API key.
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens?order_by=trending_score&order_direction=DESC&limit=5"
 ```
 
-Start with [Conventions](/api-reference/conventions) — pagination, units, errors and the write flow are
-shared by everything below and are not repeated per endpoint.
+Start with [Conventions](/api-reference/conventions) — pagination, units, errors, rate limits and
+the write flow are shared by every endpoint and are not repeated per page.
 
 ## Base URLs
 
@@ -24,50 +23,27 @@ shared by everything below and are not repeated per endpoint.
 | Mainnet | `https://api.superhero.com` | `ae_mainnet` |
 | Testnet | `https://testnet.api.dev.tokensale.org` | `ae_uat` |
 
-Both hosts serve identical paths. Every path in this reference begins with `/api/`.
+Both hosts serve identical paths. Every path begins with `/api/`.
 
-## The four things to know before you start
+## Sections
 
-1. **`limit` is capped at 100** on list endpoints — a 400 on most of them, a silent clamp on the
-   DEX paths. Page rather than asking for more.
-2. **Units are mixed within the same object, and the same field name means different scales on
-   different endpoints.** `TokenDto.market_cap` is in aettos; the `market_cap` on a transaction
-   or an OHLC candle is in AE. [Conventions](/api-reference/conventions#units) has the full table
-   and the rule that predicts it.
-3. **Date parameters are spelled three different ways** depending on the endpoint —
-   `start_date`, `startDate` and `from_date`. Getting it wrong returns unfiltered data rather
-   than an error, because loose query parameters are not whitelisted.
-4. **Most reads are unthrottled, but a handful of routes allow only 10 requests per minute per
-   IP.** Which ones, and what the 429 looks like, is in
-   [Conventions](/api-reference/conventions#rate-limits).
-
-## In this section
-
-| Page | What it covers |
+| Page | Covers |
 | --- | --- |
-| [Conventions](/api-reference/conventions) | Pagination, shared query parameters, units, errors, status codes, authentication |
+| [Conventions](/api-reference/conventions) | Pagination, shared query parameters, units, errors, rate limits, CORS, authentication |
 | [Posts](/api-reference/posts) | The feed, single posts, comments, topics, tips and the combined activity feed |
 | [Tokens](/api-reference/tokens) | The full `TokenDto`, holders, history, performance and rankings |
 | [Accounts](/api-reference/accounts) | Account records, holdings, portfolio value, PnL and the leaderboard |
 | [Transactions](/api-reference/transactions) | Buys and sells, by token, by account or by hash |
-| [Trending & Topics](/api-reference/trending) | Scored tags, topics, trending score and unified search |
+| [Trending & Topics](/api-reference/trending) | Scored tags, topics, the trending-score formula and unified search |
 | [Analytics](/api-reference/analytics) | Platform aggregates and AE fiat rates |
-| [Profile](/api-reference/profile) | Profile reads and every write endpoint in the API |
-| [Factory & Contracts](/api-reference/factory-and-contracts) | Discovering the live factory, its collections and their naming rules |
+| [Profile](/api-reference/profile) | Profile reads and every signature-authorised write endpoint |
+| [Factory & Contracts](/api-reference/factory-and-contracts) | The live factory, its collections and their naming rules |
 | [Invitations & Affiliations](/api-reference/invitations-and-affiliations) | Invite claim status and referral analytics |
 | [DEX](/api-reference/dex) | AMM tokens, pairs, routes and swap transactions |
-| [WebSocket](/api-reference/websocket) | The two Socket.IO events that push live token data, and the authenticated notification namespace |
+| [WebSocket](/api-reference/websocket) | The two Socket.IO events that push live token data, and the notification namespace |
 | [Node & Middleware](/api-reference/node-and-middleware) | Direct chain access when the REST API is not enough |
 
-## Full endpoint index
-
-Every path in the OpenAPI-generated client, grouped by resource. Paths marked **unused** have no
-caller in the web app or the agent skill.
-
-That marking means "no client in these repositories exercises it", not "unverified" and certainly
-not "unstable". Every one of them is a real route with a real controller in `superhero-api`, and
-the endpoint pages in this section now describe their responses from that controller rather than
-from a caller. Treat the marking as a hint about how well-trodden a path is, not as a warning.
+## Endpoint index
 
 ### Tokens
 
@@ -80,8 +56,8 @@ GET  /api/tokens/{address}/history
 GET  /api/tokens/{address}/transactions
 GET  /api/tokens/{address}/performance
 GET  /api/tokens/{address}/performance-raw
-GET  /api/tokens/{address}/score                      (unused)
-GET  /api/tokens/{address}/trending-eligibility       (unused)
+GET  /api/tokens/{address}/score
+GET  /api/tokens/{address}/trending-eligibility
 GET  /api/tokens/preview/{address}
 GET  /api/tokens/preview/{address}/sparkline.svg
 ```
@@ -109,7 +85,7 @@ GET  /api/accounts/leaderboard
 ```text
 GET  /api/transactions
 GET  /api/transactions/by-hash
-GET  /api/debug/failed-transactions                   (unused)
+GET  /api/debug/failed-transactions
 ```
 
 ### Posts, topics and tips
@@ -119,58 +95,59 @@ GET  /api/posts
 GET  /api/posts/popular
 GET  /api/posts/{id}
 GET  /api/posts/{id}/comments
-GET  /api/feed                                        (unused)
-GET  /api/topics                                      (unused)
-GET  /api/topics/{id}                                 (unused)
+GET  /api/feed
+GET  /api/topics
+GET  /api/topics/{id}
 GET  /api/topics/name/{name}
-GET  /api/topics/popular/trending                     (unused)
+GET  /api/topics/popular/trending
 GET  /api/tips
 GET  /api/tips/posts/{postId}/summary
-GET  /api/tips/accounts/{address}/summary             (unused)
+GET  /api/tips/accounts/{address}/summary
 GET  /api/search
 GET  /api/giphy/search
-GET  /api/announcements                               (unused)
+GET  /api/announcements
 ```
 
 ### Trending tags
 
 ```text
 GET  /api/trending-tags
-GET  /api/trending-tags/{tag}                         (unused)
-POST /api/trending-tags                               (unused)
+GET  /api/trending-tags/{tag}
+POST /api/trending-tags                               (API key required)
 ```
 
 ### Analytics
 
 ```text
 GET  /api/analytics/past-24-hours
-GET  /api/analytics                                   (unused)
-GET  /api/analytics/summary                           (unused)
-GET  /api/analytics/preview                           (unused)
+GET  /api/analytics
+GET  /api/analytics/summary
+GET  /api/analytics/preview
 GET  /api/analytics/daily-trade-volume
-GET  /api/analytics/daily-unique-active-users         (unused)
-GET  /api/analytics/daily-created-tokens-count        (unused)
-GET  /api/analytics/daily-market-cap-sum              (unused)
-GET  /api/analytics/total-market-cap                  (unused)
-GET  /api/analytics/total-created-tokens              (unused)
-GET  /api/analytics/total-unique-users                (unused)
-GET  /api/analytics/challenge                         (unused)
-GET  /api/analytics/challenge/preview                 (unused)
-GET  /api/posts/analytics                             (unused)
-GET  /api/posts/analytics/past-24-hours               (unused)
-GET  /api/posts/analytics/top-posters                 (unused)
-GET  /api/posts/analytics/top-topics                  (unused)
-GET  /api/posts/analytics/preview                     (unused)
+GET  /api/analytics/daily-unique-active-users
+GET  /api/analytics/daily-created-tokens-count
+GET  /api/analytics/daily-market-cap-sum
+GET  /api/analytics/total-market-cap
+GET  /api/analytics/total-created-tokens
+GET  /api/analytics/total-unique-users
+GET  /api/analytics/challenge
+GET  /api/analytics/challenge/preview
+GET  /api/posts/analytics
+GET  /api/posts/analytics/past-24-hours
+GET  /api/posts/analytics/top-posters
+GET  /api/posts/analytics/top-topics
+GET  /api/posts/analytics/preview
 GET  /api/coins/aeternity/rates
-GET  /api/coins/aeternity/history                     (unused)
-GET  /api/coins/aeternity/market-data                 (unused)
+GET  /api/coins/aeternity/history
+GET  /api/coins/aeternity/market-data
 ```
 
 ### Profile, identity and rewards
 
 ```text
 GET   /api/profile/{address}
-GET   /api/profile                                    (unused, batch)
+GET   /api/profile                                    (batch)
+GET   /api/profile/feed
 POST  /api/address-links/x/claim
 POST  /api/address-links/x/submit
 POST  /api/address-links/x/unclaim
@@ -208,17 +185,17 @@ PATCH /api/profile/{address}                          (deprecated)
 ```text
 GET  /api/factory
 GET  /api/contracts                                   (deprecated)
-GET  /api/stats                                       (unused)
+GET  /api/stats
 GET  /api/invitations
-GET  /api/affiliations/invites/{code}                 (unused)
-POST /api/affiliations                                (unused)
-POST /api/affiliations/invites/{code}/{provider}/{access_code}   (unused)
-GET  /api/affiliations/preview                        (unused)
-GET  /api/bcl-affiliation/analytics                   (unused)
-GET  /api/bcl-affiliation/analytics/top-inviters      (unused)
-GET  /api/bcl-affiliation/analytics/x-verification    (unused)
-GET  /api/bcl-affiliation/analytics/x-invite          (unused)
-GET  /api/bcl-affiliation/tree                        (unused)
+GET  /api/affiliations/invites/{code}
+POST /api/affiliations
+POST /api/affiliations/invites/{code}/{provider}/{access_code}
+GET  /api/affiliations/preview
+GET  /api/bcl-affiliation/analytics
+GET  /api/bcl-affiliation/analytics/top-inviters
+GET  /api/bcl-affiliation/analytics/x-verification
+GET  /api/bcl-affiliation/analytics/x-invite
+GET  /api/bcl-affiliation/tree
 ```
 
 ### DEX
@@ -247,10 +224,10 @@ GET   /api/dex/swap-routes/{from_token}/{to_token}
 ### Governance, chat rooms and notifications
 
 ```text
-GET    /api/governance/votes                          (unused)
-GET    /api/governance/votes/{pollAddress}            (unused)
-GET    /api/governance/delegations                    (unused)
-GET    /api/governance/delegations/{accountAddress}   (unused)
+GET    /api/governance/votes
+GET    /api/governance/votes/{pollAddress}
+GET    /api/governance/delegations
+GET    /api/governance/delegations/{accountAddress}
 GET    /api/rooms
 GET    /api/rooms/config
 GET    /api/rooms/{saleAddress}/members
@@ -258,7 +235,7 @@ GET    /api/rooms/{saleAddress}/mute
 POST   /api/rooms/{saleAddress}/mute
 POST   /api/rooms/{saleAddress}/mute/challenge
 POST   /api/rooms/{saleAddress}/recheck
-GET    /api/tgr/metrics                               (unused)
+GET    /api/tgr/metrics
 POST   /api/notifications/devices/challenge
 POST   /api/notifications/devices
 DELETE /api/notifications/devices
@@ -267,8 +244,7 @@ GET    /api/notifications/{address}/preferences
 POST   /api/notifications/{address}/preferences
 ```
 
-The notification **feed** routes are not in the generated client but are called by the web app,
-and are the only bearer-authenticated part of the API:
+The notification feed routes are the only bearer-authenticated part of the API:
 
 ```text
 POST /api/notifications/{address}/feed/challenge
@@ -280,13 +256,8 @@ POST /api/notifications/{address}/web-push/subscription
 GET  /api/notifications/web-push/vapid-public-key
 ```
 
-The web app's source points at `superhero-api/docs/notifications-web-feed.md` for the full feed
-protocol — a document in the backend repository, which is not part of this documentation set.
-
-The governance endpoints listed above are unused because the web app talks to a **separate
-governance server** (`GOVERNANCE_API_URL`) instead. Governance is documented under
-[Governance](/governance), chat rooms under [Chat](/social/chat) and notifications under
-[Notifications](/social/notifications).
+Governance is documented under [Governance](/governance), chat rooms under [Chat](/social/chat)
+and notifications under [Notifications](/social/notifications).
 
 ### Middleware mirror
 
@@ -302,7 +273,7 @@ GET /api/v2/mdw/sync-state
 GET /api/v2/mdw/plugin-sync-state
 ```
 
-### Operator only
+### Operator
 
 ```text
 GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD  /api/bull-board
@@ -311,59 +282,10 @@ GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD  /api/bull-board/{path}
 
 The job-queue dashboard. Not part of the public surface.
 
-## Is there an OpenAPI document?
+## Related
 
-Yes — the API server generates one, but it is **not mounted in production by default**.
-
-`superhero-api/src/main.ts` builds a `DocumentBuilder` document titled *"WORD CRAFT Scan"*,
-version `1.0`, and serves it only when `NODE_ENV !== 'production'` or the operator sets
-`ENABLE_SWAGGER=true`:
-
-```text
-GET /api        Swagger UI
-GET /api-json   the OpenAPI 3 JSON document
-```
-
-Where it is mounted, `/api-json` is the authoritative machine-readable description of the whole
-surface and is what `openapi-typescript-codegen` consumed to produce the web app's client. Where
-it is not, both paths 404 — deliberately, so the endpoint surface and parameter schemas are not
-free reconnaissance on a public deployment. The same reasoning disables GraphQL introspection and
-GraphiQL in production.
-
-If you need a generated client for `api.superhero.com` and `/api-json` is closed there, ask the
-operators to enable it or generate against a non-production deployment.
-
-## Where this comes from
-
-This section is written from four sources, in decreasing order of authority:
-
-| Source | What it gives |
-| --- | --- |
-| `superhero-api/src/` | **The API server itself.** Controllers give routes, parameters and validation; entities give the columns actually returned; services give the formulas. Where a DTO and an entity disagree, the entity is what you receive |
-| `src/api/generated/` | The web app's OpenAPI-generated client. Precise where it is current, but it lags the server in places — those are called out on the pages |
-| `src/api/backend.ts` | The hand-written client — request bodies for the write endpoints, and the error-handling behaviour |
-| `src/config.ts` and `superhero-agent-skill/scripts/*.mjs` | Base URLs, contract addresses, and real query construction from outside the browser |
-
-The server is quoted in preference to the client throughout, with the file named so you can
-re-check. Where the server is genuinely silent, the question is listed under `Open questions` on
-the page rather than guessed.
-
-## Read more
-
-- [Conventions](/api-reference/conventions) — read this before any endpoint page
+- [Conventions](/api-reference/conventions) — read before any endpoint page
 - [Tokens](/api-reference/tokens) — the most-used part of the API
-- [Node & Middleware](/api-reference/node-and-middleware) — what to do when this API does not have the data
-- [Agent quickstart](/agents/quickstart) — the fastest path from these endpoints to a working agent
-- [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
-- [æternity node API documentation](https://api-docs.aeternity.io/) — for the chain-level API underneath
-
-## Open questions
-
-- **Is Swagger enabled on `api.superhero.com` itself?** The code says it is mounted at `/api` and
-  `/api-json` outside production, or in production when `ENABLE_SWAGGER=true`. Which of those the
-  live mainnet deployment is running is an operator setting, not a source fact. A request to
-  `https://api.superhero.com/api-json` settles it in one call.
-- **Is there a published support or deprecation window?** Retired parameters are annotated and
-  silently stop having an effect (see
-  [Conventions](/api-reference/conventions#versioning-and-deprecation)), but no notice period,
-  changelog location or removal schedule is recorded anywhere in the source.
+- [Node & Middleware](/api-reference/node-and-middleware) — when the REST API does not have the data
+- [Agent quickstart](/agents/quickstart) — from these endpoints to a working agent
+- [æternity node API documentation](https://api-docs.aeternity.io/) — the chain-level API underneath

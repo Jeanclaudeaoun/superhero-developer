@@ -1,24 +1,25 @@
 ---
 title: "Tipping v3"
-description: "The post registry contract: data model, direct and delegated posting."
+description: "The post registry contract: data model, direct posting, and delegated posting with a signed message."
 ---
 
 # Tipping v3
 
 `Tipping.aes` is the content layer. Every post published through Superhero is a row in this
 contract's state, keyed by an increasing integer and attributed to an æternity address. Once
-mined, a post cannot be edited or deleted by anyone, including Superhero — moderation happens
-at the application layer, not here.
+mined, a post cannot be edited or deleted — moderation happens at the application layer, not
+here.
 
-Despite the name, **v3 has no tipping entrypoints at all**. The full source of
-`tipping-contract/contracts/v3/Tipping_v3.aes` is 77 lines and declares exactly four
-entrypoints, none of them payable. Tipping on Superhero is not a contract call — see
-[Where the tipping went](#where-the-tipping-went).
+Despite the name, **v3 has no tipping entrypoints.** It declares four entrypoints, none of them
+payable. Tips on Superhero are spend transactions — see
+[Tips are spend transactions](#tips-are-spend-transactions).
 
-Mainnet address `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb`, testnet
-`ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW` — both confirmed in the backend's
-`superhero-api/src/social/config/post-contracts.config.ts`, which labels them "Current social
-posting contract". The ACI is `superhero-agent-skill/contracts/Tipping_v3.aci.json`.
+| Network | Address |
+| --- | --- |
+| Mainnet | `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` |
+| Testnet | `ct_2J1wuuw9urs9ADBh5QbvuPyUCLdKbW5YRkfhgPoN7rGjBbPiBW` |
+
+The ACI is `Tipping_v3.aci.json`.
 
 ## Entrypoints
 
@@ -29,44 +30,38 @@ posting contract". The ACI is `superhero-agent-skill/contracts/Tipping_v3.aci.js
 | `post_without_tip_sig` | `(title: string, media: list(string), author: address, sig: signature) => int` | stateful |
 | `get_state` | `() => Tipping.state` | — |
 
-That is the whole contract. Both posting entrypoints return the new `tip_id`. Neither is
-payable, so a post costs only the transaction fee and gas — the agent skill quotes roughly
-0.00001 AE.
+Both posting entrypoints return the new `tip_id`. Neither is payable, so a post costs only the
+transaction fee and gas — roughly 0.00001 AE.
 
 `tip_id` is assigned as `Map.size(state.tips)`, so ids are dense and sequential from 0. There
 is no delete, so ids are never reused. The Superhero API serves them suffixed — post `0`
 becomes `0_v3`.
 
-Neither entrypoint validates anything about its arguments. There is no `require` on the length
-of `title`, no cap on the number of `media` entries, and no check that a media string is a URL.
-The only `require` anywhere in the contract is the signature check in `post_without_tip_sig`.
+The contract does not constrain the length of `title`, the number of `media` entries, or their
+format. The only `require` in the contract is the signature check in `post_without_tip_sig`.
 
-## Where the tipping went
+## Tips are spend transactions
 
-Tipping on Superhero is a **plain spend transaction with a payload**, not a call into this
-contract. The backend's tip indexer
-(`superhero-api/src/plugins/social-tipping/services/social-tipping-transaction-processor.service.ts`)
-only accepts transactions where `tx.type === 'SpendTx'`, decodes `tx.raw.payload`, and requires
-it to start with `TIP_PROFILE` or `TIP_POST`. A post tip carries `TIP_POST:` followed by the
-post id; the AE goes straight from sender to recipient.
+A tip on Superhero is a **plain spend transaction with a payload**, not a call into this
+contract. The payload starts with `TIP_POST:` followed by the post id for a post tip, or
+`TIP_PROFILE` for a profile tip, and the AE goes straight from sender to recipient. If you are
+indexing tips, index spend payloads, not contract calls.
 
-For the historical record, tipping entrypoints did exist in earlier versions of this contract
-family, and are still in the repository:
+Earlier versions of the contract family did tip on chain:
 
 | Version | Tip surface |
 | --- | --- |
-| `v1/Tipping_v1.aes` | `tip(url, title)`, `retip(tip_id)`, `pre_claim`, `claim` — oracle-backed URL tipping |
-| `v2/Tipping_v2.aes` | adds `tip_token`, `tip_direct`, `tip_token_direct`, `retip_token` |
-| `v3/Tipping_v3.aes` | **none** — posting only |
-| `v4/Tipping_v4.aes` | `post_via_burn(title, media, token, token_amount)` — posting paid by burning an AEX-9 |
+| `Tipping_v1` | `tip(url, title)`, `retip(tip_id)`, `pre_claim`, `claim` — oracle-backed URL tipping |
+| `Tipping_v2` | adds `tip_token`, `tip_direct`, `tip_token_direct`, `retip_token` |
+| `Tipping_v3` | **none** — posting only |
+| `Tipping_v4` | `post_via_burn(title, media, token, token_amount)` — posting paid by burning an AEX-9 |
 
-v3 is what Superhero's social layer runs against. If you are indexing tips, index spend
-payloads, not contract calls.
+v3 is what Superhero's social layer runs against.
 
 ## Types
 
-The ACI declares four types. `tip` is a variant with a single constructor, which is why every
-post is a `PostWithoutTip` even though the type is named `tip`.
+`tip` is a variant with a single constructor, which is why every post is a `PostWithoutTip`
+even though the type is named `tip`.
 
 ```sophia
 type tip_id = int
@@ -81,7 +76,7 @@ datatype tip = PostWithoutTip(tip_meta, list(string))
 
 record state =
   { tips    : map(tip_id, tip)
-  , version : string }      // currently "v3"
+  , version : string }      // "v3"
 ```
 
 Reading a post back through `get_state()` gives you a `Map` of `tip_id` to a variant object.
@@ -109,13 +104,13 @@ One event per successful post, from either entrypoint. Indexers subscribe to it 
 polling `get_state()`. Its middleware topic hash is in the
 [event catalogue](/contracts/events).
 
-Note that the event carries the title but **not** the media list and **not** the `tip_id`.
-To reconstruct a full post from an event you need the call arguments or a `get_state()` read.
+The event carries the title but **not** the media list and **not** the `tip_id`. To
+reconstruct a full post from an event you need the call arguments or a `get_state()` read.
 
 ## Direct posting
 
 `post_without_tip` records `Call.caller` as the author. This is the path a connected wallet
-takes, and the one the agent skill's `superhero-post.mjs` uses:
+takes:
 
 ```javascript
 import { AeSdk, Node, MemoryAccount, Contract } from '@aeternity/aepp-sdk';
@@ -142,16 +137,16 @@ console.log('tip_id:', result.decodedResult.toString());
 console.log('tx:', result.hash);
 ```
 
-`media` is a plain array of strings. The contract does not validate or interpret them —
-they are opaque references that the frontend renders as links or embeds.
+`media` is a plain array of strings. The contract does not validate or interpret them — they
+are opaque references that the frontend renders as links or embeds.
 
 ## Delegated posting
 
-`post_without_tip_sig` lets any account submit a post on behalf of an author who signed it
-off chain. This is how gasless posting works: the user signs a message in their wallet, a
-relayer pays the fee, and the on-chain record still attributes the post to the signer.
+`post_without_tip_sig` lets any account submit a post on behalf of an author who signed it off
+chain. This is how gasless posting works: the user signs a message in their wallet, a relayer
+pays the fee, and the on-chain record still attributes the post to the signer.
 
-Here is the entire verification, straight from the source:
+The entire verification:
 
 ```sophia
 stateful entrypoint post_without_tip_sig(title : string, media : list(string),
@@ -173,30 +168,20 @@ function prefix_message_hashed(msg : string) : bytes(60) =
 
 ### The concatenation
 
-**There is no separator.** `concat` folds `String.concat` over the media list starting from the
-title, in list order. The signed message is exactly:
+**There is no separator.** `concat` folds `String.concat` over the media list starting from
+the title, in list order. The signed message is exactly:
 
 ```text
 title ++ media[0] ++ media[1] ++ ... ++ media[n-1]
 ```
 
-The repository's own test helper spells the same thing in one line
-(`tipping-contract/util/tippingContractUtil.js`):
+In JavaScript, `title + media.join('')`. Inserting any delimiter — a newline, a comma, a null
+byte — produces a digest the contract rejects with `SIGNATURE_HAS_TO_MATCH_AUTHOR`.
 
-```javascript
-tippingContractUtil.postWithoutTippingString = (title, media) => title + media.join('');
-```
-
-This is load-bearing and easy to get wrong. Inserting any delimiter — a newline, a comma, a
-null byte — produces a digest the contract will reject with `SIGNATURE_HAS_TO_MATCH_AUTHOR`.
-It also means the message is ambiguous: `("ab", ["c"])` and `("a", ["bc"])` hash identically, so
-one signature is valid for both splits. A relayer that lets a caller choose the split can move
-text between the title and a media entry without invalidating the signature.
-
-### The 28-byte prefix, byte by byte
+### The 28-byte prefix
 
 `#1a61657465726e697479205369676e6564204d6573736167653a0a20` is the æternity personal-message
-framing, and it decodes as:
+framing:
 
 | Bytes | Meaning |
 | --- | --- |
@@ -205,7 +190,7 @@ framing, and it decodes as:
 | `20` | 32 — the length of the body that follows |
 
 1 + 26 + 1 = 28 bytes of header, and the body is always the 32-byte inner Blake2b digest, so
-`Bytes.concat` produces exactly 60 bytes. That is why the helper is typed `bytes(60)`.
+`Bytes.concat` produces exactly 60 bytes — hence `bytes(60)`.
 
 ### The full construction
 
@@ -220,9 +205,8 @@ framing, and it decodes as:
 5. ok      = Crypto.verify_sig(digest, author, sig)
 ```
 
-Steps 3 and 4 are exactly what the SDK's `signMessage` does to whatever you hand it. So from a
-key, the whole author side is two calls — this is the construction the contract's own test
-uses:
+Steps 3 and 4 are exactly what the SDK's `signMessage` does to whatever you hand it, so from a
+key the whole author side is two calls:
 
 ```javascript
 import { signMessage, hash } from '@aeternity/aepp-sdk';
@@ -231,36 +215,20 @@ const message = title + media.join('');
 const signature = signMessage(hash(message), secretKey);
 ```
 
-Note what is being framed: the **32-byte inner digest**, not the text. Handing a wallet's
-`signMessage` the raw post text instead produces a different digest and the call reverts.
+Note what is being signed: the **32-byte inner digest**, not the text. Handing a wallet's
+`signMessage` the raw post text produces a different digest and the call reverts.
 
-### There is no replay protection
+## Notes
 
-`post_without_tip_sig` has no nonce, no expiry, no per-author counter, and no record of spent
-signatures. The contract's entire state is `{ tips, version }` — there is nowhere to record
-one. `save_post` appends unconditionally.
+The signature carries no nonce, so a relayer should verify a signature locally before spending
+gas and keep track of the signed posts it has already submitted. `AddressLink`, by contrast,
+takes an explicit `nonce` on every signed write.
 
-The consequences, stated plainly:
-
-- **A valid signature is valid forever.** It can be submitted any number of times.
-- **Each submission is a new post.** A replay takes the next `tip_id` and appends a fresh
-  entry; it is not rejected as a duplicate.
-- **The signature does not name a submitter.** Anyone holding the tuple can post it.
-- **Nothing on chain distinguishes a delegated post from a direct one.** The stored `tip_meta`
-  records only sender, title and timestamp.
-
-Every mitigation is off chain, at the relayer: verify the signature locally before you spend
-gas, keep a set of tuples you have already submitted, and rate-limit per author address. If you
-need replay protection at the protocol level, it is not here — the `AddressLink` contract, by
-contrast, takes an explicit `nonce` argument and keeps a `nonce_seq` map for exactly this
-reason.
-
-## Read more
+## Related
 
 - [Posting](/social/posting) — what posting looks like from the app, and what the API adds on top
 - [Delegated posting](/social/delegated-posting) — the relayer flow end to end
-- [Tipping](/social/tipping) — the spend-with-payload mechanism that replaced the contract's tip entrypoints
+- [Tipping](/social/tipping) — the spend-with-payload mechanism
 - [Events](/contracts/events) — the topic hash for `PostWithoutTipReceived` and how to subscribe
 - [Calling Contracts](/contracts/calling-contracts) — SDK setup, gas, and reading revert reasons
-- [Post on superhero.com](https://superhero.com) — the app itself
-- [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) — every version of the source quoted above
+- [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) — the contract family's source

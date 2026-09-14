@@ -1,15 +1,14 @@
 ---
 title: "Invitations & Affiliations API"
-description: "Track invite links, their claim status and referral analytics — and how they relate to the on-chain AffiliationTreasury."
+description: "Track invite links, their claim status and referral analytics, and how they relate to the on-chain AffiliationTreasury."
 ---
 
 # Invitations & Affiliations API
 
-Superhero invites are on-chain objects: an invite link is a private key, and the AE behind it sits
-in the `AffiliationTreasury` contract until someone redeems it. This API is the indexed view of
-that — it tells you which invites an address has issued and which have been claimed, without
-making you walk the chain. Everything that *creates* or *revokes* an invite is a contract call,
-not a REST call.
+An invite link is a private key, and the AE behind it sits in the `AffiliationTreasury` contract
+until someone redeems it. This API is the indexed view of that: which invites an address has
+issued and which have been claimed. Creating or revoking an invite is a contract call, not a
+REST call.
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
 
@@ -19,7 +18,7 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | --- | --- | --- |
 | `GET /api/invitations` | `order_by`, `order_direction`, `inviter`, `limit`, `page` | Paginated invitation rows |
 | `GET /api/affiliations/invites/{code}` | — | One invite-code pool, by its public code |
-| `POST /api/affiliations` | — | Create a pool of invite codes. **Unauthenticated** |
+| `POST /api/affiliations` | — | Create a pool of invite codes |
 | `POST /api/affiliations/invites/{code}/{provider}/{access_code}` | — | Exchange a GitHub, Google or X access code for one private code |
 | `GET /api/affiliations/preview` | — | An HTML dashboard, not JSON |
 | `GET /api/bcl-affiliation/analytics` | `start_date`, `end_date` | Referral programme metrics |
@@ -28,10 +27,10 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | `GET /api/bcl-affiliation/analytics/x-invite` | `start_date`, `end_date` | X-invite usage metrics |
 | `GET /api/bcl-affiliation/tree` | — | The whole referral graph, one node per inviter |
 
-Each `/api/bcl-affiliation/*` endpoint has a `/preview` sibling. Those are server-rendered HTML
-dashboards, not JSON — do not parse them.
+Each `/api/bcl-affiliation/*` endpoint has a `/preview` sibling that returns a server-rendered
+HTML dashboard, not JSON.
 
-Account-level invite counters live on the accounts endpoint instead —
+Account-level invite counters live on the accounts endpoint:
 `GET /api/accounts?order_by=total_invitation_count` also accepts
 `total_claimed_invitation_count` and `total_revoked_invitation_count`. See
 [Accounts](/api-reference/accounts).
@@ -49,20 +48,14 @@ Account-level invite counters live on the accounts endpoint instead —
 curl -s "https://api.superhero.com/api/invitations?inviter=ak_YOUR_ADDRESS&limit=100&page=1"
 ```
 
-### The full row
-
-The stored columns
-(`superhero-api/src/affiliation/entities/invitation.entity.ts`), plus five fields the controller
-computes on the way out:
-
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `id` | string | Auto-increment row id |
+| `id` | string | Row id |
 | `tx_hash` | string | `th_...` of the `register_invitation_code` call that created it |
 | `block_height` | number | Height of that call |
-| `amount` | string | The gift behind the invite, **in AE** — see below |
+| `amount` | string | The gift behind the invite, in **AE** as a decimal string. Do not divide by 1e18 |
 | `sender_address` | string | The inviter's `ak_...`. This is the field `inviter` filters on |
-| `invitee_address` | string or null | The real wallet that redeemed it |
+| `invitee_address` | string or null | The wallet that redeemed it |
 | `receiver_address` | string | The **ephemeral invitee keypair** address encoded in the link. Unique |
 | `status` | string | `pending`, `claimed` or `revoked` |
 | `claim_tx_hash` | string or null | `th_...` of the claiming transaction |
@@ -71,65 +64,28 @@ computes on the way out:
 | `created_at` | string | ISO 8601 |
 | `sender` | object or null | The inviter's full account row, joined in |
 | `invitee` | object or null | The redeemer's full account row, joined in |
-| `claimed` | boolean | Derived: `status === 'claimed'` |
-| `claimer_address` | string or null | Derived: an alias of `invitee_address` |
-| `claimed_at` | string or null | Derived: `status_updated_at` when claimed, else null |
+| `claimed` | boolean | `status === 'claimed'` |
+| `claimer_address` | string or null | Alias of `invitee_address` |
+| `claimed_at` | string or null | `status_updated_at` when claimed, else null |
 
-So the three fields earlier drafts of this page wondered about are all present, under different
-names: the inviter is **`sender_address`** (not `inviter`), revocation is
-**`status = 'revoked'` plus `revoke_tx_hash`** (not a `revoked` boolean), and the creation hash is
-**`tx_hash`**.
-
-The distinction between `receiver_address` and `invitee_address` / `claimer_address` is the whole
-model: an invite link *is* a throwaway private key, whose address is `receiver_address`. Whoever
-redeems the link moves the funds to their own wallet, which is `invitee_address`. A
+An invite link *is* a throwaway private key whose address is `receiver_address`. Whoever redeems
+the link moves the funds to their own wallet, which becomes `invitee_address`. A
 generated-but-unclaimed invite has a `receiver_address` and no `invitee_address`.
 
-### `amount` is in AE, not aettos
-
-This one contradicts the usual "a big-integer string means base units" heuristic. The indexer
-converts before it stores:
-
-```ts
-// src/plugins/bcl-affiliation/services/bcl-affiliation-transaction-processor.service.ts
-const amountArgs = tx.raw.arguments?.[2];
-const amount = amountArgs?.value ? toAe(amountArgs.value) : '0';
-```
-
-Argument 2 of `register_invitation_code` is the per-invite gift in aettos; `toAe()` divides it by
-1e18 and the result is stored as a string in a `varchar` column. The plugin's own event payload
-names the field `amountAe` and comments *"formatted in AE (already converted from aettos)"*, and
-every aggregate built on the column — `total_amount_ae` on the tree and on the top-inviter
-leaderboard — is named in AE too.
-
-**Do not divide `amount` by 1e18.** It is already AE, as a decimal string.
-
-### Use this instead of a per-invitee middleware lookup
-
-The server states the intent in the endpoint's own Swagger description:
-
-> Filter to invitations sent by this address; each item includes its claim status (claimed,
-> claimer_address, claimed_at, claim_tx_hash) so callers no longer need a per-invitee middleware
-> lookup.
-
-And because the row also carries `amount`, `tx_hash` and `block_height` from the creation call,
-this endpoint is now sufficient on its own for the whole picture of one inviter's invites. The
-web app still reads the middleware for the creation side — see below — but that is historical;
-it no longer has to.
+Each item includes its claim status and the creation call's `tx_hash`, `block_height` and
+`amount`, so one call answers the whole picture of an inviter's invites without a per-invitee
+middleware lookup.
 
 ## `/api/affiliations/*` — the OAuth invite-code pool
 
-This is a **separate mechanism** from `/api/invitations`, despite the shared vocabulary. It has
-nothing to do with the on-chain `AffiliationTreasury`. It is a pool of pre-shared invite codes
-that a campaign hands out one per social-account, gated by an OAuth login rather than by a
-signature or a payment.
+A separate mechanism from `/api/invitations`, unrelated to the on-chain `AffiliationTreasury`: a
+pool of pre-shared invite codes that a campaign hands out one per social account, gated by an
+OAuth login. An `Affiliation` holds a public `code` and belongs to an `account_address`; each of
+its codes holds one `private_code` and the `claimed_by` identity that took it.
 
-Two tables back it
-(`superhero-api/src/affiliation/entities/`): an `Affiliation` holds a public `code` and belongs to
-an `account_address`; each of its `AffiliationCode` children holds one `private_code` and the
-`claimed_by` identity that took it.
+### `POST /api/affiliations`
 
-### `POST /api/affiliations` — create a pool
+Takes no credential.
 
 ```bash
 curl -s -X POST "https://api.superhero.com/api/affiliations" \
@@ -137,39 +93,33 @@ curl -s -X POST "https://api.superhero.com/api/affiliations" \
   -d '{"sender_address":"ak_YOUR_ADDRESS","codes":["code1","code2","code3"]}'
 ```
 
-**No credential, no signature, no rate-limit guard.** It stores your `codes` as the pool's private
-codes, generates a random ten-character public code from `[a-z0-9]` using
-`crypto.randomInt`, and returns just that:
+Stores `codes` as the pool's private codes, generates a random ten-character public code from
+`[a-z0-9]`, and returns it:
 
 ```json
 { "code": "k3f9xq2m1p" }
 ```
 
-Note it does **not** return the body you sent: an earlier version did, and the response was
-trimmed. `sender_address` is stored as the pool's `account_address` and is not verified against
-anything.
+`sender_address` is stored as the pool's `account_address`.
 
-### `GET /api/affiliations/invites/{code}` — look up a pool
+### `GET /api/affiliations/invites/{code}`
 
-`{code}` is **the ten-character public code that `POST /api/affiliations` returned.** Not the
-invite's address, not a secret key, not one of the `private_code` values you supplied. It is
-validated against `/^[a-z0-9]{1,64}$/i`, so anything with punctuation or a `ct_`/`ak_` prefix is a
-400 before the lookup runs.
+`{code}` is the ten-character public code that `POST /api/affiliations` returned. It is
+validated against `/^[a-z0-9]{1,64}$/i`, so anything with punctuation or a `ct_`/`ak_` prefix is
+a 400.
 
-It returns the `Affiliation` row — `id`, `account_address`, `code`, `created_at` — or `null` (a
-200 with a null body, not a 404) when no such pool exists. The child codes are not included.
+Returns the `Affiliation` row — `id`, `account_address`, `code`, `created_at` — or `null` (a 200
+with a null body, not a 404) when no such pool exists. The child codes are not included.
 
-### `POST /api/affiliations/invites/{code}/{provider}/{access_code}` — redeem one
+### `POST /api/affiliations/invites/{code}/{provider}/{access_code}`
 
-This is the gated half. `provider` is `github`, `google` or `x` (anything else is a 400, and the
-path segment is validated against `/^[a-z][a-z0-9_-]{0,31}$/i` first). `access_code` is an OAuth
-authorization code or access token, which the server exchanges with that provider to obtain a
-stable user id.
+`provider` is `github`, `google` or `x` (anything else is a 400; the segment is validated
+against `/^[a-z][a-z0-9_-]{0,31}$/i`). `access_code` is an OAuth authorization code or access
+token, which the server exchanges with that provider for a stable user id.
 
-The server then enforces **one code per social identity**: if `provider@userId` has already
-claimed a code with a `claimed_at` set, the call is a `409 User already claimed a code`. It picks
-one of the pool's unclaimed codes at random (`crypto.randomInt`), marks it `claimed_by`, and
-returns the minimum:
+The server enforces **one code per social identity**: if `provider@userId` has already claimed a
+code, the call is a `409 User already claimed a code`. Otherwise it picks one of the pool's
+unclaimed codes at random, marks it `claimed_by`, and returns:
 
 ```json
 {
@@ -179,22 +129,17 @@ returns the minimum:
 ```
 
 `404 Affiliation not found` when the pool does not exist; `409 No available codes for this
-affiliation` when it is exhausted. The response is deliberately narrow — an earlier version
-returned the full OAuth profile including the user's email over this unauthenticated route.
+affiliation` when it is exhausted.
 
-`GET /api/affiliations/preview` is a server-rendered HTML dashboard, not JSON.
+## The on-chain treasury
 
-## How this relates to the on-chain treasury
-
-Invites are created and revoked on chain. The contract is `AffiliationTreasury`, reached through
-the community factory rather than from configuration:
+Invites are created and revoked on chain. The `AffiliationTreasury` contract is reached through
+the community factory, and its address is also `affiliation_address` on `GET /api/factory`:
 
 ```js
 const factory = await initCommunityFactory(sdk, factorySchema.address);
 const treasury = await factory.affiliationTreasury();
 ```
-
-Three entrypoints matter:
 
 | Entrypoint | What it does |
 | --- | --- |
@@ -202,39 +147,34 @@ Three entrypoints matter:
 | `revoke_invitation_code(address)` | Reclaims an unused invite |
 | `get_invitation_code(address)` | Returns `[sender, amount, claimed]` for one invite |
 
-The agent skill's `superhero-invite.mjs generate` does exactly this: it generates `count`
-throwaway keypairs, calls `register_invitation_code` with their addresses, and builds each link
-as the keypair's **secret key** appended to a URL fragment:
+To generate invites: create `count` throwaway keypairs, call `register_invitation_code` with
+their addresses, and build each link as the keypair's **secret key** in a URL fragment:
 
 ```text
 https://superhero.com#invite_code=<secret key>
 ```
 
-It covers redemption gas with a fixed `0.001 AE` per invite (`10n ** 15n` aettos) on top of the
+Redemption gas is covered by a fixed `0.001 AE` per invite (`10n ** 15n` aettos) on top of the
 gift amount, so the total sent is `(amount + 0.001) * count` plus the call's own gas. Revoking
 takes the invite's **address**, not its secret key.
 
-The web app reads the creation side from the middleware rather than from this API, because the
-invite amounts live in the transaction arguments:
+The creation side can also be read from the middleware, where invite amounts live in the
+transaction arguments:
 
 ```text
 GET {middlewareUrl}/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ&caller_id=ak_...
 ```
 
-It then filters to `tx.function === 'register_invitation_code'`, reads the invitee addresses from
-argument 0 and the per-invite amount from argument 2 (in **aettos** — divide by 1e18), and follows
+Filter to `tx.function === 'register_invitation_code'`, read the invitee addresses from argument
+0 and the per-invite amount from argument 2 (in **aettos** — divide by 1e18), and follow
 `response.next` to page. See [Node & Middleware](/api-reference/node-and-middleware).
-
-That middleware route remains the ground truth, and it is worth knowing while reading the web
-app. But `GET /api/invitations?inviter=...` now answers the same question in one call: it carries
-`tx_hash`, `block_height` and `amount` from the creation call alongside the claim status. Prefer
-it, and fall back to the middleware only when you need an invite the indexer has not caught.
+`GET /api/invitations?inviter=...` answers the same question in one call; fall back to the
+middleware only for an invite the indexer has not caught.
 
 ## Referral analytics
 
-The `/api/bcl-affiliation/*` family reads the same `invitations` table as `GET /api/invitations`,
-aggregated. `start_date` and `end_date` are snake_case here and must be exactly `YYYY-MM-DD` — a
-different format is a 400, not a best-effort parse.
+The `/api/bcl-affiliation/*` family aggregates the same invitations table. `start_date` and
+`end_date` must be exactly `YYYY-MM-DD`; any other format is a 400.
 
 ### `GET /api/bcl-affiliation/analytics`
 
@@ -248,7 +188,7 @@ date · registered · redeemed · revoked · amount_ae_registered
 `summary` carries `total_registered`, `total_redeemed`, `total_revoked`, `total_outstanding`,
 `unique_inviters`, `unique_invitees`, `unique_redeemers`, `total_amount_ae_registered`,
 `avg_amount_ae_per_registered`, `avg_amount_ae_per_inviter`, `redeemed_rate` and `revoked_rate`.
-The two rates are fractions of `total_registered`.
+The two rates are fractions of `total_registered`. All amounts are in **AE**.
 
 `xVerification` nests its own `series` (`date`, `daily_new_verified`, `cumulative_verified`) and
 `summary` (`total_verified_users`), counted from `link` calls against the AddressLink contract.
@@ -269,24 +209,23 @@ curl -s "https://api.superhero.com/api/bcl-affiliation/analytics/top-inviters?li
 
 ### `GET /api/bcl-affiliation/analytics/x-verification` and `/x-invite`
 
-The two X funnels, each `series` plus `summary`. X-verification points are
-`date`, `daily_new_verified`, `cumulative_verified`; X-invite points are `date`, `created_codes`,
-`invited_users`, with a summary of `total_created_codes`, `total_invited_users` and
-`invite_bind_rate`.
+Each returns `series` plus `summary`. X-verification points are `date`, `daily_new_verified`,
+`cumulative_verified`. X-invite points are `date`, `created_codes`, `invited_users`, with a
+summary of `total_created_codes`, `total_invited_users` and `invite_bind_rate`.
 
 ### `GET /api/bcl-affiliation/tree`
 
-The full referral graph as one payload — no pagination, no parameters. It is
-`{ items, meta }`, where `items` is one node per **inviter**:
+The full referral graph as one payload — no pagination, no parameters. `{ items, meta }`, where
+`items` is one node per **inviter**:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `sender_address` | string | The inviter's `ak_...` |
 | `sender` | object | That inviter's own stats — see below |
 | `invitees` | array | One stats object per distinct address they invited |
-| `amount` | number | Total AE this inviter sent to invitees |
+| `amount` | number | Total AE this inviter sent to invitees, in **AE** |
 
-Each stats object, inviter and invitee alike, has the same six fields:
+Each stats object, inviter and invitee alike, has the same fields:
 
 ```text
 address
@@ -298,20 +237,19 @@ total_amount_ae                   sum of amount as inviter, in AE
 total_received_invitation_count   registered as invitee
 ```
 
-Note the shape of the tree: an **invitee node carries only `total_received_invitation_count`**;
-its other five counters are hard-coded to 0 by the builder, even when that address is itself an
-inviter elsewhere. To walk a chain more than one level deep, look the invitee's address up as a
-`sender_address` in the same `items` array — the structure is a flat list of one-level fans, not a
-nested tree.
+An **invitee node carries only `total_received_invitation_count`**; its other five counters are
+0, even when that address is itself an inviter elsewhere. To walk a chain more than one level
+deep, look the invitee's address up as a `sender_address` in the same `items` array — the
+structure is a flat list of one-level fans, not a nested tree.
 
 `meta` carries `unique_inviters`, `unique_invitees`, `total_registered`, `total_redeemed`,
 `total_revoked` and `total_amount_ae`.
 
-Only invitations with **both** a `sender_address` and an `invitee_address` are counted, so
-pending and revoked invites that were never redeemed contribute to `meta.total_revoked` but not to
-any node's invitee list.
+Only invitations with **both** a `sender_address` and an `invitee_address` are counted as edges,
+so pending and revoked invites that were never redeemed contribute to `meta.total_revoked` but
+not to any node's invitee list.
 
-## Read more
+## Related
 
 - [API Conventions](/api-reference/conventions) — pagination and the write-endpoint authentication model
 - [Accounts API](/api-reference/accounts) — the per-account invitation counters
@@ -319,12 +257,3 @@ any node's invitee list.
 - [Node & Middleware](/api-reference/node-and-middleware) — the middleware query behind invite creation
 - [Affiliation treasury](/contracts/affiliation-treasury) — the contract itself
 - [Invite links](/rewards/invite-links) — the feature from a user's point of view
-- [Invite page on superhero.com](https://superhero.com/trends/invite) — where invites are generated
-
-## Open questions
-
-- **Is `POST /api/affiliations` meant to be publicly writable?** It is, today: no guard, no
-  signature, no rate limit, and `sender_address` is stored without verification, so anyone can
-  create a pool naming any address. Nothing in the source says whether that is deliberate for a
-  campaign tool or an oversight. Only the API operators can say whether it is protected at the
-  edge or should be treated as a private endpoint.

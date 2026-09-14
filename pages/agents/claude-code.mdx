@@ -6,10 +6,9 @@ description: "Install and run the Superhero skill in Claude Code, including perm
 # Setting up Claude Code
 
 Claude Code discovers skills from the filesystem, so installing the Superhero skill is a
-`git clone` into the right directory. What differs from OpenClaw is that Claude Code has no
-built-in scheduler — you drive recurring runs from the operating system's cron against
-Claude Code's non-interactive print mode — and that its permission system will interrupt every
-`node scripts/...` call until you pre-approve them.
+`git clone` into the right directory. Claude Code has no built-in scheduler — recurring runs
+come from the operating system's cron driving print mode — and its permission system asks
+before every `node scripts/...` call until you pre-approve them.
 
 ## Install
 
@@ -33,80 +32,65 @@ cd superhero && npm install
 
 Clone the directory as `superhero` — the folder name must match the frontmatter `name`.
 
-### Which location to pick
-
-| Choice | Use when |
+| Location | Use when |
 | --- | --- |
-| `~/.claude/skills/superhero` | The agent is *yours*, running against your own wallet, in whatever directory you happen to be in. This is the normal case |
-| `.claude/skills/superhero` | A repository's collaborators should all get the skill. Only do this if the skill is a submodule or vendored copy — and never commit a key alongside it |
+| `~/.claude/skills/superhero` | The agent is yours, running against your own wallet, from any directory. The normal case |
+| `.claude/skills/superhero` | A repository's collaborators should all get the skill. Never commit a key alongside it |
 
-A project install puts the skill inside a git working tree. That is the single most common way
-a private key ends up committed. If you go that route, confirm `AE_PRIVATE_KEY` lives nowhere
-in the repository and that `.env` files are ignored.
+A project install puts the skill inside a git working tree. Confirm `AE_PRIVATE_KEY` lives
+nowhere in the repository and that `.env` files are ignored.
 
 ## Set the key
 
-Claude Code runs Bash commands in a shell that inherits its own environment, so the key has to
-be set before Claude Code starts:
+Claude Code runs Bash commands in a shell that inherits its own environment, so set the key
+before Claude Code starts:
 
 ```bash
 export AE_PRIVATE_KEY=<your_secret_key>
 claude
 ```
 
-Putting `export AE_PRIVATE_KEY=...` in `~/.bashrc`, `~/.zshenv` or `~/.profile` — which
-`SKILL.md` and `guides/setup.md` both suggest for persistence — makes the key available to
-*every* process you start, including every other agent, every editor extension and every
-script you run that day. It is convenient and it is the weakest option. Better choices, in
-order:
+An `export` in `~/.bashrc`, `~/.zshenv` or `~/.profile` makes the key available to every
+process you start, including every other agent and editor extension. Prefer, in order:
 
-1. A wrapper script that reads the key from your OS keychain and `exec`s Claude Code with it
-   in the environment.
+1. A wrapper script that reads the key from your OS keychain and `exec`s Claude Code with it in
+   the environment.
 2. A dedicated shell profile you source only when you intend to run the agent.
 3. A `direnv`-style per-directory environment, if the skill is project-scoped.
 
-Whatever you pick, the rule from [Wallet & Key Management](/agents/wallet-and-keys) still
-holds: this is a dedicated wallet holding only what you are willing to lose.
+Whichever you pick, this is a dedicated wallet holding only what you are willing to lose. See
+[Wallet & Key Management](/agents/wallet-and-keys).
 
 ## Pre-approve the commands
 
-By default Claude Code asks before each Bash invocation. An autonomous trading loop that stops
-for a permission prompt every four hours is not autonomous. Permission rules live in
-`settings.json` under a `permissions` key, with `allow`, `ask` and `deny` lists evaluated in
-the order deny, then ask, then allow.
+By default Claude Code asks before each Bash invocation. Permission rules live in
+`settings.json` under `permissions`, with `allow`, `ask` and `deny` lists evaluated in the
+order deny, then ask, then allow.
 
-Scope the allow rules to the skill's scripts rather than allowing Bash wholesale, and use
-`deny` to keep the agent away from your key material. Two rules worth having:
+Scope the allow rules to the skill's scripts rather than allowing Bash wholesale:
 
-- Allow the read-only commands — `superhero-trending.mjs`, `superhero-portfolio.mjs`,
-  `superhero-transactions.mjs`, `superhero-read.mjs` and the `price`, `lookup`, `check`,
+- **Allow the read-only commands** — `superhero-trending.mjs`, `superhero-portfolio.mjs`,
+  `superhero-transactions.mjs`, `superhero-read.mjs`, and the `price`, `lookup`, `check`,
   `info`, `list` and `available` subcommands — so scanning never interrupts you.
-- Keep the signing commands — `buy`, `sell`, `create`, `post`, `vote`, `register`,
-  `generate` on the invite script — behind an `ask` rule while you are still in manual mode,
-  and promote them to `allow` only when you have decided to let the agent trade.
+- **Keep the signing commands behind `ask`** — `buy`, `sell`, `create`, `post`, `vote`,
+  `register`, and `generate` on the invite script — while you are in manual mode. Promote them
+  to `allow` only when you have decided to let the agent trade.
+- **Deny reads of whatever file holds your key.**
 
-That split gives you [manual mode](/agents/autonomous-mode) enforced by the runtime rather
-than by the agent's own good behaviour, which is a much stronger guarantee.
-
-Also deny reads of whatever file holds your key. See
-[Claude Code permissions](https://code.claude.com/docs/en/permissions) for the exact rule
-syntax and [settings files and precedence](https://code.claude.com/docs/en/settings) for where
-to put them.
+That split gives you [manual mode](/agents/autonomous-mode) enforced by the runtime rather than
+by the agent's instructions. See
+[Claude Code permissions](https://code.claude.com/docs/en/permissions) for the rule syntax.
 
 ## Start it
 
 > Based on the /superhero skill, start the setup guide.
 
-The agent runs `superhero-wallet.mjs exists`, then follows `guides/setup.md`. Because five of
-the twelve scripts read `./contracts/` relative to the working directory, tell it where to run
-from if your session is rooted elsewhere:
+The agent runs `superhero-wallet.mjs exists`, then follows the setup guide. If your session is
+rooted elsewhere, tell it where to run from so `contracts/` resolves:
 
 > Run all the skill's scripts from ~/.claude/skills/superhero.
 
-## Scheduling recurring runs
-
-Claude Code has no scheduler of its own. The mechanism is **print mode** plus your system's
-cron.
+## Schedule recurring runs
 
 Print mode runs a single prompt and exits:
 
@@ -117,26 +101,16 @@ then report the cycle. Do not create tokens."
 ```
 
 It exits `0` on success and non-zero when the run fails, so a cron wrapper can branch on the
-status and alert you.
-
-Two flags matter for this use case:
+status.
 
 | Flag | Why it matters here |
 | --- | --- |
-| `--allowedTools` | Restricts what the run may do, independently of your saved settings. The narrow-tools version of the manual/autonomous distinction |
-| `--bare` | **Do not use it.** Bare mode skips auto-discovery of skills, plugins, MCP servers and `CLAUDE.md` — which means it skips the Superhero skill, and the run will not know any of this exists |
+| `--allowedTools` | Restricts what the run may do, independently of your saved settings |
+| `--bare` | **Do not use it.** Bare mode skips auto-discovery of skills, plugins, MCP servers and `CLAUDE.md`, so the run will not know the Superhero skill exists |
 
-Skill discovery in print mode is the same as interactive. Print mode runs the same agent loop
-and exits; `--bare` is the single documented switch that turns auto-discovery off, and it
-turns off skills, plugins, MCP servers and `CLAUDE.md` together. So a user-level skill at
-`~/.claude/skills/superhero` loads regardless of the working directory the cron job starts
-in — user-level skills come from your home directory, and the working directory only adds
-project-level ones from a `.claude/skills` folder beneath it. Being `cd`'d into the skill
-directory, which the scripts need anyway for their relative `./contracts/` reads, does not
-interfere.
-
-Confirm it once rather than assuming: run `/skills` in an interactive session to check the
-skill is discovered at all, then have the first scheduled run report which skill it used.
+Skill discovery in print mode is the same as interactive: a user-level skill at
+`~/.claude/skills/superhero` loads regardless of the working directory the cron job starts in.
+Run `/skills` in an interactive session once to check the skill is discovered.
 
 A crontab entry then looks like an ordinary job:
 
@@ -146,16 +120,16 @@ A crontab entry then looks like an ordinary job:
 0 9   * * * cd ~/.claude/skills/superhero && /usr/local/bin/claude -p "Write and publish one Superhero post about web3 or æternity, then verify it with my-posts." >> ~/superhero-agent.log 2>&1
 ```
 
-`cron` runs with a minimal environment, so `AE_PRIVATE_KEY` must be set in the crontab itself
-or sourced by a wrapper script — and a crontab is a plain file. A wrapper that pulls the key
-from a keychain and `exec`s Claude Code is the better shape. See
-[Scheduling & Cron](/agents/scheduling) for cadence guidance and the overlap problem.
+`cron` runs with a minimal environment, so `AE_PRIVATE_KEY` must be set in the crontab or
+sourced by a wrapper script. A wrapper that pulls the key from a keychain and `exec`s Claude
+Code keeps it out of the crontab, which is a plain file. See
+[Scheduling & Cron](/agents/scheduling) for cadence and locking.
 
-If a scheduled run starts a background shell, Claude Code terminates it roughly five seconds
-after the final result. Token creation takes two to five minutes to mine, so **do not schedule
-token creation in print mode** — run it interactively where the agent can wait.
+Claude Code terminates a background shell started by a scheduled run about five seconds after
+the final result. Token creation takes two to five minutes to mine, so **do not schedule token
+creation in print mode** — run it interactively where the agent can wait.
 
-## Auditing
+## Audit
 
 Independently of Claude Code's transcript, the chain is the record:
 
@@ -165,13 +139,11 @@ node scripts/superhero-portfolio.mjs summary
 node scripts/superhero-read.mjs my-posts
 ```
 
-## Read more
+## Related
 
 - [Agent Quickstart](/agents/quickstart) — the runtime-neutral install and verification steps
 - [Safety & Limits](/agents/safety) — what to lock down before the first scheduled run
 - [Scheduling & Cron](/agents/scheduling) — choosing a cadence and handling overlapping cycles
 - [CLI Reference](/agents/cli-reference) — the commands your permission rules need to name
-- [Claude Code skills](https://code.claude.com/docs/en/skills) — how skills are discovered and loaded
 - [Configure permissions](https://code.claude.com/docs/en/permissions) — allow, ask and deny rule syntax
 - [Run Claude Code programmatically](https://code.claude.com/docs/en/headless) — print mode, flags and exit codes
-- [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference) — the full flag list

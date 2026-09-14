@@ -1,14 +1,13 @@
 ---
 title: "Setting up GitHub Copilot"
-description: "Install the Superhero skill for Copilot, and where Copilot's capabilities stop short of a scheduled agent."
+description: "Install the Superhero skill for Copilot CLI and VS Code, approve its commands, and schedule cycles from outside Copilot."
 ---
 
 # Setting up GitHub Copilot
 
-Copilot reads the same Agent Skills format the rest of this section uses, so the Superhero
-skill installs with a `git clone` and works without modification. What Copilot does not give
-you is a scheduler, and one of its surfaces — the cloud coding agent — is a poor place to put
-a private key at all. Both are covered below.
+Copilot reads the same Agent Skills format as the other runtimes, so the Superhero skill
+installs with a `git clone` and works without modification. Copilot has no scheduler of its
+own; scheduled cycles come from system cron or another runtime.
 
 ## Install
 
@@ -23,14 +22,11 @@ cd superhero && npm install
 
 Copilot also reads personal skills from `~/.agents/skills`, and project skills from
 `.github/skills`, `.claude/skills` or `.agents/skills` inside a repository. If you already have
-the skill in `~/.claude/skills/superhero` for Claude Code, a symlink avoids a second copy
-drifting out of date.
+the skill in `~/.claude/skills/superhero` for Claude Code, a symlink avoids a second copy.
 
 Clone it as `superhero` — the directory name must match the frontmatter `name`.
 
-## Managing it in the CLI
-
-Copilot CLI exposes skill management as slash commands:
+## Manage it in the CLI
 
 | Command | What it does |
 | --- | --- |
@@ -42,30 +38,16 @@ Copilot CLI exposes skill management as slash commands:
 After the clone, run `/skills reload` then `/skills info superhero`. If the skill does not
 appear, the folder name or the frontmatter `name` is wrong.
 
-## Which surfaces support it
+## Which surface to use
 
-Agent Skills are supported across Copilot CLI, the Copilot coding agent, and agent mode in
-Visual Studio Code. The three differ in ways that matter a great deal for a skill that signs
-blockchain transactions:
-
-| Surface | Runs where | Suitable for this skill? |
+| Surface | Runs where | Use for this skill? |
 | --- | --- | --- |
-| Copilot CLI | Your machine, your shell, your environment variables | Yes. This is the surface to use |
+| Copilot CLI | Your machine, your shell, your environment variables | Yes |
 | VS Code agent mode | Your machine, inside the editor | Yes, with the same environment-variable setup |
-| Copilot coding agent | GitHub's cloud environment | **Not recommended.** See below |
+| Copilot coding agent | GitHub's cloud environment | **No.** It does not inherit your local environment, so the key would have to be stored as a repository or environment secret readable by every workflow |
 
-### Why not the cloud coding agent
-
-The cloud agent does not inherit your local environment. Giving it `AE_PRIVATE_KEY` means
-storing a self-custodial signing key as a repository or environment secret in GitHub's
-infrastructure, where its blast radius is every workflow and every collaborator with the
-rights to run one. A key that can move funds is not the same kind of secret as a deploy token:
-there is no revocation, no rate limit, and no chargeback. If it leaks, the wallet is drained
-and there is no recourse.
-
-If you want an unattended agent, run it on a host you control — see
-[Other Agents & Runtimes](/agents/other-runtimes) — or use the OpenClaw Gateway, which was
-designed for it.
+For an unattended agent, run it on a host you control — see
+[Other Agents & Runtimes](/agents/other-runtimes) — or use the OpenClaw Gateway.
 
 ## Set the key
 
@@ -76,27 +58,18 @@ process that launches Copilot:
 export AE_PRIVATE_KEY=<your_secret_key>
 ```
 
-The same warnings apply as everywhere else in this section: a dedicated wallet, funded only
-with what you can lose, and never a shell profile if you can avoid it. Read
+Copilot does not prompt for it: its frontmatter fields are `name`, `description`,
+`allowed-tools` and `metadata`, with no environment declaration. Export the variable before
+launching, and ask for `superhero-wallet.mjs exists` as the first command. Use a dedicated
+wallet funded with only what you can lose — see
 [Wallet & Key Management](/agents/wallet-and-keys).
 
-Copilot will not prompt you for it. Copilot's documented SKILL.md frontmatter is `name`
-(required), `description`, `allowed-tools`, and a `metadata` section used for things like a
-version field and the provenance that `gh skill` writes on install — there is no environment
-declaration and no equivalent of OpenClaw's `primaryEnv`. The skill's `metadata.openclaw`
-block is a namespace Copilot has no reason to read. Export the variable yourself before
-launching, and verify with a `superhero-wallet.mjs exists` call as the first thing you ask
-for.
+Run Copilot from the skill directory, or tell it to run the scripts from there, so
+`contracts/` resolves.
 
-Because five of the skill's scripts read `./contracts/` relative to the working directory, run
-Copilot from the skill directory or tell it where to run the scripts from.
+## Pre-approve the scripts
 
-## Pre-approving the scripts
-
-Copilot CLI can pre-approve shell commands, both per session and per skill, so you do not
-confirm every script call.
-
-Per session, on the command line:
+Copilot CLI can pre-approve shell commands per session:
 
 ```bash
 copilot --allow-tool 'shell(node scripts/superhero-trending.mjs*)' \
@@ -104,60 +77,48 @@ copilot --allow-tool 'shell(node scripts/superhero-trending.mjs*)' \
         --deny-tool  'shell(node scripts/superhero-token-swap.mjs*)'
 ```
 
-`shell(<glob>)` takes a glob pattern, and `--deny-tool` is the half that matters here: it is
-how you run a research-only or manual-mode session where the read commands never prompt but
-anything that signs still does. A bare `--allow-tool shell` approves every shell command and
-is the wrong setting for a skill that holds a signing key.
+`shell(<glob>)` takes a glob pattern. `--deny-tool` is how you run a research-only or
+manual-mode session: the read commands never prompt, anything that signs still does. A bare
+`--allow-tool shell` approves every shell command and is the wrong setting for a skill that
+holds a signing key.
 
-Per skill, the same idea lives in SKILL.md frontmatter as `allowed-tools`, which lists the
-tools Copilot may use without asking each time. Do not add `shell` or `bash` there for this
-skill — GitHub's own documentation warns that pre-approving them removes the confirmation step
-for terminal commands and lets an attacker-controlled skill or a prompt injection execute
-arbitrary commands. A session flag you can see in your shell history is a better place for
-this decision than a file that travels with the skill.
+The skill's frontmatter can also list `allowed-tools`, which Copilot uses without asking. Do
+not add `shell` or `bash` there: pre-approving them removes the confirmation step for every
+terminal command. A session flag in your shell history is the better place for this decision.
 
-One known limitation to plan around: compound commands always prompt. Anything using `;`,
-`&&`, a pipe, or a redirect triggers a permission prompt even when every individual command in
-the chain would be auto-approved on its own. Keep the commands you pre-approve to single
-invocations.
+Compound commands always prompt. Anything using `;`, `&&`, a pipe or a redirect triggers a
+permission prompt even when each command in the chain is approved on its own. Keep pre-approved
+commands to single invocations.
 
 ## Start it
 
 > Based on the /superhero skill, start the setup guide.
 
-Everything after that is runtime-neutral: the agent detects the key, verifies the balance,
-offers a `.chain` name, and asks whether you want autonomous or manual mode.
+The agent detects the key, verifies the balance, offers a `.chain` name, and asks whether you
+want autonomous or manual mode.
 
-## Scheduling: the gap
+## Schedule cycles
 
-Copilot has no equivalent of OpenClaw's Gateway cron. There is nothing in the skills mechanism
-that fires a prompt on a schedule, so **autonomous mode in the sense the skill means it is not
-available from Copilot alone**. You have three options:
+Copilot has no equivalent of OpenClaw's Gateway cron, so autonomous mode needs one of these:
 
-1. **Run it interactively.** Open a Copilot CLI session when you want a cycle. This is the
-   honest fit for Copilot, and it pairs naturally with manual mode.
-2. **Schedule the scripts, not the agent.** The twelve scripts are ordinary CLI programs. A
-   cron job that runs `superhero-trending.mjs tokens 20` and pipes the JSON somewhere gives
-   you the monitoring half of the loop with no model in the path at all. See
-   [Other Agents & Runtimes](/agents/other-runtimes).
+1. **Run it interactively.** Open a Copilot CLI session when you want a cycle. This pairs
+   naturally with manual mode.
+2. **Schedule the scripts, not the agent.** A cron job that runs
+   `superhero-trending.mjs tokens 20` and stores the JSON gives you the monitoring half of the
+   loop with no model in the path. See [Other Agents & Runtimes](/agents/other-runtimes).
 3. **Use a different runtime for the scheduled part.** OpenClaw's cron or a Claude Code
-   print-mode cron job can drive the loop while you keep Copilot for interactive work. The
-   skill is the same files; nothing is duplicated.
+   print-mode cron job can drive the loop while you keep Copilot for interactive work. The skill
+   is the same files.
 
-GitHub Actions can run a workflow on a POSIX cron `schedule` trigger, in UTC, and is the
-obvious-looking fourth option — but it lands you back in the cloud-secret problem above, and
-scheduled runs can be delayed or dropped under load, which is not a property you want in a
-trading loop. If you use it at all, use it for read-only reporting.
+GitHub Actions can run a workflow on a cron `schedule` trigger (in UTC), but that stores the
+signing key as a cloud secret, and scheduled runs can be delayed or dropped under load. If you
+use it, use it for read-only reporting.
 
-## Read more
+## Related
 
 - [Other Agents & Runtimes](/agents/other-runtimes) — the agentless and MCP paths for scheduling
-- [OpenClaw](/agents/openclaw) — the runtime with a built-in scheduler, if you need autonomy
-- [Wallet & Key Management](/agents/wallet-and-keys) — why a cloud-stored signing key is a bad trade
-- [Example Prompts](/agents/prompts) — including a research-only prompt that never signs anything
+- [OpenClaw](/agents/openclaw) — the runtime with a built-in scheduler
+- [Wallet & Key Management](/agents/wallet-and-keys) — where the key may live
+- [Example Prompts](/agents/prompts) — including a research-only prompt that never signs
 - [Adding agent skills for Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills) — directories, discovery and the slash commands
-- [Adding agent skills for the Copilot coding agent](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills) — the cloud surface
-- [Agent Skills in VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills) — agent mode setup
-- [GitHub Copilot now supports Agent Skills](https://github.blog/changelog/2025-12-18-github-copilot-now-supports-agent-skills/) — the announcement and supported surfaces
-- [Allowing and denying tool use](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools) — `--allow-tool`, `--deny-tool` and the `shell()` pattern syntax
-- [Creating agent skills for Copilot CLI](https://docs.github.com/en/enterprise-cloud@latest/copilot/how-tos/copilot-cli/customize-copilot/create-skills) — the frontmatter fields, including `allowed-tools`
+- [Allowing and denying tool use](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools) — `--allow-tool`, `--deny-tool` and the `shell()` pattern

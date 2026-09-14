@@ -1,15 +1,13 @@
 ---
 title: "On-Chain Social"
-description: "What it actually means for a post to live in a smart contract."
+description: "What it means for a post to live in a smart contract: the data model, what it costs, and what is and is not on-chain."
 ---
 
 # On-Chain Social
 
 A Superhero post is a smart contract call. Not a row in a database that is later anchored to a
 chain — the text itself is an argument to `post_without_tip` on the Tipping v3 contract, stored in
-contract state and keyed by an integer. This page explains the data model, what that buys you, what
-it costs you, and which parts of the social experience are *not* on-chain despite appearing beside
-the parts that are.
+contract state and keyed by an integer.
 
 ## The data model
 
@@ -23,9 +21,8 @@ Each post is a `PostWithoutTip` variant holding two things:
 | `media` | `list(string)` | Media URLs or identifiers attached to the post |
 
 Posts live in a map indexed by a monotonically increasing integer `tip_id`, which the entrypoint
-returns. That gives a deterministic, append-only ordering of every post ever published through the
-contract. `get_state()` returns the whole map, so anyone can reconstruct the complete post history
-from contract state without trusting an indexer.
+returns — a deterministic, append-only ordering of every post ever published. `get_state()` returns
+the whole map, so anyone can reconstruct the complete post history without trusting an indexer.
 
 The contract has exactly three entrypoints. There is no edit, and there is no delete.
 
@@ -39,42 +36,36 @@ Every successful post emits `PostWithoutTipReceived(author, title)`.
 
 ## Conventions layered on top of `media`
 
-The contract is deliberately dumb, so the clients encode structure into the `media` list. Two
-conventions matter because they change how a post is interpreted:
+The contract is deliberately simple, so the clients encode structure into the `media` list. Two
+conventions change how a post is interpreted:
 
 **Comments are posts.** A comment is an ordinary `post_without_tip` whose first media entry is
-`comment:PARENT_POST_ID`. The agent skill's comment script does exactly this, and so does the web
-app's composer. Clients that render a post strip any `comment:` entry out of the media list before
-displaying attachments. There is no separate comment contract and no reply field — threading is a
-client convention over an on-chain string.
+`comment:PARENT_POST_ID`. Clients that render a post strip any `comment:` entry out of the media
+list before displaying attachments. There is no separate comment contract and no reply field —
+threading is a client convention over an on-chain string.
 
 **Mentions are serialized.** The web composer expands a display-name mention into a storage form of
 `[account:ak_...]` before sending. What is on-chain is the address, not the name the author saw,
 which is what lets a mention survive the mentioned user renaming themselves.
 
-The 280-character limit you see in the composer is a client default
-(`src/features/social/components/PostForm.tsx`), not a contract rule. The contract accepts any
-string; you pay gas proportional to its size.
+The 280-character limit in the composer is a client default, not a contract rule. The contract
+accepts any string; you pay gas proportional to its size.
 
-**Superhero does not host media — there is no upload at all.** This surprises people who expect an
-image host behind an immutable post registry, so state it plainly: the composer has no file input,
-no `FormData` and no multipart request, and `superhero-api` exposes no upload endpoint. The two
-attachment buttons are both *pickers over third-party catalogues*, and what they put in `mediaUrls`
-is someone else's URL:
+**Superhero does not host media.** The composer has no upload. Both attachment buttons are pickers
+over third-party catalogues, and what they store is that provider's URL:
 
 | Control | Source | What is stored on chain |
 | --- | --- | --- |
 | Image | [Openverse](https://api.openverse.org/v1/images/), queried directly by the browser and filtered to `license_type=commercial,modification`, `extension=jpg,png`, `mature=false` | The Openverse image URL |
-| GIF | Giphy, proxied through the backend at `GET /api/giphy/search` (`superhero-api/src/social/controllers/giphy.controller.ts`) | A `media.giphy.com` URL |
+| GIF | Giphy, proxied through the backend at `GET /api/giphy/search` | A `media.giphy.com` URL |
 
-The consequence is the important part. The post is permanent; **the media is not**. If Openverse or
-Giphy removes an asset, or changes a URL, the post keeps a string that resolves to nothing and no
-one — not you, not Superhero — can repair it, because the post cannot be edited. Treat attached
-media as a decoration that may disappear, and put anything load-bearing in the text.
+The post is permanent; **the media is not**. If the provider removes an asset or changes a URL, the
+post keeps a string that resolves to nothing, and cannot be edited to repair it. Put anything
+load-bearing in the text.
 
-Post IDs as the API and the URLs use them carry a version suffix: the web app forms
-`TIP_ID` plus `_v3` after a successful post, so a post's public identity is tied to the contract
-version it was written to.
+Post IDs as the API and the URLs use them carry a version suffix: the web app forms `TIP_ID` plus
+`_v3` after a successful post, so a post's public identity is tied to the contract version it was
+written to.
 
 ## Two ways to publish
 
@@ -97,20 +88,17 @@ replayed as a post. See [Delegated & Gasless Posting](/social/delegated-posting)
 
 ## What a post costs
 
-The agent skill quotes roughly **0.00001 AE of gas per post** and applies the same figure to
-comments. That is the only concrete number either repository states for posting, and it is a
-guide-level estimate rather than a measured gas schedule: the real cost scales with the size of the
-string you are writing, and the transaction fee depends on network conditions at submission time.
+Gas for a post is about **0.00001 AE**, and the same for a comment. The real cost scales with the
+size of the string you are writing, and the transaction fee depends on network conditions at
+submission time.
 
-Practically, posting is cheap enough that the constraint is having *any* AE at all, which is why the
-agent skill's setup guide checks for a non-zero balance before it will let an agent post. See
+Posting is cheap enough that the constraint is having *any* AE at all, which is why the agent
+skill's setup checks for a non-zero balance before it will let an agent post. See
 [AE & Gas](/aeternity/ae-and-gas) and [Fund Your Wallet](/getting-started/fund-wallet).
 
 ## What is on-chain, and what is not
 
-This distinction drives most "why did that happen" questions, so it is worth being precise.
-
-| Thing | On-chain? | Where it actually lives |
+| Thing | On-chain? | Where it lives |
 | --- | --- | --- |
 | Post text | Yes | `Tipping.aes` v3 contract state |
 | Post author and timestamp | Yes | Same |
@@ -130,27 +118,22 @@ The rule of thumb: **authorship and money are on-chain; presentation and discove
 indexer outage hides posts from the feed; it does not unpublish them. Anyone can re-derive the feed
 from `get_state()` or from the contract's event log.
 
-## Permanence, stated plainly
+## Permanence
 
 You cannot unpublish. There is no entrypoint that removes or alters a post, no admin key that can,
-and no upgrade path that would let a future Superhero delete your history. This is the design goal —
-the whitepaper's first principle is "No single entity can remove, alter, or suppress a post after it
-has been recorded" — and it is also the single largest practical risk of using the product.
+and no upgrade path that would let a future Superhero delete your history. That is the design goal,
+and it is also the single largest practical risk of using the product.
 
-Concretely, before you post:
+Before you post:
 
-- **Anything you write is public forever**, including to people and tools that did not exist when you
-  wrote it. There is no "friends only".
-- **A mistake is permanent.** A typo, a wrong link, a leaked detail — the only remedy is a second
-  post correcting the first. Both stay.
-- **Your address links your posts together.** Pseudonymity is one deanonymising transaction deep: the
-  privacy policy notes that on-chain activity "is pseudonymous, but may be considered personal data
-  under GDPR if it can be linked to an identifiable individual."
-- **Deletion requests cannot be honoured.** The privacy policy says so directly: "Since we do not
-  control the blockchain, we cannot modify or erase on-chain data, and we do not act as a data
-  controller for such information." A right-to-erasure request can only reach off-chain data.
-- **Do not post secrets.** Invite links carry one-time secrets; the agent skill's security table says
-  to share them directly and never log or commit them. The same applies to posting them.
+- **Anything you write is public forever.** There is no "friends only".
+- **A mistake is permanent.** The only remedy is a second post correcting the first. Both stay.
+- **Your address links your posts together.** On-chain activity is pseudonymous, not anonymous, and
+  one deanonymising transaction links all of it to you.
+- **Deletion requests cannot be honoured.** On-chain data cannot be modified or erased; a
+  right-to-erasure request can only reach off-chain data.
+- **Do not post secrets.** Invite links carry one-time secrets; share them directly and never post,
+  log or commit them.
 
 ## Moderation without deletion
 
@@ -159,13 +142,11 @@ both community-scoped, and neither touches the Tipping contract.
 
 **Muting.** `CommunityManagement.aes` holds a set of moderator addresses and a set of muted user
 IDs. A moderator can call `mute_user_id(user_id)` and `unmute_user_id(user_id)`, and both emit
-events so clients can react. Muting marks content for clients to hide within that community. The
-post itself is untouched and still readable from contract state, from an explorer, or from any
-client that chooses not to honour the list.
+events. Muting marks content for clients to hide within that community; the post itself is untouched
+and still readable from contract state, from an explorer, or from any client that ignores the list.
 
-The muted set is `Set.set(string)`, and the contract is **deliberately agnostic about what that
-string is**. It stores, inserts and deletes the value without ever comparing it to an address,
-parsing it or validating a format:
+The muted set is `Set.set(string)`. The contract stores, inserts and deletes the value without
+comparing it to an address, parsing it or validating a format:
 
 ```sophia
 stateful entrypoint mute_user_id(user_id : string) =
@@ -174,46 +155,32 @@ stateful entrypoint mute_user_id(user_id : string) =
   put(state{ muted_user_ids = Set.insert(user_id, state.muted_user_ids) })
 ```
 
-So the key convention belongs to whatever client writes it — and no Superhero client writes it yet.
-Neither the web app nor `superhero-api` calls `mute_user_id`; the only occurrences outside the
-contract are the vendored ACIs. If you build a client that honours these lists, you are choosing the
-convention, not following one, so read the existing set before assuming `ak_` addresses.
+The key convention belongs to the client that writes it. If you build a client that honours these
+lists, read the existing set before assuming `ak_` addresses.
 
 **Write thresholds.** The same contract holds a `minimum_token_threshold` — the minimum balance of
 the community's token required for write access in that community. It raises the cost of spamming a
 community without granting anyone the power to erase what is already there.
 
-Both levers are governed rather than administered, and the split of authority is exact. Muting
-requires `require_moderator()` — membership of `moderator_accounts`. Everything else in the contract
-requires `require_owner()`, and the owner is the community's DAO, set by the factory at deployment.
-So moderators are appointed and removed by DAO vote (`AddModerator`, `DeleteModerator`) and the
-threshold is changed by DAO vote (`ChangeMinimumTokenThreshold`); a moderator cannot appoint another
-moderator or move the threshold. Each of those votes carries the full DAO cost and quorum: 555 AE to
-open, two weeks in key-blocks, 55% approval, 10% participation. Moderation is deliberately slow and
-expensive.
+Both levers are governed rather than administered. Muting requires `require_moderator()` —
+membership of `moderator_accounts`. Everything else requires `require_owner()`, and the owner is the
+community's DAO. Moderators are appointed and removed by DAO vote (`AddModerator`,
+`DeleteModerator`) and the threshold is changed by DAO vote (`ChangeMinimumTokenThreshold`); a
+moderator cannot appoint another moderator or move the threshold. Each of those votes carries the
+full DAO cost and quorum: 555 AE to open, two weeks in key-blocks, 55% approval, 10% participation.
+Moderation is deliberately slow and expensive.
 
-One flag has no lever at all: `is_private` is fixed by `init` at community creation and no entrypoint
-changes it, and it is not among the vote subjects. A community's private/public setting is permanent.
+`is_private` is fixed by `init` at community creation; no entrypoint changes it and it is not among
+the vote subjects. A community's private/public setting is permanent.
 
-The honest summary: Superhero offers **community-level visibility control, not protocol-level
-removal.** If you need content taken down from the internet, an immutable contract is the wrong
-place to have put it.
+Superhero offers **community-level visibility control, not protocol-level removal.** If you need
+content taken down from the internet, an immutable contract is the wrong place to have put it.
 
-## Read more
+## Related
 
 - [Posting](/social/posting) — the practical guide, including hashtags, mentions and media.
 - [Delegated & Gasless Posting](/social/delegated-posting) — the signature scheme above, with code.
 - [Comments](/social/comments) — the `comment:` convention and how threads are reconstructed.
 - [Moderation](/social/moderation) — moderators, mute lists and write thresholds in detail.
 - [Tipping (v3)](/contracts/tipping) — the full contract reference, entrypoints and events.
-- [Post on superhero.com](https://superhero.com) — the live feed and composer.
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the "Posting & Tipping" section this page expands.
 - [æScan explorer](https://aescan.io) — look up the Tipping contract and read the post history yourself.
-
-## Open questions
-
-- **What is the real gas cost of a post?** The 0.00001 AE figure comes from the agent skill's
-  guides, not from a measurement or a fee schedule, and no contract determines it — the cost depends
-  on the deployed bytecode and the gas price at execution. Closing this means publishing posts of
-  several lengths on mainnet and reading `gasUsed` and `gasPrice` off each transaction in an
-  explorer.

@@ -1,14 +1,13 @@
 ---
 title: "Trending & Topics API"
-description: "Trending tags, their scores and sources, topic feeds, and how a tag maps to a token."
+description: "Trending tags and their scores, topic feeds, the trending-score formula and how a tag maps to a token."
 ---
 
 # Trending & Topics API
 
 Trending is the entry point for most agent strategies: find what is moving, then find whether a
-token exists for it. Two surfaces do this — **trending tags**, which are scored words ingested
-from external providers, and **topics**, which are hashtags that have actually been used in posts
-on Superhero.
+token exists for it. Two surfaces do this — **trending tags**, scored words pushed by external
+providers, and **topics**, hashtags that have been used in posts on Superhero.
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
 
@@ -18,7 +17,7 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | --- | --- | --- |
 | `GET /api/trending-tags` | `order_by`, `order_direction`, `search`, `limit`, `page` | Scored tags, each with its matching token joined in |
 | `GET /api/trending-tags/{tag}` | — | One tag, without the token join |
-| `POST /api/trending-tags` | — | Ingest tags from an external provider. **Needs an API key** |
+| `POST /api/trending-tags` | — | Ingest tags from a provider. **Requires an API key** |
 | `GET /api/topics` | `order_by`, `order_direction`, `search`, `limit`, `page` | Paginated topics |
 | `GET /api/topics/{id}` | — | One topic, by UUID or name |
 | `GET /api/topics/name/{name}` | — | One topic, by name |
@@ -32,75 +31,42 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 
 | Parameter | Notes |
 | --- | --- |
-| `order_by` | `score` (default), `source` or `created_at`. **Anything else is a 400** |
+| `order_by` | `score` (default), `source` or `created_at`. Anything else is a 400 |
 | `order_direction` | `ASC` or `DESC`, default `DESC`. Anything else is a 400 |
-| `search` | Substring match on the tag, `ILIKE`. Rejected above 100 characters |
+| `search` | Case-insensitive substring match on the tag. Rejected above 100 characters |
 | `limit`, `page` | `limit` defaults to 100 and must be 1–100; outside that range it is a 400 |
-
-`order_by=token_sale_address` — which some hand-written clients still send — **is rejected** with
-`400 Invalid order_by value: token_sale_address`. The allow-set in
-`superhero-api/src/trending-tags/controllers/trending-tags.controller.ts` is literally
-`new Set(['score', 'source', 'created_at'])`, and there is no such column on the entity. Clients
-carrying that enum are out of date.
 
 ```bash
 curl -s "https://api.superhero.com/api/trending-tags?order_by=score&order_direction=DESC&limit=20"
 ```
 
-### Item shape
-
-A row is the `TrendingTag` entity
-(`superhero-api/src/trending-tags/entities/trending-tags.entity.ts`):
-
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `id` | number | Auto-increment row id |
+| `id` | number | Row id |
 | `tag` | string | The normalised tag, unique |
-| `description` | string or null | Always null today — nothing writes it |
+| `description` | string or null | Currently always null |
 | `score` | number | The provider's score, as sent |
 | `source` | string | The `provider` string from the ingest call |
 | `created_at` | string | ISO 8601 |
+| `token` | `TokenDto` or null | List endpoint only. The token whose `name` equals `tag`; absent or null when there is none |
 
-The list endpoint additionally attaches a nested **`token`** object via
-`leftJoinAndMapOne('trending_tag.token', 'token', 'token', 'token.name = trending_tag.tag')`.
-That join — tag equals token *name* — is the token association. There is no
-`token_sale_address` column; take `token.sale_address` off the nested object, and expect `token`
-to be absent or null for a tag with no matching token.
+Take `token.sale_address` off the nested object to reach the token.
 
-`GET /api/trending-tags/{tag}` returns the bare entity for one tag, with **no** `token` join. It
-normalises the path parameter the same way ingest does, so `/superHero` finds `SUPER-HERO`. It
+`GET /api/trending-tags/{tag}` returns the bare row for one tag, with no `token` join. It
+normalises the path parameter the same way ingest does, so `/superHero` finds `SUPER-HERO`, and
 404s with `Trending tag not found` when there is no row.
 
-### `score` — what scale, and is it comparable?
+### `score` and `source`
 
-`score` is whatever the provider sent, parsed with `parseFloat`. The backend applies **no**
-normalisation, no cap and no rescaling (`TrendingTagsService.createTrendingTags`). There is no
-documented range.
-
-Scores are nevertheless comparable *within a response*, for a reason that is easy to miss: a
-`POST /api/trending-tags` with a non-empty `items` array calls `repository.clear()` — it
-**truncates the whole table** — before inserting. So the table always holds exactly the most
-recent ingest batch, from one provider, on one scale. You will not see two providers' magnitudes
-mixed in the same listing; you will see the last one to post.
-
-The practical consequence is that `score` is a ranking key, not a quantity. Sort by it; do not
-compare it across time, and do not attach units to it.
-
-### `source` — where a trend comes from
-
-Trending tags are **ingested from external providers**, not derived from Superhero activity.
-`POST /api/trending-tags` takes a `provider` string plus an array of `tag` / `score` items, and
-`source` on a read row is that `provider` verbatim. The DTO's `x`, `facebook` and `github` are
-examples in the Swagger annotation, not an allow-list: `provider` is validated only as a
-non-empty string, so any value can land in `source`.
-
-The backend has no scheduled pull of its own. `TrendingTagsService.saveAllTrendingTags`, gated by
-`PULL_TRENDING_TAGS_ENABLED`, has a `// TODO` for a body and does nothing. Everything in the
-table therefore arrived over `POST`.
+Tag scores are supplied by the provider that posts them; the API applies no normalisation, cap or
+rescaling, and there is no documented range. Because each ingest replaces the whole table, every
+score in a response comes from one provider on one scale — so `score` is a ranking key within a
+response, not a quantity to compare across time or attach units to. `source` is the `provider`
+string as sent.
 
 ### Normalisation
 
-`normalizeTagName` in `src/trending-tags/utils/tag-name.util.ts` does, in order:
+Tags are normalised on ingest and on lookup:
 
 ```text
 camelCase -> kebab-case   (\p{Ll})(\p{Lu})  ->  $1-$2
@@ -110,16 +76,14 @@ collapse runs of "-" and trim leading/trailing "-"
 ```
 
 So `CamelCase` becomes `CAMEL-CASE`, `dog` plus an emoji becomes `DOG`, `привет` becomes
-`ПРИВЕТ`, and `!!!` becomes the empty string — which ingest skips with an error entry rather
-than storing. Non-Latin scripts survive: this is deliberate, because the CHINESE, ARABIC and
-RUSSIAN collections mint tokens whose names are not Latin, and the tag has to come out equal to
-the token name for the join to resolve. See
-[Collections and naming](/tokens/collections-and-naming).
+`ПРИВЕТ`, and `!!!` becomes the empty string, which ingest skips with an error entry. Non-Latin
+scripts survive so that a tag comes out equal to a token name in the CHINESE, ARABIC or RUSSIAN
+collections. See [Collections and naming](/tokens/collections-and-naming).
 
-### `POST /api/trending-tags` requires an API key
+### `POST /api/trending-tags`
 
-It is guarded by `ApiKeyGuard`
-(`superhero-api/src/trending-tags/guards/api-key.guard.ts`). Send the key as either header:
+Requires the API key, sent as `x-api-key` or `Authorization: Bearer`. A missing or wrong key is
+a `401`.
 
 ```bash
 curl -s -X POST "https://api.superhero.com/api/trending-tags" \
@@ -128,12 +92,8 @@ curl -s -X POST "https://api.superhero.com/api/trending-tags" \
   -d '{"provider":"x","items":[{"tag":"SuperHero","score":"95.5"}]}'
 ```
 
-`Authorization: Bearer YOUR_KEY` is accepted as an alternative. The guard compares the value in
-constant time against the server's `TRENDING_TAGS_API_KEY` and throws `401` when the key is
-missing, wrong, or when the server's own key is unset or shorter than 16 characters — a
-misconfigured deployment fails closed rather than open.
-
-The response is a summary, not the stored rows:
+`provider` is any non-empty string. A call with a non-empty `items` array **replaces the entire
+table**. The response is a summary, not the stored rows:
 
 ```json
 {
@@ -142,38 +102,29 @@ The response is a summary, not the stored rows:
 }
 ```
 
-Remember that this call replaces the entire table.
-
 ## From a tag to a token
 
-There is no single "resolve tag to token" endpoint. Three routes, in the order the web app and
-the agent skill use them:
+Three routes, in order of cost:
 
-1. **Read the nested `token` off the tag row.** The list endpoint already joins it on
-   `token.name = trending_tag.tag`. Free, but only on the list — the single-tag route does not
-   join.
-2. **Look the name up directly.** `GET /api/tokens/{name}` resolves a token by name, not just by
-   address, and 404s cleanly when no token exists. This is what
-   `superhero-token-swap.mjs lookup` does first.
-3. **Search.** `GET /api/tokens?search={tag}` matches on name, for partial and fuzzy cases.
+1. **Read the nested `token` off the tag row.** The list endpoint joins it on
+   `token.name = trending_tag.tag`. Free, but only on the list.
+2. **Look the name up directly.** `GET /api/tokens/{name}` resolves a token by name and 404s
+   when none exists.
+3. **Search.** `GET /api/tokens?search={tag}` matches on name, for partial cases.
 
-Posts go the other way for free: every `PostDto` carries `trend_mentions`, an array that already
-resolves each `#hashtag` in the body to a `sale_address`, its `collection_info` and a
-`performance` summary. See [Posts](/api-reference/posts).
+Posts go the other way for free: every `PostDto` carries `trend_mentions`, which resolves each
+`#hashtag` in the body to a `sale_address`, its `collection_info` and a `performance` summary.
+See [Posts](/api-reference/posts).
 
 ## The trending-score formula
 
-The tag `score` and a token's `trending_score` are different numbers with nothing in common. The
-tag score is a provider's opinion, passed through. `TokenDto.trending_score` is computed by the
-backend, from Superhero's own data, with a published formula.
-
-It is the default sort for the trending token list:
+The tag `score` and a token's `trending_score` are different numbers. `TokenDto.trending_score`
+is computed from Superhero's own data with the formula below, and is the default sort for the
+trending token list:
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens?order_by=trending_score&order_direction=DESC&limit=10"
 ```
-
-That is exactly what `superhero-trending.mjs tokens` calls.
 
 ### Shape and range
 
@@ -199,71 +150,57 @@ freshness     = 1 / (1 + age_hours / 2) ^ 1.15        when pre_decay > 0, else 0
 trending_score = round(pre_decay * freshness, 6)
 ```
 
-Every weight set sums to 1 and every `normalized(...)` term lies in `[0, 1]`, so `pre_decay` lies
-in `[0, 1]`; `freshness` is at most 1 (at zero age) and falls monotonically. **`trending_score`
-is therefore a decimal in `[0, 1]`, rounded to six places.** A score of 0 means either no
-activity in the window or a non-finite computation, which the writer coerces to 0.
+Every weight set sums to 1 and every `normalized(...)` term lies in `[0, 1]`, so `pre_decay`
+lies in `[0, 1]`; `freshness` is at most 1 at zero age and falls monotonically.
+**`trending_score` is a decimal in `[0, 1]`, rounded to six places.** A score of 0 means no
+activity in the window.
 
-**It is comparable across tokens.** The caps, weights and decay constants are module-level
-constants shared by every token — there is no per-token or per-universe normalisation, and
-nothing in the calculation depends on what other tokens are doing. That is the deliberate
-improvement over the previous min-max formula, which divided by a platform-wide range and
-produced `NaN` when the range collapsed.
-
-It is *not* comparable across time without care: the same activity scores lower an hour later,
-because `age_hours` is measured from the most recent qualifying event at read time.
+**It is comparable across tokens.** The caps, weights and decay constants are shared by every
+token, and nothing in the calculation depends on what other tokens are doing. It is *not*
+comparable across time without care: the same activity scores lower an hour later, because
+`age_hours` is measured from the most recent qualifying event.
 
 ### Inputs
 
-The window is the **last 24 hours** (`WINDOW_HOURS: 24`).
+The window is the **last 24 hours**.
 
 | Signal | Cap | Weight | Source |
 | --- | --- | --- | --- |
-| `active_wallets` | 25 | 0.40 of trading | `COUNT(DISTINCT address)` over the token's transactions |
-| `buy_count` | 40 | 0.20 | transactions with `tx_type = 'buy'` |
-| `sell_count` | 40 | 0.20 | transactions with `tx_type = 'sell'` |
-| `volume_ae` | 5000 | 0.20 | `SUM(amount->>'ae')` over `buy`, `sell` and `create_community` |
-| `mention_posts` | 15 | 0.32 of social | top-level posts whose body mentions the symbol |
-| `mention_comments` | 50 | 0.32 | comments anywhere in a thread rooted on such a post |
-| `unique_authors` | 20 | 0.22 | distinct `sender_address` across those posts and comments |
-| `tips_count` | 15 | 0.05 | tips on those posts, excluding self-tips |
-| `tips_amount_ae` | 250 | 0.03 | `SUM(amount)` of those tips |
-| `reads` | 200 | 0.06 | `post_reads_daily` rows for those posts |
+| `active_wallets` | 25 | 0.40 of trading | Distinct trader addresses over the token's transactions |
+| `buy_count` | 40 | 0.20 | Transactions with `tx_type = 'buy'` |
+| `sell_count` | 40 | 0.20 | Transactions with `tx_type = 'sell'` |
+| `volume_ae` | 5000 | 0.20 | Sum of `amount.ae` over `buy`, `sell` and `create_community` |
+| `mention_posts` | 15 | 0.32 of social | Top-level posts whose body mentions the symbol |
+| `mention_comments` | 50 | 0.32 | Comments anywhere in a thread rooted on such a post |
+| `unique_authors` | 20 | 0.22 | Distinct `sender_address` across those posts and comments |
+| `tips_count` | 15 | 0.05 | Tips on those posts, excluding self-tips |
+| `tips_amount_ae` | 250 | 0.03 | Sum of those tips, in AE |
+| `reads` | 200 | 0.06 | Daily read counts for those posts |
 
-Trading is worth 0.35 of the total and social 0.65 — social activity dominates by design.
+Trading is worth 0.35 of the total and social 0.65.
 
-Attribution is by direct `#SYMBOL` mention. There is no persisted post-to-token foreign key; a
-top-level post that mentions the symbol becomes the root of a token thread, and every
-non-hidden comment, tip and read anywhere in that thread then counts for the token, whether or
-not it repeats the hashtag.
+Attribution is by direct `#SYMBOL` mention: a top-level post that mentions the symbol becomes
+the root of a token thread, and every non-hidden comment, tip and read anywhere in that thread
+counts for the token, whether or not it repeats the hashtag.
 
 ### When it is recomputed
 
 | Trigger | Cadence |
 | --- | --- |
-| A trade, post, comment or tip involving the token | immediately, via the `update-trending-scores` Bull queue, deduped per symbol with a 5-second delay |
-| `ACTIVE_REFRESH_CRON` — tokens with activity in the last 120 minutes | `0 */2 * * *`, every two hours, up to 250 tokens |
-| `STALE_BACKFILL_CRON` — tokens whose score is older than 30 minutes | `30 */6 * * *`, every six hours, up to 150 tokens |
-| `GET /api/tokens/{address}/score` | on demand, and it persists the result |
+| A trade, post, comment or tip involving the token | Immediately, via a queue deduped per symbol with a 5-second delay |
+| Active refresh — tokens with activity in the last 120 minutes | `0 */2 * * *`, every two hours, up to 250 tokens |
+| Stale backfill — tokens whose score is older than 30 minutes | `30 */6 * * *`, every six hours, up to 150 tokens |
+| `GET /api/tokens/{address}/score` | On demand, and it persists the result |
 
-Because decay is applied at write time rather than read time, a token with no new activity keeps
-a stale score until one of the backfill paths reaches it. `trending_score_update_at` tells you
-how stale.
-
-All of the constants above live in `TRENDING_SCORE_CONFIG` in
-`superhero-api/src/configs/constants.ts`; the calculation is
-`TokensService.calculateTokenTrendingMetrics`. A design note shipped with the backend explains
-the reasoning: `superhero-api/docs/bcl-trending-score.md`. Note that that document's "Current
-configuration" section quotes an older cron (`*/2 * * * *`) and lookback (15 minutes) than the
-code; the constants file is the one that runs.
+Decay is applied at write time, so a token with no new activity keeps its last score until a
+backfill reaches it. `trending_score_update_at` tells you how stale.
 
 ### Which tokens are eligible
 
-Sorting by `trending_score` applies a gate before the sort: at least **5 holders**, **2** all-time
-posts mentioning the symbol and **3** all-time trades
-(`TOKEN_LIST_ELIGIBILITY_CONFIG`). `GET /api/tokens/{address}/trending-eligibility` shows one
-token's standing against those thresholds. If no token at all clears the gate the list is
-re-queried without it, so the trending tab is never empty.
+Sorting by `trending_score` applies a gate before the sort: at least **5 holders**, **2**
+all-time posts mentioning the symbol and **3** all-time trades.
+`GET /api/tokens/{address}/trending-eligibility` shows one token's standing against those
+thresholds. If no token clears the gate the list is re-queried without it.
 
 ## Topics
 
@@ -276,18 +213,14 @@ A topic is a hashtag that exists because someone posted it, with a post count at
 | `search` | Substring match on the name |
 | `limit`, `page` | Standard pagination |
 
-`GET /api/topics/name/{name}` returns one topic with a `posts` array and a `post_count` number.
-The web app uses `post_count` when it is a number and otherwise falls back to the length of
-`posts`, so treat the count as advisory. `GET /api/topics/{id}` accepts a UUID **or** a name, and
-`GET /api/topics/popular/trending` is a ready-made "most used" list with no parameters.
-
 ```bash
 curl -s "https://api.superhero.com/api/topics/name/superhero"
 curl -s "https://api.superhero.com/api/topics?order_by=post_count&order_direction=DESC&limit=20"
 ```
 
-A topic row is `TopicDto` (`superhero-api/src/social/dto/topic.dto.ts`), backed by the `topics`
-table:
+`GET /api/topics/name/{name}` returns one topic with a `posts` array and a `post_count` number.
+`GET /api/topics/{id}` accepts a UUID or a name, and `GET /api/topics/popular/trending` is a
+ready-made "most used" list with no parameters.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -299,41 +232,26 @@ table:
 | `created_at` / `updated_at` | string | ISO 8601 |
 | `version` | number | Indexer bookkeeping |
 
-The `token` relation is marked `persistence: false` — it is resolved for reads and never written
-through, so it is the topic-side equivalent of the trending tag's nested `token`.
-
 ## `GET /api/search`
 
-One request across all three entity types, run in parallel server-side:
+One request across all three entity types:
 
 | Parameter | Notes |
 | --- | --- |
 | `q` | Search term, max 100 characters. A `q` shorter than 2 characters returns empty arrays |
 | `limit` | Max results **per category**, clamped to 1–20, default 5 |
 
-Returns `SearchResultDto`: `tokens` (full `TokenDto` objects), `accounts`
-(`address` plus `chain_name`) and `posts` (full `PostDto` objects).
-
 ```bash
 curl -s "https://api.superhero.com/api/search?q=super&limit=5"
 ```
 
-For a trend-discovery loop this is often a better first call than three separate requests.
+Returns `tokens` (full `TokenDto` objects), `accounts` (`address` plus `chain_name`) and
+`posts` (full `PostDto` objects).
 
-## Read more
+## Related
 
 - [Tokens API](/api-reference/tokens) — `trending_score` in context, and resolving a tag name to a token
 - [Posts API](/api-reference/posts) — `trend_mentions`, the pre-resolved tag-to-token links on every post
-- [API Conventions](/api-reference/conventions) — pagination and the `limit` cap that applies here
+- [API Conventions](/api-reference/conventions) — pagination and the `limit` cap
 - [Trending score](/tokens/trending-score) — what the score is meant to represent
 - [Collections and naming](/tokens/collections-and-naming) — which tags can become tokens at all
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list
-
-## Open questions
-
-- **Which providers hold a `TRENDING_TAGS_API_KEY` in production?** The backend imposes no
-  allow-list on `provider` and pulls nothing itself, so the `source` values in the live table are
-  whatever the key-holders send. Only the API operators know who holds a key; the values in the
-  Swagger example (`x`, `facebook`, `github`) are illustrative. Reading `GET /api/trending-tags`
-  and collecting the distinct `source` values shows who posted most recently, but because ingest
-  truncates the table that is one provider at a time, not the full set.

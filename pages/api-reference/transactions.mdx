@@ -6,8 +6,7 @@ description: "Query buys and sells across the platform, by token, by account, or
 # Transactions API
 
 Every buy and sell against a token sale contract is indexed here. Filter by token to watch a
-market, by account to watch a trader, or by both to answer "is this whale accumulating this
-token?". This is the endpoint most trading agents poll.
+market, by account to watch a trader, or by both.
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
 
@@ -15,25 +14,25 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 
 | Method & path | Query | Returns |
 | --- | --- | --- |
-| `GET /api/transactions` | `token_address`, `account_address`, `includes`, `limit`, `page` | Paginated `TransactionDto` |
-| `GET /api/transactions/by-hash` | `tx_hash` | One `TransactionDto` |
+| `GET /api/transactions` | `token_address`, `account_address`, `includes`, `limit`, `page` | Paginated trade rows |
+| `GET /api/transactions/by-hash` | `tx_hash` | One trade row |
 | `GET /api/tokens/{address}/transactions` | `interval`, `start_date`, `end_date`, `convertTo`, `mode` | Aggregated series for one token |
-| `GET /api/debug/failed-transactions` | — | The 500 most recent indexer failures. Public, unauthenticated |
+| `GET /api/debug/failed-transactions` | — | The 500 most recent indexer failures |
 
-These are **Superhero trade records**, not raw chain transactions. For arbitrary chain history —
-transfers, contract calls, name transactions — go to the middleware instead; see
+These are Superhero trade records, not raw chain transactions. For arbitrary chain history —
+transfers, contract calls, name transactions — use the middleware; see
 [Node & Middleware](/api-reference/node-and-middleware).
 
 ## `GET /api/transactions`
 
 | Parameter | Notes |
 | --- | --- |
-| `token_address` | A token sale address, AEX-9 address **or name** — it is resolved through the same lookup as `/api/tokens/{address}` |
+| `token_address` | A token sale address, AEX-9 address **or name** — resolved through the same lookup as `/api/tokens/{address}` |
 | `account_address` | Filter to trades made by this `ak_...`. A malformed address is a 400 |
 | `includes` | Only `token`. Inlines the full token object on each row |
 | `limit`, `page` | `limit` defaults to 100 and is capped at 100 |
 
-Both filters compose, which is the useful part:
+Both filters compose:
 
 ```bash
 # All recent trades, with the token inlined
@@ -45,97 +44,53 @@ curl -s "https://api.superhero.com/api/transactions?token_address=ct_YOUR_SALE_A
 
 Response is the standard `items` plus `meta` envelope.
 
-### Ordering is fixed, and there are no date bounds
+Results are ordered by `created_at` descending, and that is the only order available: there is
+no `order_by`, `order_direction`, `from_date` or `to_date` on this endpoint (unlike
+`GET /api/dex/transactions`). Unrecognised query keys are ignored. To bound a date range, page
+from the top and stop when `created_at` passes your cutoff, or use
+`GET /api/tokens/{address}/transactions`, which takes `start_date` and `end_date`.
 
-`TransactionsController.listTransactions` hard-codes
-`queryBuilder.orderBy('transactions.created_at', 'DESC')` and binds only the five parameters
-above. There is no `order_by`, no `order_direction`, no `from_date` and no `to_date` — unlike
-`GET /api/dex/transactions`, which has all four.
+With no `token_address`, the list is restricted to tokens from the **current** community
+factory. A `token_address` that cannot be resolved returns an empty page rather than a 404.
+`account_address` also adds `token.name`, `token.symbol`, `token.address`, `token.sale_address`
+and `token.collection` to each row even without `includes=token`.
 
-Sending them anyway is neither honoured nor rejected: these are loose `@Query('name')` bindings
-with no DTO behind them, so the global validation pipe has nothing to whitelist and unknown keys
-are dropped silently. **Newest-first is the only order you can get.** To bound a range, page
-backwards from the top and stop when `created_at` passes your cutoff, or use
-`GET /api/tokens/{address}/transactions`, which does take `start_date` and `end_date`.
-
-### What the filters imply
-
-With no `token_address`, the list is restricted to tokens from the **current** community factory
-(`token.factory_address = <current factory>`), so trades against a retired factory's tokens do
-not appear. With a `token_address` that cannot be resolved to a token, you get an empty page
-rather than a 404.
-
-`account_address` also widens the projection: it adds `token.name`, `token.symbol`,
-`token.address`, `token.sale_address` and `token.collection` to each row even without
-`includes=token`.
-
-## What a row actually contains
-
-The generated `TransactionDto` and the row on the wire are not the same thing. The endpoint
-paginates the `Transaction` **entity** directly
-(`superhero-api/src/transactions/entities/transaction.entity.ts`); the DTO exists to describe the
-route to Swagger and is out of step with it. These are the columns you will receive:
+## Trade row
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `tx_hash` | string | `th_...`, the primary key. Look it up in an explorer for the on-chain record |
+| `tx_hash` | string | `th_...`, the primary key |
 | `sale_address` | string | `ct_...` of the token sale contract this trade hit |
 | `tx_type` | string | `buy`, `sell` or `create_community` — see below |
 | `block_height` | number | Height of the including block |
 | `address` | string | The trader's `ak_...` |
 | `verified` | boolean | The indexer settled this row: no revalidation pending and the transaction is at least 5 hours old |
 | `volume` | string | Token quantity traded, in **whole tokens** |
-| `protocol_reward` | string | Protocol-fee mint attached to the trade, in whole tokens |
+| `protocol_reward` | string | Protocol-fee mint attached to the trade, in **whole tokens** |
 | `amount` | `PriceDto` | Total spent (buy) or received (sell), in **AE** |
-| `unit_price` | `PriceDto` | `amount / volume` — the realised price per token, in AE |
-| `previous_buy_price` | `PriceDto` or null | Curve buy price before this trade, from the `PriceChange` event |
-| `buy_price` | `PriceDto` | Curve buy price after this trade |
-| `sell_price` | `PriceDto` or null | Legacy, marked for removal in the entity |
-| `total_supply` | string | Token supply after the trade, in whole tokens |
+| `unit_price` | `PriceDto` | `amount / volume` — the realised price per token, in **AE** |
+| `previous_buy_price` | `PriceDto` or null | Curve buy price before this trade, in **AE** |
+| `buy_price` | `PriceDto` | Curve buy price after this trade, in **AE** |
+| `sell_price` | `PriceDto` or null | Legacy field |
+| `total_supply` | string | Token supply after the trade, in **whole tokens** |
 | `market_cap` | `PriceDto` or null | `buy_price * total_supply` — in **AE**, not aettos |
 | `created_at` | string | ISO 8601, the micro-block time |
 
-The DTO's `account`, `spent_amount_data` and `price_data` are the other spellings of `address`,
-`amount` and `unit_price` — see the alias table below. Its `id` has no counterpart at all: the
-table's primary key is `tx_hash`, and there is no numeric row id. With `includes=token`, a `token`
-object carrying the full token row is added.
+With `includes=token`, a `token` object carrying the full token row is added.
 
-### Field aliases — read defensively
+### Units
 
-The same values have shipped under more than one name, and the web app normalises every row
-before rendering it:
-
-```ts
-// src/utils/transactionNormalization.ts
-address:            transaction.address      ?? transaction.account
-price_data:         transaction.price_data   ?? transaction.unit_price ?? transaction.buy_price
-spent_amount_data:  transaction.spent_amount_data ?? transaction.amount
-```
-
-Reading the backend settles which side is current: the entity's columns are `address`,
-`unit_price` / `buy_price` and `amount` — the spellings the **agent skill** uses. The generated
-client's `account`, `price_data` and `spent_amount_data` are the aliases. Apply the fallback
-chain above and you are correct under either.
-
-### Units — everything here is already in whole units
-
-This is the one endpoint family where nothing needs dividing by 1e18, and it is easy to get
-wrong because the field names repeat those on `TokenDto`, which *are* scaled.
-
-The indexer converts every decoded event argument with `toAe()` before it stores the row
-(`TransactionService.parseTransactionData`). So:
+Nothing on a trade row needs dividing by 1e18, even though the field names repeat those on
+`TokenDto`, which *are* scaled:
 
 - `volume`, `protocol_reward` and `total_supply` are in **whole tokens**, not base units.
 - `amount`, `unit_price`, `buy_price` and `previous_buy_price` are in **AE**.
-- `market_cap` is in **AE** — whereas `TokenDto.market_cap` is in aettos. The two differ by 1e18.
+- `market_cap` is in **AE** — whereas `TokenDto.market_cap` is in aettos. The two differ by
+  1e18.
 
-Do not reuse a `toAe()` you applied to a token row on a transaction row.
+## `tx_type`
 
-## `tx_type` — the complete set
-
-`tx_type` is **the name of the contract entrypoint that was called**. The indexer writes
-`tx_type: rawTransaction.tx.function` verbatim, and it only writes a row at all when that
-function is one of the three in `BCL_FUNCTIONS` (`superhero-api/src/configs/constants.ts`):
+`tx_type` is the name of the contract entrypoint that was called. The complete set:
 
 | Value | What it is |
 | --- | --- |
@@ -143,18 +98,15 @@ function is one of the three in `BCL_FUNCTIONS` (`superhero-api/src/configs/cons
 | `sell` | A sale back into the curve |
 | `create_community` | Token creation. Carries the creator's initial purchase, so it has a non-zero `volume` and `amount` and counts as a buy |
 
-That is the whole enum for `/api/transactions`. Anything else — a DEX swap, an AE transfer, a
-governance vote — is never indexed into this table. Transactions whose `returnType` is `revert`
-are skipped, so every row is a trade that succeeded.
+Anything else — a DEX swap, an AE transfer, a governance vote — is never indexed into this
+table. Reverted transactions are skipped, so every row is a trade that succeeded.
 
-The consequence that matters for aggregation: **treat `create_community` as a buy.** The
-backend's own PnL, volume and trending queries all do, with `tx_type IN ('buy',
-'create_community')` on the acquisition side and `tx_type = 'sell'` on the disposal side. A
-holdings calculation that only counts `buy` will understate every creator's position by their
-founding purchase.
+**Treat `create_community` as a buy.** PnL, volume and trending all use
+`tx_type IN ('buy', 'create_community')` on the acquisition side and `tx_type = 'sell'` on the
+disposal side. A holdings calculation that only counts `buy` understates every creator's
+position by their founding purchase.
 
-For the DEX's separate and much larger `tx_type` vocabulary, see
-[DEX API](/api-reference/dex#tx_type-on-dex-transactions).
+For the DEX's separate `tx_type` vocabulary, see [DEX API](/api-reference/dex#tx_type).
 
 ## `GET /api/transactions/by-hash`
 
@@ -164,25 +116,22 @@ Takes the hash as a **query parameter**, not a path segment:
 curl -s "https://api.superhero.com/api/transactions/by-hash?tx_hash=th_YOUR_TX_HASH"
 ```
 
-Returns a single row, or 404 if that hash is not a Superhero trade. A malformed hash is a 400 —
-the parameter is validated as a `th_` encoding before the lookup runs.
+Returns a single row, or 404 if that hash is not a Superhero trade. A malformed hash is a 400.
 
-It has a useful side effect: on a miss, the handler fetches the transaction from the middleware
-(`/v3/txs/{hash}`) and tries to index it on the spot, returning the newly created row. So a trade
-that the indexer has not caught up to yet can be pulled in by asking for it. Only if that also
-fails do you get the 404.
+On a miss, the handler fetches the transaction from the middleware and indexes it on the spot,
+returning the newly created row — so a trade the indexer has not caught up to yet can be pulled
+in by asking for it. Only if that also fails do you get the 404.
 
-Note the asymmetry with the DEX, where the equivalent is a path segment:
-`GET /api/dex/transactions/{txHash}`.
+The DEX equivalent takes the hash as a path segment: `GET /api/dex/transactions/{txHash}`.
 
 ## `GET /api/tokens/{address}/transactions`
 
-Aggregated rather than row-level — this is what charts are built from.
+Aggregated rather than row-level — what charts are built from.
 
 | Parameter | Notes |
 | --- | --- |
 | `interval` | Bucket width **in seconds** |
-| `start_date`, `end_date` | ISO 8601. Note the snake_case here, against camelCase on the account endpoints |
+| `start_date`, `end_date` | ISO 8601. Snake_case here, against camelCase on the account endpoints |
 | `convertTo` | One of the nine currency codes, default `ae` |
 | `mode` | `normal` or `aggregated` |
 
@@ -190,22 +139,18 @@ Aggregated rather than row-level — this is what charts are built from.
 curl -s "https://api.superhero.com/api/tokens/SUPERHERO/transactions?interval=3600&mode=aggregated&convertTo=usd"
 ```
 
-For OHLC candles specifically, `GET /api/tokens/{address}/history` is the better endpoint — see
+For OHLC candles, `GET /api/tokens/{address}/history` is the better endpoint — see
 [Tokens](/api-reference/tokens).
 
 ## Live trades
 
-Polling `/api/transactions` is not the only option. The API pushes every live-indexed trade over
-Socket.IO on the **`token-history`** channel, carrying the row that was just written plus the
-token it belongs to. The web app seeds its list from this endpoint once and then updates from the
-socket.
-
-The client also registers a `token-transaction` listener, but the server never emits that event —
-`token-history` is the one to subscribe to. See [WebSocket](/api-reference/websocket).
+The API pushes every live-indexed trade over Socket.IO on the **`token-history`** channel,
+carrying the row that was just written plus the token it belongs to. Seed your list from this
+endpoint once, then update from the socket. See [WebSocket](/api-reference/websocket).
 
 ## Relating a record to the chain
 
-`tx_hash` is the on-chain transaction hash. Resolve it in an explorer or against the middleware:
+`tx_hash` is the on-chain transaction hash:
 
 | Where | URL |
 | --- | --- |
@@ -213,13 +158,12 @@ The client also registers a `token-transaction` listener, but the server never e
 | æScan (testnet) | `https://testnet.aescan.io/transactions/{tx_hash}` |
 | Middleware | `GET https://mainnet.aeternity.io/mdw/v3/transactions/{tx_hash}` |
 
-The web app polls the middleware form of this while a trade is confirming, treating a `404` as
-"still pending" rather than an error.
+While a trade is confirming, poll the middleware form and treat a `404` as "still pending".
 
 ## `GET /api/debug/failed-transactions`
 
-A public, unauthenticated diagnostics dump: the 500 most recent rows of the
-`failed_transactions` table, newest first, with no parameters and no pagination.
+A diagnostics endpoint: the 500 most recent rows of the failed-transactions table, newest first,
+with no parameters and no pagination.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -229,16 +173,14 @@ A public, unauthenticated diagnostics dump: the 500 most recent rows of the
 | `error_trace` | string | The stack trace |
 | `created_at` | string | ISO 8601 |
 
-It is an operations aid, not an API: the shape is an internal entity, there is no guard on the
-route, and the payload is unbounded stack-trace text. Useful when a trade of yours is missing
-from `/api/transactions` and you want to know whether the indexer choked on it. Do not build a
-product on it.
+Use it when a trade of yours is missing from `/api/transactions` and you want to know whether
+the indexer failed on it.
 
-## Read more
+## Related
 
 - [API Conventions](/api-reference/conventions) — the units table and the shared pagination envelope
 - [Tokens API](/api-reference/tokens) — the `TokenDto` that `includes=token` inlines
-- [Accounts API](/api-reference/accounts) — the aggregated PnL these individual trades roll up into
+- [Accounts API](/api-reference/accounts) — the aggregated PnL these trades roll up into
 - [WebSocket API](/api-reference/websocket) — push instead of poll for the same records
 - [Node & Middleware](/api-reference/node-and-middleware) — chain history beyond Superhero trades
 - [æScan](https://aescan.io/) — the block explorer for resolving a `tx_hash`

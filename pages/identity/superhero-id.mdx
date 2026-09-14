@@ -1,40 +1,13 @@
 ---
 title: "SuperheroID"
-description: "The identity layer that ties your wallet, names and social accounts together — as it is actually deployed."
+description: "Link your wallet, .chain name, X handle and Nostr key into one self-controlled on-chain identity."
 ---
 
 # SuperheroID
 
-SuperheroID is the name Superhero gives to its identity layer: an æternity address with a set
-of independently signed, independently revocable links attached to it. Today those links live
-in the `AddressLink` contract, not in `ProfileRegistry.aes` — the registry was superseded and
-its indexer removed. This page covers what an identity actually contains now, which parts are
-on chain, and how much of the marketing claim the code supports.
-
-## What the product claims
-
-The landing page makes three claims:
-
-> A DID (decentralized identifier) that links your social accounts to your wallet. Your
-> identity is verifiable, portable, and censorship-resistant — following the W3C standard
-> for decentralized identifiers.
-
-- W3C DID standard compliant
-- Links wallet, chain names and X handle
-- Self-sovereign — you control your data
-
-The in-app help text is more concrete:
-
-> SuperheroID is a decentralized digital identity smart contract that connects all your social
-> accounts to your wallet address. Your SuperheroID Profile will be set up automatically for
-> you after linking your X account.
-
-The linking claim holds up. The self-sovereignty claim holds up for the *authorisation* — every
-link requires your signature and only you can remove it — but not for the *submission*: the
-transaction is sent by a provider wallet Superhero controls, and that wallet is the only
-account permitted to write into the `x`, `nostr`, `bio`, `site` and `prefaens` namespaces. The
-W3C claim is asserted and not specified anywhere; see
-[DIDs and the W3C Standard](/identity/did-standard).
+SuperheroID is Superhero's identity layer: an æternity address with a set of independently
+signed, independently revocable links attached to it. The links live in the `AddressLink`
+contract. You authorise every link with your wallet signature, and only you can remove one.
 
 ## What it links
 
@@ -46,19 +19,13 @@ W3C claim is asserted and not specified anywhere; see
 | Bio | `bio` | `link` | Ownership of the address only |
 | Website | `site` | `link` | Ownership of the address only |
 
-Every one of those also needs your æternity signature over the claim message, so the table's
-"proof" column is what the provider adds *on top of* proving you hold the key. Each link is
-removed by its own `unlink`, which needs nothing but your signature.
+Every link also needs your æternity signature over the claim message; the proof column is what
+the provider checks on top of that. Each link is removed by its own `unlink`, which needs
+nothing but your signature.
 
-Two things the whitepaper describes are **not in this list because they no longer exist**:
-
-- **Custom names.** There is no custom-name namespace in `AddressLink`, no `set_custom_name`,
-  and therefore no auto-rename and no `CustomNameAutoRenamed` event. The `profile.username`
-  field survives in the API as a frozen cache column with no writer.
-- **Display source.** `set_display_source` is gone and `display_source` is not in the profile
-  response. A public name is chosen by a fixed server-side ladder, not by your preference.
-
-See [The AddressLink contract](/identity/profile-registry) for the full before-and-after.
+The transaction itself is submitted and paid for by Superhero's provider wallet, which is the
+only account permitted to write the `x`, `nostr`, `bio`, `site` and `prefaens` namespaces. See
+[AddressLink](/identity/profile-registry) for the provider-ownership model.
 
 ## What is on chain and what is not
 
@@ -70,71 +37,63 @@ See [The AddressLink contract](/identity/profile-registry) for the full before-a
 | AENS name registration, pointers, expiry | æternity AENS — the `prefaens` link references it, it does not own it |
 | Posts, comments, tip totals | `Tipping` v3 plus the API index |
 | Avatar, fullname, legacy username, follow counts, leaderboard stats | Superhero API |
-| Chain name shown on a profile | Derived hourly from the middleware, not from any contract link |
+| Chain name shown on a profile | Resolved hourly from the middleware, not from a contract link |
 
-`GET /api/profile/{address}` serves the merged aggregate: `address`, a `profile` object
+## Reading an identity
+
+`GET /api/profile/{address}` returns the merged aggregate: `address`, a `profile` object
 (`fullname`, `bio`, `site`, `avatarurl`, `username`, `prefered_aens_name`, `x_username`,
 `chain_name`, `chain_expires_at`, plus follow counts when the social-graph feature is on) and a
-resolved `public_name`. Its `includeOnChain` query flag is documented as deprecated: profiles
-are served entirely from indexed backend data, so there is nothing left to opt into.
+resolved `public_name`. Profiles are served entirely from indexed data; the `includeOnChain`
+query flag is deprecated.
 
-`public_name` is resolved by this ladder, in `ProfileReadService`:
+`public_name` is the first non-empty value of:
 
 ```text
 prefered_aens_name   (links.prefaens — the AENS name you explicitly linked)
-chain_name           (accounts.chain_name, from the middleware, refreshed hourly)
-username             (the frozen registry-era cache field)
+chain_name           (from the middleware, refreshed hourly)
+username             (the legacy profile field)
 address              (the ak_… itself)
 ```
 
-`GET /api/accounts/{address}` returns the raw side of the same thing, including the `links`
-object keyed by provider id. That is the authoritative view — the client reads it first and
+`GET /api/accounts/{address}` returns the raw side of the same data, including a `links`
+object keyed by provider id. That is the authoritative view; the client reads it first and
 treats the flat profile fields as fallbacks for older records.
 
-## How a third party verifies a claim
+## How a third party verifies a link
 
-Nothing here requires trusting Superhero's *API*, but some of it requires trusting Superhero's
-*provider wallet*. The difference matters:
+In order of how much can be checked independently:
 
-1. **Preferred `.chain` name.** Strongest. The link was written by `link_principal`, which
-   calls `AENSv2.lookup` inside the contract and aborts with `PRINCIPAL_MISMATCH` if the signer
-   does not own the name. You can independently resolve the name through AENS on any node and
-   compare its `account_pubkey` pointer. Both checks are protocol state.
-2. **Nostr key.** Strong off chain, weak on chain. The backend verified a Schnorr signature
-   from the npub over the exact claim message before submitting, but only the æternity
-   signature is recorded. A third party reading the chain sees consent to an npub string, not
-   proof of the Nostr key.
-3. **X handle.** Weakest. The chain records that the address consented to a handle string and
-   that the provider owner submitted it. The OAuth evidence lives only inside the backend and
-   is discarded. See [Verifying Your X Account](/identity/x-verification).
+1. **Preferred `.chain` name.** `link_principal` calls `AENSv2.lookup` inside the contract and
+   aborts with `PRINCIPAL_MISMATCH` if the signer does not own the name. You can independently
+   resolve the name through AENS on any node and compare its `account_pubkey` pointer. Both
+   checks are protocol state.
+2. **Nostr key.** The backend verifies a Schnorr signature from the npub over the exact claim
+   message before submitting, but only the æternity signature is recorded on chain. A reader
+   of the chain sees the address's consent to an npub string.
+3. **X handle.** The chain records that the address consented to a handle string and that the
+   provider owner submitted it. The OAuth evidence lives only inside the backend. See
+   [Verifying Your X Account](/identity/x-verification).
 4. **Bio and website.** Nothing to verify beyond ownership of the address.
-5. **Posts.** Independent of all of the above — a post's `sender` is whichever address signed
+5. **Posts.** Independent of the identity layer — a post's `sender` is whichever address signed
    the transaction, recorded by the `Tipping` contract.
 
-That ladder is the whole trust model. A verified badge in the UI means "an X link resolves for
-this account", not "this person is who they say they are".
+The verified badge on a profile means an `x` link exists for that account.
 
 ## Where you manage it
 
-In the app, SuperheroID lives behind the **Edit SuperheroID** action on your own profile at
-`https://superhero.com/users/` plus your address. The modal covers the `.chain` name selection
-and preferred-name link, the bio, the website link, and the X connection. Each change is a
-separate claim-sign-submit round trip, not one bulk save — a failure part-way through can leave
-the bio linked and the website not, which is why the editor reloads its state afterwards rather
-than trusting the form.
+Open your own profile at `https://superhero.com/users/` plus your address and choose **Edit
+SuperheroID**. The editor covers the `.chain` name selection and preferred-name link, the bio,
+the website and the X connection. Each change is a separate claim-sign-submit round trip, and
+the editor reloads its state after each one.
 
-The fields that have no writer any more — fullname, avatar, the legacy username — are not
-editable through any live endpoint.
+Fullname, avatar and the legacy username are read-only.
 
-## Read more
+## Related
 
-- [The AddressLink contract](/identity/profile-registry) — the contract, its entrypoints, its
-  provider-ownership model, and what replaced each registry feature.
-- [Names: Custom, Chain and X](/identity/names) — which of the three name types still exists,
-  and how a public name is resolved now.
-- [Verifying Your X Account](/identity/x-verification) — the `x` provider's flow in full, and
-  exactly what it proves.
+- [AddressLink](/identity/profile-registry) — the contract, its entrypoints and its
+  provider-ownership model.
+- [Names](/identity/names) — the name types and how a public name is resolved.
+- [Verifying Your X Account](/identity/x-verification) — the `x` provider's flow in full.
 - [Profiles & Accounts](/identity/profiles) — where each linked value appears on screen.
-- [DIDs and the W3C Standard](/identity/did-standard) — how far the DID framing goes.
-- [The Superhero whitepaper](https://superhero.com/whitepaper) — the "Superhero Onchain ID"
-  section, which describes the retired registry design rather than what runs.
+- [Identity and DIDs](/identity/did-standard) — how the model maps onto W3C DID Core.

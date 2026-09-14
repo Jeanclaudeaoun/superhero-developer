@@ -5,11 +5,9 @@ description: "Create AE-funded invite links, share them safely, revoke the unuse
 
 # Invite Links
 
-An invite link is a one-time secret key wrapped in a URL, backed by AE you have already
-locked in the AffiliationTreasury contract. Whoever opens the link claims the AE and becomes
-your level-1 invitee — which is how you start earning from the
-[affiliation system](/rewards/affiliation). This page covers creating links, the funding
-arithmetic, sharing them without losing the money, revoking, tracking, and the CLI.
+An invite link is a one-time secret key wrapped in a URL, backed by AE you have locked in the
+AffiliationTreasury contract. Whoever opens the link claims the AE and becomes your level-1
+invitee — which is how you start earning from the [affiliation system](/rewards/affiliation).
 
 > **Invite links contain one-time secrets.**
 >
@@ -21,12 +19,10 @@ arithmetic, sharing them without losing the money, revoking, tracking, and the C
 >   support ticket. Send it to one person, directly.
 > - **Never commit one to a repository**, and never write one into a log file, a shell
 >   history, an error report or a screenshot.
-> - **The app never persists the secret.** The atom holding generated invitations is
->   annotated "Do not persist invitation secrets locally" and is cleared on reload. If you
->   close the dialog without copying, the secret is gone — the AE stays locked on-chain and
->   the only way to get it back is to revoke the code.
-> - **Treat a leaked link as spent.** If one escapes, revoke it immediately rather than
->   hoping nobody noticed.
+> - **The app never persists the secret.** Generated links are held in memory and cleared on
+>   reload. If you close the dialog without copying, the secret is gone — the AE stays locked
+>   on-chain and the only way to get it back is to revoke the code.
+> - **Treat a leaked link as spent.** If one escapes, revoke it immediately.
 
 ## What a link looks like
 
@@ -35,8 +31,8 @@ https://superhero.com/#invite_code=<secret key of the one-time account>
 ```
 
 The app builds it from the current origin plus the `invite_code` fragment parameter. When
-someone lands on any page with that fragment, the invitation hook reads the code, strips the
-fragment and redirects them to the home feed, where the claim card appears.
+someone lands on any page with that fragment, the app reads the code, strips the fragment and
+redirects them to the home feed, where the claim card appears.
 
 The agent-skill CLI builds the same shape against the canonical host:
 
@@ -44,18 +40,18 @@ The agent-skill CLI builds the same shape against the canonical host:
 https://superhero.com#invite_code=<secret key>
 ```
 
-## Creating links in the app
+## Create links in the app
 
 1. Open [https://superhero.com/trends/invite](https://superhero.com/trends/invite) and
    connect your wallet.
 2. Find the **Generate Invites** card.
 3. Enter **Amount per invite (AE)** — the AE the recipient will claim — and **Number of
-   invites**. The form validates that your balance covers amount × count before submitting.
+   invites**.
 4. Press **Generate invite links** and confirm the transaction. All the links in one batch
    are registered in a single `register_invitation_code` call.
 5. A dialog opens with the links. **Copy them now.** The dialog will not close until you tick
    "I have copied the invitation links" — escape, clicking outside and the close button are
-   all blocked, and the checkbox row shakes if you try. That friction is deliberate.
+   all blocked.
 
 ## What it costs
 
@@ -69,23 +65,18 @@ plus       = the æternity transaction fee for the call itself
 ```
 
 `redemption_fee_cover` is **0.001 AE** (`10n ** 15n` aettos) in both the web app and the CLI,
-and that is also the contract's own minimum — `register_invitation_code` aborts with
-`MINIMUM_REDEMPTION_AND_FEE_NOT_MEET` below `10 ^ 15` aettos
-(`bcl-contracts/contracts/AffiliationTreasury.aes`). It funds the throwaway account so the
-recipient can pay for their own redemption transaction without already holding AE. The reason
-it is needed at all is explained under
-[`redemption_fee_cover`](/rewards/affiliation) on the affiliation page: redemption is signed
-by the invite's key, not by the recipient's wallet.
+and that is also the contract's minimum — `register_invitation_code` aborts with
+`MINIMUM_REDEMPTION_AND_FEE_NOT_MEET` below `10 ^ 15` aettos. It funds the one-time account so
+the recipient can pay for their own redemption transaction, which is signed by the invite's
+key rather than the recipient's wallet. See
+[`redemption_fee_cover`](/rewards/affiliation) on the affiliation page.
 
-So ten links of 1 AE each cost 10.01 AE plus gas.
+Ten links of 1 AE each cost 10.01 AE plus gas.
 
-Two arithmetic traps:
-
-- The contract checks `Call.value == (redemption_fee_cover + invitation_amount) × count`
-  with **exact equality**. Attaching more does not leave you a credit; it aborts with
-  `INVITATION_AMOUNT_AND_FEE_NOT_MATCHING`.
-- The app's balance check only validates amount × count and ignores the fee cover, so a
-  wallet funded to the exact AE amount can still fail the transaction.
+- The contract checks `Call.value == (redemption_fee_cover + invitation_amount) × count` with
+  **exact equality**. Attaching more aborts with `INVITATION_AMOUNT_AND_FEE_NOT_MATCHING`.
+- Fund your wallet for `(amount + 0.001) × count` plus the transaction fee. The app's form
+  checks your balance against `amount × count` only.
 
 ## Claiming — the recipient's side
 
@@ -93,16 +84,16 @@ The recipient opens the link and sees a card showing the gift amount and your ad
 connect a wallet and press **Claim reward**. The call is
 `redeem_invitation_code(<their wallet address>)`, signed by the invite's one-time key.
 
-Once it lands, two things are true: they hold the AE, and they are attached to you in the
-affiliation tree. Everything they subsequently spend on community tokens starts paying you
-0.300% at level 1, and pays your own inviter 0.125% at level 2.
+Once it lands, they hold the AE and are attached to you in the affiliation tree: everything
+they subsequently spend on community tokens pays you 0.300% at level 1, and your own inviter
+0.125% at level 2.
 
-An address can only be invited once. A second attempt fails with
-`INVITEE_ALREADY_REGISTERED`. A link that has been claimed already fails with
-`ALREADY_REDEEMED`, and the card detects that state before you press the button by reading
-the claimed flag from `get_invitation_code`.
+An address can only be invited once; a second attempt fails with
+`INVITEE_ALREADY_REGISTERED`. A link that has already been claimed fails with
+`ALREADY_REDEEMED`; the card reads the claimed flag from `get_invitation_code` and shows that
+state before the button is pressed.
 
-## Revoking
+## Revoke a link
 
 Revoke any link that leaked, or any that nobody claimed and you want the AE back.
 
@@ -115,33 +106,21 @@ All three call `revoke_invitation_code(invitation_address)` with your wallet. Th
 the public address of the one-time account, not the secret — it is safe to handle and it is
 what the invitation list shows you.
 
-**Revoking returns the gift, not the fee cover.** The contract spends exactly
-`invitation_amount` back to you:
+Revoking returns the `invitation_amount` to your wallet; the 0.001 AE fee cover was sent to
+the one-time address at registration and is not part of the refund. Revoking ten unclaimed
+1 AE links returns 10 AE, and costs a transaction fee.
 
-```sophia
-Chain.spend(Call.caller, invitation_amount)
-Chain.event(InvitationRevoked(invitation_address, inviter_address))
-put(state{ invitation_codes = Map.delete(invitation_address, state.invitation_codes) })
-```
+There is **no expiry**. An `invitation_codes` entry is the tuple
+`(inviter, invitation_amount, is_redeemed)` — it carries no timestamp, and no entrypoint
+prunes the map. An unclaimed link stays claimable indefinitely, which is why revoking a leaked
+one matters.
 
-The 0.001 AE `redemption_fee_cover` left the treasury at registration time, in a `Chain.spend`
-to the one-time invite address, and nothing sweeps it back. Revoking ten unclaimed 1 AE links
-returns 10 AE, not 10.01 AE, and costs another transaction fee on top. Treat the fee cover as
-sunk the moment you press Generate.
+Three errors you can hit: `INVITATION_NOT_REGISTERED` if the code was already revoked or never
+existed (the app uses this to drop a stale local entry), `ALREADY_REDEEMED` if somebody claimed
+it first (the app refreshes so the row flips to claimed), and `CALLER_NOT_INVITER` if the
+connected wallet is not the address that registered the code.
 
-There is also **no expiry**. An `invitation_codes` entry is the tuple
-`(inviter, invitation_amount, is_redeemed)` — it carries no timestamp and no height, no
-entrypoint prunes the map, and nothing in the contract references a deadline. An unclaimed
-link stays claimable indefinitely, which is exactly why revoking a leaked one matters: time
-will not close the hole for you.
-
-Three errors you can hit, all from the contract: `INVITATION_NOT_REGISTERED` if the code was
-already revoked or never existed (the UI uses this to drop a stale local entry),
-`ALREADY_REDEEMED` if somebody claimed it first (the UI refreshes so the row flips to
-claimed), and `CALLER_NOT_INVITER` if the connected wallet is not the address that registered
-the code.
-
-## Tracking your invitations
+## Track your invitations
 
 The **Your Invitations** list shows every code you registered, with one of three statuses:
 
@@ -153,33 +132,29 @@ The **Your Invitations** list shows every code you registered, with one of three
 
 The list is assembled from two sources:
 
-- **Middleware transaction history** — the app pages through the middleware's `/v3/transactions`
-  endpoint, filtered to the invitations contract and to your address as the caller, and keeps
-  the calls whose function name is `register_invitation_code` or `revoke_invitation_code`:
+- **Middleware transaction history** — the app pages through the middleware's
+  `/v3/transactions` endpoint, filtered to the invitations contract and to your address as
+  the caller, and keeps the calls whose function name is `register_invitation_code` or
+  `revoke_invitation_code`:
 
   ```text
   <middleware>/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ&caller_id=<your address>
   ```
 
-  This is the part of the list that survives a page reload. That contract address is a bare
-  constant in the client with no network branch, and it is the **mainnet** treasury —
-  `superhero-api/src/configs/contracts.ts` lists it as `BCL_FACTORY[mainnet]
-  .affiliation_address`, against `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK` for
-  testnet. So on testnet this half of the list is empty, and you need the API below or a
+  This is the part of the list that survives a page reload. The contract address is the
+  **mainnet** treasury; the testnet treasury is
+  `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK`. On testnet, use the API below or a
   middleware query against the testnet address.
 - **Superhero's API** — `GET /api/invitations` with an `inviter` filter, paginated, which
-  returns claim status per invitation so the app does not need one middleware lookup per
-  invitee. The relevant response fields are `receiver_address` (the one-time invite address),
-  `claimed`, `claimer_address`, `claimed_at` and `claim_tx_hash`. It also accepts
-  `order_by` of `amount` or `created_at`, `order_direction` of `ASC` or `DESC`, plus `limit`
-  and `page`.
+  returns claim status per invitation. The response fields are `receiver_address` (the
+  one-time invite address), `claimed`, `claimer_address`, `claimed_at` and `claim_tx_hash`.
+  It accepts `order_by` of `amount` or `created_at`, `order_direction` of `ASC` or `DESC`,
+  plus `limit` and `page`.
 
-  `limit` is validated to 1–100 and defaults to 100; `page` must be 1 or more; anything else
-  in `order_by` or `order_direction` is a 400. The backend indexes the treasury per network
-  (`src/plugins/bcl-affiliation/bcl-affiliation.plugin.ts` resolves
-  `affiliation_address` from the network id), so unlike the middleware query above this
-  endpoint works on testnet as well as mainnet. The underlying row carries `status` as one of
-  `pending`, `claimed` or `revoked`, plus `tx_hash`, `block_height`, `amount`,
+  `limit` is validated to 1–100 and defaults to 100; `page` must be 1 or more; any other
+  `order_by` or `order_direction` is a 400. The backend indexes the treasury per network, so
+  this endpoint works on testnet as well as mainnet. The underlying row carries `status` as
+  one of `pending`, `claimed` or `revoked`, plus `tx_hash`, `block_height`, `amount`,
   `sender_address`, `invitee_address`, `revoke_tx_hash` and `status_updated_at`.
 
 Because the secret keys are never persisted, links you generated in an earlier session appear
@@ -189,9 +164,9 @@ recoverable by revoking.
 ## From the command line
 
 The agent skill ships `scripts/superhero-invite.mjs`, which talks to the same contract. It
-requires `AE_PRIVATE_KEY` in the environment and runs against
-`https://mainnet.aeternity.io`. Run it from the skill's root directory — it reads
-`./contracts/CommunityFactory.aci.json` by relative path.
+requires `AE_PRIVATE_KEY` in the environment and runs against `https://mainnet.aeternity.io`.
+Run it from the skill's root directory — it reads `./contracts/CommunityFactory.aci.json` by
+relative path.
 
 ```bash
 # Print usage and the cost formula
@@ -208,39 +183,33 @@ node scripts/superhero-invite.mjs revoke ak_...
 ```
 
 `generate` prints a JSON object on stdout with `count`, `amount_ae_per_invite`,
-`total_cost_ae`, `tx_hash` and a `links` array. Progress messages go to stderr, so the
-stdout payload stays parseable.
+`total_cost_ae`, `tx_hash` and a `links` array. Progress messages go to stderr, so the stdout
+payload stays parseable.
 
 **The `links` array is the secret material.** Do not pipe it into a log, a CI artefact, a
 chat webhook, or anything an agent will later summarise into a shared transcript. Redirect
 stdout to a file with restrictive permissions, or read the links and clear the output.
 
-## Turning invites into withdrawable rewards
+## Turn invites into withdrawable rewards
 
-Creating and sharing links earns you nothing on its own. The affiliate balance only becomes
-withdrawable once **4 of your direct invitees have each spent at least 10 AE** in token sales
-— cumulatively, so ten 1 AE buys count the same as one 10 AE buy.
+The affiliate balance becomes withdrawable once **4 of your direct invitees have each spent at
+least 10 AE** in token sales, cumulatively. Only direct invitees count: someone your invitee
+invites earns you 0.125% at level 2 but does nothing for your qualification, so a wide first
+ring gets you paid sooner than a deep chain.
 
-The Collect Rewards card on the same page tracks this: a progress bar out of four, a
-per-invitee bar toward 10 AE for everyone still accumulating, and the live
-`get_accumulated_rewards` balance. Once the bar reads 4/4 and the balance is above zero,
-**Collect rewards** calls `withdraw()`. See [Claiming Rewards](/rewards/claiming).
-
-Only **direct** invitees count toward the four. Someone your invitee invites earns you
-0.125% at level 2 but does nothing for your qualification, so a wide first ring gets you paid
-sooner than a deep chain. And because credited rewards only stay claimable for the current
-30-day payout period plus the one before it, rewards earned long before you reach 4/4 expire
-unclaimed — the arithmetic is on [The Affiliation System](/rewards/affiliation).
+Rewards accumulate in 30-day periods and `withdraw()` pays the current and previous period,
+so withdraw monthly once you qualify. The Collect Rewards card tracks the gate and the live
+`get_accumulated_rewards` balance — see [Claiming Rewards](/rewards/claiming) and
+[The Affiliation System](/rewards/affiliation).
 
 ## Read more
 
 - [The Affiliation System](/rewards/affiliation) — the contract these links write to, the
-  four-level split, and the `redemption_fee_cover` mechanism in detail.
+  four-level split, and the `redemption_fee_cover` mechanism.
 - [Claiming Rewards](/rewards/claiming) — both sides of claiming: the recipient's gift and
   your own `withdraw()`.
-- [Superhero Rewards Program](/rewards/rewards-program) — the other, unrelated program on the
-  same page.
-- [Invitations and affiliations API](/api-reference/invitations-and-affiliations) — the REST surface
-  behind the invitation list.
+- [Superhero Rewards Program](/rewards/rewards-program) — the other program on the same page.
+- [Invitations and affiliations API](/api-reference/invitations-and-affiliations) — the REST
+  surface behind the invitation list.
 - [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — generate, track and
   revoke links here.

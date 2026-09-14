@@ -1,14 +1,14 @@
 ---
 title: "The Governance Registry"
-description: "The contract that indexes every poll and every delegation."
+description: "The Registry contract that indexes every governance poll and holds the delegation map, with its addresses, entrypoints and API."
 ---
 
 # The Governance Registry
 
-The `Registry` is the single entry point to æternity governance. It does two jobs: it keeps
-the index of every poll ever registered, and it holds the global delegation map. It does
-**not** hold votes — those live on each individual `Poll` contract — and it does not compute
-results, which happens off-chain in the governance backend.
+The `Registry` is the single entry point to æternity governance. It keeps the index of every
+poll ever registered, and it holds the global delegation map. It does **not** hold votes —
+those live on each individual `Poll` contract — and it does not compute results, which happens
+off-chain in the governance backend.
 
 One registry per network, deployed once, with no admin entrypoint and no upgrade path.
 
@@ -19,9 +19,9 @@ One registry per network, deployed once, with no admin entrypoint and no upgrade
 | Mainnet | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` |
 | Testnet | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` |
 
-These are the values the Superhero app ships as `GOVERNANCE_CONTRACT_ADDRESS`. The agent
-skill's CLI defaults to the same mainnet address and accepts an override through the
-`AE_GOVERNANCE_REGISTRY` environment variable, which is how you point it at testnet.
+The Superhero app ships these as `GOVERNANCE_CONTRACT_ADDRESS`. The agent skill's CLI defaults
+to the mainnet address and accepts an override through the `AE_GOVERNANCE_REGISTRY`
+environment variable, which is how you point it at testnet.
 
 ## State
 
@@ -37,21 +37,18 @@ Registry.poll_data = { poll         : Poll
                      , close_height : option(int) }
 ```
 
-Two design points follow from this shape.
+**`poll_data` caches the title and close height**, which also live on the poll contract, so a
+client can render a full poll list from one contract call instead of one call per poll — which
+is what the app and the CLI do.
 
-**`poll_data` duplicates the title and close height.** They also live on the poll contract.
-Caching them in the registry means a client can render a full poll list from one contract call
-instead of one call per poll — which is exactly what the app and the CLI do.
-
-**`delegations` is a plain address-to-address map.** That is the structural reason an account
-can have at most one outgoing delegation and any number of incoming ones. See
+**`delegations` is a plain address-to-address map**, which is why an account can have at most
+one outgoing delegation and any number of incoming ones. See
 [Delegation](/governance/delegation).
 
 `seq_id` is the counter behind poll ids: `add_poll` assigns the next one, so ids are dense,
-sequential and permanent. `created_height` records when the registry itself was deployed — and it is
-not decoration. The governance backend calls `created_height()` to know where to start scanning for
-`Delegation` and `RevokeDelegation` events when it reconstructs a historic delegation graph without
-a middleware.
+sequential and permanent. `created_height` records when the registry was deployed; the
+governance backend starts scanning for `Delegation` and `RevokeDelegation` events from that
+height when it reconstructs a historic delegation graph.
 
 ## Entrypoints
 
@@ -69,37 +66,27 @@ a middleware.
 | `created_height` | `() : int` | Deployment height |
 | `version` | `() : int` | Contract version |
 
-**There is no way to remove a poll, change its `is_listed` flag, or edit its cached title.** Those
-are not undocumented entrypoints — they do not exist. `Registry.aes` is 103 lines and the complete
-list of state-changing entrypoints is `add_poll`, `delegate` and `revoke_delegation`. There is no
-owner field, no admin, no pause, no migration hook and no `init` parameter.
+The complete list of state-changing entrypoints is `add_poll`, `delegate` and
+`revoke_delegation`. There is no way to remove a poll, change its `is_listed` flag, or edit its
+cached title, and there is no owner, admin, pause or migration hook.
 
-`add_poll` has no access control whatsoever: no caller check, no deposit, no author check, and no
-verification that the argument is really a poll beyond the fact that the call would revert if it
-could not answer `title()` and `close_height()`. Anyone can register any deployed contract of the
-right shape, including one they did not deploy, and choose `is_listed` themselves while doing it.
-Nothing prevents registering the same poll twice under two ids.
-
-That combination has one consequence worth planning around: **an abusive or mistaken registry entry
-is permanent.** Moderation, if any, happens in clients deciding what to render.
+`add_poll` can be called by any account for any deployed poll, including one the caller did
+not author, and the caller chooses `is_listed`. The call reverts if the argument cannot answer
+`title()` and `close_height()`. The same poll can be registered more than once under different
+ids. A registration is permanent; listing decisions happen in clients.
 
 `polls()` returns everything, unlisted included, because `is_listed` is a display hint rather
-than an access control. Clients filter it; the contract does not. See
-[Polls](/governance/polls).
+than an access control. See [Polls](/governance/polls).
 
-### The two registry sources
-
-Like the poll contract, the registry has a pre- and post-Iris source in the repository:
+### Contract versions
 
 | Source | `version()` | Notes |
 | --- | --- | --- |
-| `Registry.aes` | 1 | No `@compiler` pragma. Last builds with aesophia 5.0.0 |
+| `Registry.aes` | 1 | Builds with aesophia up to 5.0.0 |
 | `Registry_Compiler_v6.aes` | 2 | `@compiler >= 6`; `contract interface Poll` and `main contract Registry` syntax. Builds 6.0.0 through 8.0.0 |
 
-The bodies are otherwise identical — same state, same entrypoints, same events. The web app ships
-the `Registry_Compiler_v6.aes` bytecode and records `Registry.aes` as unbuildable under aesophia
-8.0.0. Read `version()` on the address you are calling if you need to know which one a given network
-is running; the ACI is the same either way.
+The two have the same state, entrypoints and events, so the ACI is the same either way. Read
+`version()` on the address you are calling if you need to know which build a network runs.
 
 ## Events
 
@@ -109,17 +96,15 @@ is running; the ACI is the same either way.
 | `Delegation` | delegator, delegatee |
 | `RevokeDelegation` | delegator |
 
-These three are the registry's whole public activity stream, and they are what the indexers
-consume. `AddPoll` lets a backend discover new polls without re-reading `polls()`; the
-delegation events let it maintain the delegation graph incrementally rather than re-reading the
-full map on every change.
+These three are the registry's whole activity stream. `AddPoll` lets an indexer discover new
+polls without re-reading `polls()`; the delegation events let it maintain the delegation graph
+incrementally.
 
-Note what is **not** here: votes. `Vote` and `RevokeVote` are emitted by each `Poll` contract,
-not by the registry, so an indexer has to subscribe per poll — which is why the governance
-backend discovers polls through `AddPoll` first and then follows them individually. See
-[Contract events](/contracts/events).
+`Vote` and `RevokeVote` are emitted by each `Poll` contract, not by the registry, so an
+indexer subscribes per poll — discovering polls through `AddPoll` first and then following
+them individually. See [Contract events](/contracts/events).
 
-## Calling it
+## Call it
 
 From the agent skill's CLI, which initialises the registry for you:
 
@@ -139,15 +124,13 @@ export AE_GOVERNANCE_REGISTRY=ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiS
 ```
 
 From your own client, initialise a contract instance against the registry ACI and the address
-for your network. The ACI ships in both repositories — as `RegistryWithEventsACI.json` in the
-agent skill's `contracts/` directory, and as `GovernanceRegistryACI.json` in the web app. The
-"with events" name refers to the event variant being declared in the ACI, which is what lets a
-client decode `AddPoll`, `Delegation` and `RevokeDelegation` without a separate schema.
+for your network. The agent skill ships the ACI as `RegistryWithEventsACI.json`; the event
+variant declared in it is what lets a client decode `AddPoll`, `Delegation` and
+`RevokeDelegation` without a separate schema.
 
 ## The governance API
 
-The registry gives you structure; the backend gives you weighted results. Both are needed for
-a complete picture.
+The registry gives you structure; the backend gives you weighted results.
 
 | Network | Governance API base URL |
 | --- | --- |
@@ -168,10 +151,9 @@ The Superhero app combines the two sources for its poll list: it reads titles fr
 `Registry.polls()` and ordering, stake totals and vote counts from `pollOrdering`, then merges
 them by poll id.
 
-The agent skill's CLI uses a slightly different mainnet host,
-`https://governance-server-mainnet.prd.aepps.com`, overridable with
-`AE_GOVERNANCE_BACKEND_URL`. Both spellings appear in the repositories; if one does not answer,
-try the other.
+The agent skill's CLI defaults to `https://governance-server-mainnet.prd.aepps.com` for
+mainnet, overridable with `AE_GOVERNANCE_BACKEND_URL`. If one host does not answer, try the
+other.
 
 Superhero's own backend additionally indexes governance transactions at
 `/api/governance/votes` and `/api/governance/delegations` — useful for history rather than for
@@ -184,9 +166,3 @@ live results. See [Polls](/governance/polls).
 - [Creating a Poll](/governance/create-a-poll) — `add_poll` as the second half of poll creation.
 - [Registry and Poll contract reference](/contracts/governance-contracts) — the full signature tables.
 - [Contract addresses](/contracts/addresses) — every deployed address across both networks in one place.
-- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference contracts, aepp and backend.
-
-## Open questions
-
-- **Which registry version each deployed address is running.** Both sources are in the repository and their ACIs are identical, so the only way to tell is to call `version()` against the mainnet and testnet addresses — `1` for `Registry.aes`, `2` for `Registry_Compiler_v6.aes`. It changes nothing about how you call them; it matters only if you are reproducing a deployment.
-- **Whether the mainnet registry is reachable through the public `https://mainnet.aeternity.io` node.** The app's mainnet configuration uses a third-party node host while the agent skill's CLI defaults to the public one. Settle it with one call: set `AE_NODE_URL=https://mainnet.aeternity.io` and read `version()` off `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq`. If the CLI times out against mainnet, this is the thing to check first.

@@ -6,51 +6,48 @@ description: "Install, secure, connect and recover an æternity wallet for Super
 # Wallets
 
 Superhero never holds your keys. Everything you do that touches the chain — posting, tipping,
-trading, voting — is a transaction signed by a wallet you control. This section covers every wallet
-that works with Superhero, how to connect one, and how to get back in when something goes wrong.
+trading, voting — is a transaction signed by a wallet you control.
 
-Superhero works with two different things people call "a wallet":
+Two different things are called "a wallet" on Superhero:
 
-1. **Superhero Wallet** — the standalone multi-chain wallet. One codebase
-   (`superhero-com/superhero-wallet`) built three ways: a browser extension, native iOS and Android
-   apps, and the hosted web build served at `wallet.superhero.com`.
+1. **Superhero Wallet** — the standalone multi-chain wallet, built three ways: a browser extension,
+   native iOS and Android apps, and the hosted web build at `wallet.superhero.com`.
 2. **The built-in wallet** — a wallet created and held inside the Superhero app itself, unlocked
-   with a passkey or passphrase. This is what the mobile app means by "wallet built in, no
-   extensions, no friction".
+   with a passkey or passphrase.
 
-Both hold the same kind of æternity account (`ak_...`), derived on the same path — so the same seed
-phrase gives you the same addresses in either. Pick based on how you use the app, and on which
-recovery model you can actually live with.
+Both hold the same kind of æternity account (`ak_...`) on the same derivation path, so the same
+seed phrase gives you the same addresses in either. Pick based on how you use the app and on which
+recovery model you can live with.
 
 ## Start here
 
 | If you want to… | Read |
 | --- | --- |
-| Decide which wallet to use at all | [Choosing a Wallet](/wallets/choosing-a-wallet) |
+| Decide which wallet to use | [Choosing a Wallet](/wallets/choosing-a-wallet) |
 | Get signing working on a desktop browser | [Browser Extension](/wallets/superhero-wallet-extension) |
 | Get signing working on a phone | [Mobile App](/wallets/superhero-wallet-mobile) |
-| Understand where your key actually lives | [The Built-In Wallet](/wallets/built-in-wallet) |
+| Use a wallet with nothing to install | [Web Wallet](/wallets/web-wallet) |
+| Understand where your key lives | [The Built-In Wallet](/wallets/built-in-wallet) |
 | Make sure you can get back in | [Backup & Recovery](/wallets/backup-and-recovery) |
 | Fix something that is broken right now | [Troubleshooting](/wallets/troubleshooting) |
 
 ## In this section
 
-- [Choosing a Wallet](/wallets/choosing-a-wallet) — every option compared on custody, platform, recovery model, hardware support and agent suitability, with a recommendation per situation.
+- [Choosing a Wallet](/wallets/choosing-a-wallet) — every option compared on custody, platform, recovery model, hardware support and agent suitability.
 - [Browser Extension](/wallets/superhero-wallet-extension) — install for Chrome, Brave, Opera and Firefox, first-run setup, and the connect handshake on desktop.
-- [Mobile App](/wallets/superhero-wallet-mobile) — the two different Superhero apps, the standalone wallet, and installing Superhero as a PWA with no app store.
-- [Web Wallet](/wallets/web-wallet) — which build `wallet.superhero.com` is, when superhero.com opens it automatically, what it cannot do that the extension can, and what a hosted wallet costs you in trust.
-- [The Built-In Wallet](/wallets/built-in-wallet) — the in-app vault in detail: the sealed-seed model, passkey and passphrase factors, key derivation, and exactly what clearing site data destroys.
+- [Mobile App](/wallets/superhero-wallet-mobile) — the two Superhero apps, the standalone wallet, and installing Superhero as a PWA.
+- [Web Wallet](/wallets/web-wallet) — when superhero.com opens `wallet.superhero.com` automatically, and what a hosted wallet can and cannot do.
+- [The Built-In Wallet](/wallets/built-in-wallet) — the in-app vault: how it stores the seed, how it unlocks, and what clearing site data destroys.
 - [Connecting a Wallet](/wallets/connecting) — wallet detection, the deep-link fallback, the transaction queue, account switching and disconnecting.
-- [Backup & Recovery](/wallets/backup-and-recovery) — what to write down, how to verify it, and an explicit list of what cannot be recovered.
+- [Backup & Recovery](/wallets/backup-and-recovery) — what to write down, how to verify it, and what cannot be recovered.
 - [Security Best Practices](/wallets/security) — phishing, allowance hygiene, running an agent key safely, and what signing commits you to.
 - [Managing AEX-9 Tokens](/wallets/aex9-tokens) — how token balances are discovered, sale address versus token address, and allowances.
-- [Troubleshooting](/wallets/troubleshooting) — symptom, cause and fix, including the passkey failure that shows no prompt at all.
+- [Troubleshooting](/wallets/troubleshooting) — symptom, cause and fix.
 
-## Read more
+## Related
 
-- [Create an Account](/getting-started/create-account) — the account-creation flow, from the user's side rather than the wallet's.
+- [Create an Account](/getting-started/create-account) — the account-creation flow from the user's side.
 - [Accounts and Keys](/aeternity/accounts-and-keys) — what an `ak_...` address is at the protocol level.
-- [Agent Wallets and Keys](/agents/wallet-and-keys) — the raw-key model an unattended agent uses instead of any wallet here.
-- [Navigating the App](/getting-started/navigating-the-app) — which parts of superhero.com actually need a connected account.
-- [Superhero Wallet](https://wallet.superhero.com/) — the hosted wallet, usable with no install.
+- [Agent Wallets and Keys](/agents/wallet-and-keys) — the raw-key model an unattended agent uses instead.
+- [Navigating the App](/getting-started/navigating-the-app) — which parts of superhero.com need a connected account.
 - [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet's own documentation.

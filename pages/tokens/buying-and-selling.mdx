@@ -1,33 +1,29 @@
 ---
 title: "Buying & Selling"
-description: "Execute a trade against the curve from the UI, the CLI or the SDK — including allowances and slippage defence."
+description: "Execute a trade against the curve from the UI, the CLI or the SDK — including the AEX-9 allowance a sell needs and how to set a return floor."
 ---
 
 # Buying & Selling
 
 Trading a community token means minting or burning it against its bonding curve. There is no order
 book and no counterparty: you send AE and receive newly minted tokens, or you burn tokens and receive
-AE back. This page covers the three ways to do that, the AEX-9 allowance a sell requires, and
-`minimal_return_required` — the only thing standing between a sell and a bad fill.
-
-Read [Bonding Curves](/tokens/bonding-curve) first if you have not: the reason a quote and a fill can
-differ is entirely in the shape of the curve.
+AE back. A sell needs an AEX-9 allowance first, and `minimal_return_required` is what stands between
+a sell and a bad fill.
 
 ## From the token page
 
 Open a token at `/trends/tokens/NAME` and use the **Trade** tab.
 
 1. Choose **Buy** or **Sell**.
-2. Type an amount in either field — AE or tokens. The other side is computed from the curve at the token's current supply, live, as you type.
-3. Review the quote. The card shows the average price you will pay, the price impact of your own trade, and, on a buy, the ProtocolDAO token reward you will receive.
+2. Type an amount in either field — AE or tokens. The other side is computed from the curve at the token's current supply as you type.
+3. Review the quote: the average price you will pay, the price impact of your own trade, and, on a buy, the ProtocolDAO token reward.
 4. Confirm in your wallet.
 
-The slippage tolerance defaults to **1%** and is remembered per browser in local storage. A buy sends
-that much extra AE — refunded if unused — and a sell sets its return floor that much below the quote.
+The slippage tolerance defaults to **1%** and is remembered per browser. A buy sends that much extra
+AE — refunded if unused — and a sell sets its return floor that much below the quote.
 
-The ProtocolDAO reward the card previews is an underestimate. The app shows
-`0.95 × 1000 × ae_value`; `CommunityFactory.aes` mints `1000 ×` the AE actually paid, fee included.
-See [The ProtocolDAO Token](/dao/protocol-dao).
+A buy also mints ProtocolDAO tokens at 1,000× the AE paid; the `Mint` event on the ProtocolDAO token
+contract carries the exact figure. See [The ProtocolDAO Token](/dao/protocol-dao).
 
 A sell is **two transactions**, and the UI says so with a "step 1 of 2" notice: first an AEX-9
 allowance letting the sale contract move your tokens, then the sell itself. Both need a signature.
@@ -48,12 +44,11 @@ node scripts/superhero-token-swap.mjs sell  ct_<sale_address> 5
 | `buy` | Yes | Quotes, adds 3%, and sends `buy(count)` with that amount attached |
 | `sell` | Yes | Sets the allowance, quotes `sell_return(count)`, subtracts 3%, and sends `sell(count, floor)` |
 
-Amounts are **whole tokens** — the script scales them by the token's own `decimals` for you. Run it
-from the skill's root directory; it reads its ACI files from `./contracts/`.
+Amounts are **whole tokens** — the script scales them by the token's own `decimals`. Run it from
+the skill's root directory; it reads its ACI files from `./contracts/`.
 
-Both `buy` and `sell` apply **3% slippage protection** automatically, which is a harder-coded and
-more generous default than the web app's 1%. There is no flag to change it: edit `SLIPPAGE_PERCENT`
-in the script, or call the contract yourself as shown below.
+Both `buy` and `sell` apply **3% slippage protection**. To change it, edit `SLIPPAGE_PERCENT` in
+the script, or call the contract yourself as shown below.
 
 ## The contract entrypoints
 
@@ -64,7 +59,7 @@ On the sale contract (`AffiliationBondingCurveTokenSale`):
 | `price(count)` | Read-only quote: aettos required to buy `count`, **including the 0.5% affiliation fee** |
 | `sell_return(count)` | Read-only quote: aettos you would receive for selling `count` |
 | `buy(count)` | Payable, stateful. Mints `count` tokens to the caller |
-| `buy_with_affiliation(count, affiliation_rewardee)` | Payable, stateful — but **factory-only**, see below |
+| `buy_with_affiliation(count, affiliation_rewardee)` | Payable, stateful. Callable only by the factory, during `create_community` |
 | `sell(count, minimal_return_required)` | Stateful. Burns `count` tokens and pays out, reverting if the return is below the floor |
 | `token_contract()` | The AEX-9 contract address, needed for the allowance |
 | `bonding_curve()` | The pricing contract, if you want to compute quotes yourself |
@@ -73,49 +68,28 @@ Every `count` is in token decimal units and every AE figure is in aettos. See
 [Curve Parameters & Units](/tokens/curve-parameters).
 
 **Attach exactly `price(count)`, or more.** `buy` requires `Call.value >= total_price` and refunds
-the difference with `Chain.spend` in the same transaction, so an over-attachment is returned rather
-than kept. Attaching less aborts with `AE_AMOUNT_NOT_SUFFICIENT`. Do not add the affiliation fee on
-top of `price(count)` yourself — it is already in there. See
-[Fees & Slippage](/tokens/fees-and-slippage).
+the difference with `Chain.spend` in the same transaction. Attaching less aborts with
+`AE_AMOUNT_NOT_SUFFICIENT`. Do not add the affiliation fee on top of `price(count)` yourself — it is
+already included. See [Fees & Slippage](/tokens/fees-and-slippage).
 
-### You cannot call `buy_with_affiliation` yourself
-
-`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes` gates it:
-
-```sophia
-payable stateful entrypoint buy_with_affiliation(count : int, affiliation_rewardee: address): unit =
-  require(Call.caller == state.factory.address, "ONLY_FACTORY_CAN_CALL")
-  buy_with_affiliation_inner(count, affiliation_rewardee)
-```
-
-Only the `CommunityFactory` that deployed the sale can call it, and it does so exactly once — during
-`create_community`, to attribute a creator's initial buy to the creator's own address. Any other
-caller gets `ONLY_FACTORY_CAN_CALL`.
-
-For an ordinary buy, use `buy(count)`. It calls the same internal function with
-`affiliation_rewardee = Call.caller`, so **the affiliation reward is always attributed to the buyer's
-own position in the affiliation tree** — there is no per-transaction referrer argument to set. Who
-gets paid is decided by `AffiliationTreasury.affiliation_tree`, which is populated once when the
-buyer redeems an invitation or calls `register_invitation`, and never by the trade itself. See
+`buy(count)` attributes the affiliation reward to the buyer's own position in the affiliation tree;
+there is no per-transaction referrer argument. Who gets paid is decided by the buyer's inviter
+chain, populated once when the buyer redeems an invitation or calls `register_invitation`. See
 [Affiliation](/rewards/affiliation).
 
 A successful trade emits `Buy(int, int, int)` or `Sell(int, int)` on the sale contract, plus `Mint`
 or `Burn` on the token contract, plus a second `Mint` from the ProtocolDAO token contract on a buy.
-The web app reads exactly these events to report what you actually received — which is the right
-habit to copy, since the events carry the executed numbers rather than the quoted ones.
+Read these events to learn what you actually received — they carry the executed numbers rather than
+the quoted ones.
 
 ## `minimal_return_required`
 
 `sell(count, minimal_return_required)` takes a floor in aettos. If the AE the curve would pay out is
 below that floor, the call reverts and nothing happens: no tokens burned, no AE moved, gas spent.
 
-**This is your only protection on a sell.** A buy is naturally bounded — you attach a fixed amount of
-AE and cannot spend more than you sent — but a sell has no equivalent ceiling, so without a floor you
-would accept whatever the curve happened to be paying by the time your transaction was mined.
-
-The risk it guards against is real and specific: between the moment you read `sell_return(count)` and
-the moment your transaction is included, other people can sell. Supply falls, the curve slides down,
-and your payout shrinks. On a curve this steep that is not a rounding error.
+**This is your only protection on a sell.** A buy is bounded by the AE you attach, but a sell has no
+equivalent ceiling. Between the moment you read `sell_return(count)` and the moment your transaction
+is included, other people can sell; supply falls, the curve slides down, and your payout shrinks.
 
 ### Choosing a floor
 
@@ -144,27 +118,25 @@ move in supply:
 | 100,000,000 | 634,164 tokens (0.63%) | 1% |
 | 100,000,000 | 1,914,686 tokens (1.91%) | 3% |
 
-Read that as: a 3% floor on a token with 10 million supply survives roughly 286,000 tokens being
-dumped ahead of you. On a quiet token that is an enormous margin; on one where a single holder owns
-20% of the supply it is not. Size the tolerance to the token, not to a habit.
-
-Two failure modes to keep in mind:
+A 3% floor on a token with 10 million supply survives roughly 286,000 tokens being sold ahead of
+you. On a quiet token that is an enormous margin; on one where a single holder owns 20% of the
+supply it is not. Size the tolerance to the token.
 
 - **Too tight** and your sell reverts on ordinary activity. You pay gas and still hold the position.
-- **Too loose** and you have no protection at all. A floor of 0 means "fill me at any price", which on a falling curve is exactly what you do not want.
+- **Too loose** and you have no protection. A floor of 0 means "fill me at any price", which on a falling curve is exactly what you do not want.
 
-Note that your *own* trade's slippage is already in the quote — `sell_return(count)` integrates the
-curve across the tokens you are burning. The tolerance is only for what happens between quote and
+Your *own* trade's slippage is already in the quote — `sell_return(count)` integrates the curve
+across the tokens you are burning. The tolerance covers only what happens between quote and
 execution.
 
 ## The allowance step
 
-The sale contract cannot take your tokens without permission. Before `sell`, grant an AEX-9 allowance
-on the **token** contract, for the **sale** contract, for at least the amount you are selling.
+Before `sell`, grant an AEX-9 allowance on the **token** contract, for the **sale** contract, for at
+least the amount you are selling.
 
-The quirk: the allowance is granted to the sale contract's address rewritten from `ct_` to `ak_`.
-AEX-9 allowances are keyed by account address, and the contract's account form is the same byte
-string under a different prefix.
+The allowance is granted to the sale contract's address rewritten from `ct_` to `ak_`: AEX-9
+allowances are keyed by account address, and a contract's account form is the same byte string under
+a different prefix.
 
 ```js
 const forAccount = saleAddress.replace('ct_', 'ak_');
@@ -182,14 +154,13 @@ if (existing === undefined) {
 }
 ```
 
-`create_allowance` fails if an allowance already exists, which is why the check matters:
-`change_allowance` takes a signed **delta**, not an absolute value, so raising an allowance from 5 to
-8 means passing `3` and lowering it from 8 to 5 means passing `-3`. `reset_allowance(for_account)`
+`create_allowance` fails if an allowance already exists, which is why the check matters.
+`change_allowance` takes a signed **delta**, not an absolute value: raising an allowance from 5 to 8
+means passing `3`, and lowering it from 8 to 5 means passing `-3`. `reset_allowance(for_account)`
 clears it entirely.
 
-Leaving a standing allowance is convenient and is a small standing risk — it authorises that contract
-to move that many tokens until you reduce it. The skill's script sets the allowance to exactly the
-amount being sold on each sell, which is the conservative pattern.
+A standing allowance authorises the sale contract to move that many tokens until you reduce it. Set
+it to exactly the amount you are selling on each sell.
 
 ## A complete buy and sell against the SDK
 
@@ -239,10 +210,6 @@ const amount = new BigNumber(price.toString())
 const bought = await sale.buy(count, { amount, omitUnknown: true });
 console.log('buy tx', bought.hash);
 
-// buy_with_affiliation(count, rewardee) is NOT callable here — the contract
-// requires Call.caller == factory and aborts with ONLY_FACTORY_CAN_CALL.
-// The affiliation reward for a normal buy follows the buyer's own inviter chain.
-
 // ---- SELL 5 tokens ------------------------------------------------------
 const forAccount = SALE.replace('ct_', 'ak_');
 await token.create_allowance(forAccount, count);     // or change_allowance, see above
@@ -256,12 +223,9 @@ const sold = await sale.sell(count, minReturn, { omitUnknown: true });
 console.log('sell tx', sold.hash);
 ```
 
-`omitUnknown: true` tells the SDK to ignore ACI entries it cannot decode rather than throwing; both
-skill scripts pass it.
+`omitUnknown: true` tells the SDK to ignore ACI entries it cannot decode rather than throwing.
 
 ## Why the executed price differs from the quote
-
-Four separate reasons, worth keeping apart:
 
 | Cause | Direction | Typical size |
 | --- | --- | --- |
@@ -270,22 +234,20 @@ Four separate reasons, worth keeping apart:
 | The 0.5% affiliation fee on a buy | Against you | 0.5% of the curve value — already inside `price()`, not inside `calculate_buy_price()` |
 | Off-chain estimates using a trapezoidal integral | Overstates by up to ~20 ppm on very large trades | Negligible, but see [Curve Parameters & Units](/tokens/curve-parameters) |
 
-The quote you get from `price()` or `sell_return()` is exact at the supply it was read at. Everything
-that moves it afterwards is other people.
+The quote you get from `price()` or `sell_return()` is exact at the supply it was read at.
+Everything that moves it afterwards is other people.
 
-What you receive is also recoverable after the fact without re-deriving anything. A buy emits
+What you received is recoverable after the fact. A buy emits
 `Buy(total_price, affiliation_amount, total_supply)` and a sell emits `Sell(return, total_supply)`,
 both carrying the executed figures, and both are preceded by
 `PriceChange(previous_price, next_price)` with the unit price before and after your trade. The
 `total_supply` in those events is the supply **before** the trade.
 
-## Read more
+## Related
 
 - [Bonding Curves](/tokens/bonding-curve) — where the quote comes from, and why a big trade fills worse
 - [Fees & Slippage](/tokens/fees-and-slippage) — the 1% spread, the fee split, and the slippage defaults side by side
 - [Curve Parameters & Units](/tokens/curve-parameters) — the decimal scaling used throughout the code above
 - [Token sale contract](/contracts/token-sale) — entrypoint-level reference for the sale contract
 - [Portfolio & PnL](/tokens/portfolio) — checking what a trade did to your position afterwards
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — find a token and open its Trade tab
 - [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the allowance semantics used by the sell flow
-- [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/) — call options such as `amount` and `omitUnknown`

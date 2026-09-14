@@ -5,15 +5,13 @@ description: "æternity-wide stake-weighted polls, delegation, and the /voting s
 
 # Governance & Voting
 
-This section documents æternity's protocol-level governance: stake-weighted polls run through
-a `Registry` contract, with each poll deployed as its own `Poll` contract, weighted by AE
-balance and delegation. Superhero surfaces the whole system at
-[superhero.com/voting](https://superhero.com/voting).
+æternity's protocol-level governance runs stake-weighted polls through a `Registry` contract,
+with each poll deployed as its own `Poll` contract and weighted by AE balance and delegation.
+Superhero surfaces the whole system at [superhero.com/voting](https://superhero.com/voting).
 
-## This is not the same thing as a community DAO
+## Not the same thing as a community DAO
 
 Two different systems, two different contract sets, two different sources of voting power.
-People confuse them constantly, so be sure which one you are in.
 
 | | æternity governance poll | Community DAO |
 | --- | --- | --- |
@@ -28,15 +26,12 @@ People confuse them constantly, so be sure which one you are in.
 | Duration | Whatever close height the author sets, or never | Fixed at two weeks |
 | Where in the app | `/voting` | `/trends/daos` |
 
-The most consequential differences: **a governance poll does not lock your tokens and does not
-execute anything.** It records what stake-weighted opinion was at a block height. Acting on
-that result is a social and off-chain process. A community DAO vote is the opposite — it locks
-your stake and, if it passes, moves real money on-chain.
+**A governance poll does not lock your tokens and does not execute anything.** It records
+stake-weighted opinion at a block height; acting on that result is an off-chain process. A
+community DAO vote locks your stake and, if it passes, moves real money on-chain. For
+community treasuries and payout proposals, see [Community DAOs](/dao).
 
-If you are looking for community treasuries and payout proposals, go to
-[Community DAOs](/dao) instead.
-
-## How a poll works, in short
+## How a poll works
 
 1. Somebody deploys a `Poll` contract with a title, a description, a reference link and a list
    of options, then registers it in the `Registry` — two transactions.
@@ -54,7 +49,7 @@ are not the outcome — see [Polls](/governance/polls).
 
 - [Polls](/governance/polls) — the data model, how stake weighting works, and which result figure is authoritative.
 - [Creating a Poll](/governance/create-a-poll) — the two-transaction creation flow, from the UI and from the CLI, with every field limit.
-- [Voting on Polls](/governance/voting) — casting and revoking a vote, and why you read the poll first.
+- [Voting on Polls](/governance/voting) — casting and revoking a vote.
 - [Delegation](/governance/delegation) — delegating your AE weight, revoking it, and how chains of delegation resolve.
 - [The Governance Registry](/governance/registry) — the contract that indexes every poll and every delegation, with deployed addresses.
 
@@ -71,10 +66,9 @@ Superhero's `/voting` route is one page with four tabs, driven by the URL:
 
 ## Read more
 
-- [Community DAOs](/dao) — the other system: per-community treasury governance.
-- [Polls](/governance/polls) — start here for how a poll is actually counted.
+- [Community DAOs](/dao) — per-community treasury governance.
+- [Polls](/governance/polls) — how a poll is counted.
 - [The Governance Registry](/governance/registry) — contract addresses and the governance API.
 - [Governance with an agent](/agents/governance) — driving all of this from the CLI or an AI agent.
 - [superhero.com/voting](https://superhero.com/voting) — the live governance interface.
-- [æternity governance](https://docs.aeternity.com/aeternity-core-concepts/aeternity-governance) — the protocol's own description of delegated coin-weighted governance.
-- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference governance aepp, its contracts and its backend.
+- [æternity governance](https://docs.aeternity.com/aeternity-core-concepts/aeternity-governance) — the protocol's description of delegated coin-weighted governance.

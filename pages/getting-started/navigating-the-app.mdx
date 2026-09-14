@@ -5,19 +5,9 @@ description: "Every route on superhero.com, what lives there, and which ones nee
 
 # Navigating the App
 
-superhero.com is a single-page app with a flat route table. This page is that table, verified
-against `src/routes.tsx`, plus the redirects you will hit from older links and a note on what
-actually requires a wallet.
-
-## How wallet access works
-
-**No route on superhero.com is gated behind a wallet.** There are no protected routes in the router —
-every page renders, and every page that needs an account shows a Connect control in place of the
-action rather than refusing to load. The token creation page, for example, renders its whole form
-and swaps the submit button for **Connect wallet to create**.
-
-So the "Wallet" column below means *the primary action here needs a connected account*, not *this URL
-is blocked*. Browsing is always open.
+superhero.com is a single-page app with a flat route table. Browsing is always open: every page
+renders without a wallet, and a page whose primary action needs an account shows a Connect control
+in place of that action. The **Wallet** column below says which actions those are.
 
 ## Social
 
@@ -28,7 +18,7 @@ is blocked*. Browsing is always open.
 | `/users/:address` | A user profile | To edit your own |
 | `/profile/x/callback` | OAuth landing page for the Connect X flow | Part of a signed flow |
 
-`:slug` also accepts a post id; `PostDetail` redirects to the canonical slug.
+`:slug` also accepts a post id, which redirects to the canonical slug.
 
 ## Trends and tokens
 
@@ -47,9 +37,8 @@ is blocked*. Browsing is always open.
 | `/trends/visx` | The trend cloud visualisation | No |
 | `/trends` | Redirects to `/trends/tokens` | — |
 
-Note the singular/plural split, which is easy to get wrong when writing links: the **list** is
-`/trends/daos`, a **single DAO** is `/trends/dao/:saleAddress`. The parameter is a **sale address**,
-not the AEX-9 token address.
+The **list** is `/trends/daos`; a **single DAO** is `/trends/dao/:saleAddress`. The parameter is a
+**sale address**, not the AEX-9 token address.
 
 ## Chat
 
@@ -61,9 +50,7 @@ not the AEX-9 token address.
 | `/chat/dm/:address` | A direct-message thread | **Yes** |
 | `/chat/settings/relays` | Relay configuration | **Yes** |
 
-Chat identity is derived from your wallet, so chat needs one throughout. The two-segment literal
-paths (`dm/…`, `settings/relays`) are ordered so they can never collide with the one-segment room
-parameter.
+Chat identity is derived from your wallet, so chat needs one throughout.
 
 ## Governance
 
@@ -90,11 +77,8 @@ All four render the same Governance view; the path selects the tab.
 | `/defi/explore/pools/:poolAddress` | One pool's detail | No |
 | `/defi/explore/transactions` | Recent DEX transactions | No |
 | `/defi` | Redirects to `/defi/swap` | — |
-| `/defi/bridge` | **Currently redirects to `/defi/swap`** — the bridge view is disabled in this build | — |
-| `/defi/buy-ae-with-eth` | **Currently redirects to `/defi/swap`** — same | — |
-
-The two bridge routes are not broken links; their view components are commented out in the router,
-so both resolve to the swap page.
+| `/defi/bridge` | Currently redirects to `/defi/swap` | — |
+| `/defi/buy-ae-with-eth` | Currently redirects to `/defi/swap` | — |
 
 ## Wallet, utility and reference
 
@@ -110,12 +94,12 @@ so both resolve to the swap page.
 | `/branding` | Brand assets | No |
 | `/terms` · `/privacy` | Legal pages | No |
 
-`/wallet` is a product page about Superhero Wallet, not the built-in wallet's interface. The built-in
-wallet is reached through **Connect** wherever you are.
+`/wallet` is a product page about Superhero Wallet, not the built-in wallet's interface. The
+built-in wallet is reached through **Connect** wherever you are.
 
 ## Redirects
 
-Old links keep working. Every one of these is a real route that redirects:
+Old links keep working:
 
 | From | To |
 | --- | --- |
@@ -134,34 +118,10 @@ Legacy DEX paths that still render their own view rather than redirecting: `/poo
 
 Anything else renders the not-found page.
 
-## Development-only routes
-
-`/wallet-lab` exists only in development builds. It clears and rewrites the real on-device vault
-store, so it is guarded by a build-time flag and eliminated entirely from production output. You will
-not find it on superhero.com.
-
-## Read more
+## Related
 
 - [Quickstart](/getting-started/quickstart) — the five-minute path through the routes above.
-- [Connecting a Wallet](/wallets/connecting) — what happens when you press Connect on any of the pages marked Yes, and what `/tx-queue/:id` is for.
+- [Connecting a Wallet](/wallets/connecting) — what happens when you press Connect, and what `/tx-queue/:id` is for.
 - [Your First Trade](/getting-started/first-trade) — the token page's tabs, in detail.
 - [The Token Page](/tokens/token-page) — everything on `/trends/tokens/:tokenName`.
-- [Superhero](https://superhero.com) — the app itself.
-- [Superhero FAQ](https://superhero.com/faq) — the in-app answers, which follow roughly this same map.
-
-## Open questions
-
-- A screenshot per major section would make this page substantially easier to use. None is included
-  here because none exists in the repository; capturing them against the live app is a follow-up.
-- **Do the "Superhero — Web3 Communities" store apps use the same route paths as superhero.com?**
-  The web routes in `src/routes.tsx` are authoritative for superhero.com, and the reason no
-  repository describes the native apps' navigation is now specific: `/home/user/superhero` contains
-  **no native project at all** — no Capacitor config, no `android/` or `ios/` directory, no Cordova
-  or React Native setup — so the store builds are produced from a source not in any available
-  repository. Nothing in the web app distinguishes native from PWA either; its surface-gated
-  behaviours key on *installed versus browser tab*. Someone with the native app installed would have
-  to compare, or Superhero would have to publish that source.
-
-  For the avoidance of confusion: the **standalone Superhero Wallet** app is a different program with
-  a different, self-contained route table of its own (`superhero-wallet/src/popup/router/routes.ts`,
-  hash-routed on the extension and mobile builds). None of the paths on this page apply to it.
+- [superhero.com](https://superhero.com) — the app itself.

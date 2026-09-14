@@ -1,14 +1,13 @@
 ---
 title: "Support"
-description: "Where to get help, and how to report a bug that can actually be acted on."
+description: "Where to report a problem, and what to include so it can be acted on."
 ---
 
 # Support
 
 Most Superhero problems are one of three things: a transaction that did not do what you expected, a
-client that is showing stale data, or a wallet that will not connect. Diagnose which one you have
-first — it decides where the report goes — then file it with enough detail that someone can
-reproduce it without asking you questions.
+client showing stale data, or a wallet that will not connect. Diagnose which one you have first — it
+decides where the report goes — then file it with enough detail to reproduce without a follow-up.
 
 ## Triage first
 
@@ -23,51 +22,23 @@ Work down this list before filing anything. Each step rules out a whole class of
 | Is it your wallet? | Try a different surface — extension, the app's built-in wallet, or `wallet.superhero.com` | Narrows a signing failure to one wallet |
 
 If the chain shows your transaction as successful and the app disagrees, it is a client or indexer
-bug and worth reporting. If the chain shows it reverted, the error is on-chain — a slippage floor
-you crossed, a missing allowance, an insufficient balance — and
+issue — report it. If the chain shows it reverted, the error is on-chain — a slippage floor you
+crossed, a missing allowance, an insufficient balance — and
 [Troubleshooting](/wallets/troubleshooting) is the better starting point.
 
 ## Where to report
 
 | What | Where |
 | --- | --- |
-| Bug or feedback about the web app, mobile apps or PWA | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues) |
+| Bug or feedback about the web app, mobile apps or PWA | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues) — the app's "Send Feedback" button opens the same tracker |
 | Bug in the API, the indexer or a trending score | [github.com/superhero-com/superhero-api](https://github.com/superhero-com/superhero-api) |
 | Bug in the AI agent skill — scripts, guides, ACIs | [github.com/superhero-com/superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) |
-| Privacy, data-protection or legal questions | `superherowallet@protonmail.com` |
-| Errors in this documentation | See How to Contribute |
-
-Superhero publishes no staffed support desk, and none of these trackers is one. They are simply
-where the app itself sends reports: the "Send Feedback" button in the footer and the in-app
-feedback control both open
-`https://github.com/superhero-com/superhero/issues` directly. No response time is promised
-anywhere. The backend is open source too
-(`superhero-com/superhero-api`), so a wrong figure in an API response — a trending score, a TVL
-column, a PnL number — has a public tracker of its own; its `CONTRIBUTING.md` says to "open an issue
-or submit a pull request" and names no other contact.
-
-**There is exactly one official social account identifiable from first-party sources, and it is not
-a support channel.** The app's own copy for the X posting reward tells you to "tag
-`@superhero_chain`" (`superhero/src/locales/en.json`, `profile.x.*`), and the backend treats
-`superhero.com` and `superhero_chain` as the qualifying mentions
-(`superhero-api/src/profile/profile.constants.ts`). That account is
-[x.com/superhero_chain](https://x.com/superhero_chain). Nothing in any repository presents it as a
-place to get help, and no Discord, Telegram, forum or chat channel appears anywhere — so treat any
-invite claiming to be Superhero support as unverified and use the trackers and the email address
-above.
-
-The `superherowallet@protonmail.com` address is given in both the
-[terms of use](https://superhero.com/terms) ("For any additional questions, please contact the
-Superhero.com team at …") and the [privacy policy](https://superhero.com/privacy), which names it as
-the contact for data-subject requests and for questions about the policy. Note that anything you
-send there is off-chain data you volunteered, and the privacy policy processes it on a consent basis
-and retains it "until the questions have been answered … or, in any other case, until withdrawal of
-consent."
+| Privacy or data-protection questions | `superherowallet@protonmail.com` |
 
 ## What to include
 
-The FAQ's own answer sets the minimum: "Include the token name, your address, the tx hash, and what
-happened." Expand it into this, and your report will be actionable on the first read.
+The minimum is the token name, your address, the tx hash, and what happened. Expand it into this,
+and your report will be actionable on the first read.
 
 **Always:**
 
@@ -118,48 +89,15 @@ insists otherwise, that is the tell.
 ## Security disclosure
 
 If you have found a vulnerability in a contract, the app or the skill, disclose it privately first —
-do not open a public GitHub issue describing an exploitable bug in a live contract that holds user
-funds. No repository publishes a `SECURITY.md` or a dedicated security address: not the web app, the
-backend, the agent skill, the BCL contracts, the governance contracts or the tipping contract. The
-only address any of these sources gives at all is `superherowallet@protonmail.com`, which the terms
-and the privacy policy name for legal and data-protection questions.
+do not open a public GitHub issue describing a live vulnerability in a contract that holds user
+funds. Send it to `superherowallet@protonmail.com`. See [Security Model](/contracts/security) for
+what the protocol does and does not defend against.
 
-Two facts should shape how you weigh a finding. The contracts carry no audit: every BCL `.aes` file
-opens with "THIS IS NOT SECURITY AUDITED — DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST" and a
-liability disclaimer by BCTSL. And at least one real defect is already in the deployed code —
-`get_sell_return_precision()` in `BondingCurveExponential.aes` returns the wrong constant, which is
-harmless on chain but wrong for any off-chain caller. See
-[Where the Money Goes](/concepts/value-flow) and
-[Security Model](/contracts/security) for what the protocol does and does not defend against.
-
-## Read more
+## Related
 
 - [Troubleshooting](/wallets/troubleshooting) — the wallet and connection problems that account for most reports.
 - [Risks](/tokens/risks) — losses that are working as designed rather than bugs.
 - [Explorers](/aeternity/explorers) — how to read a transaction before reporting it.
 - [Fees & Slippage](/tokens/fees-and-slippage) — why a sell reverts, and how to stop it happening again.
 - [FAQ](/concepts/faq) — the 23 canonical answers, plus developer and agent questions.
-- [Report a bug](https://github.com/superhero-com/superhero/issues) — the app's own issue tracker.
-- [æScan](https://aescan.io) — look your transaction up before you file.
-
-## Open questions
-
-These three can only be closed by Superhero. Nothing in any repository settles them, and no amount
-of further code reading will.
-
-- **What are the "official channels listed in the app"?** The FAQ's support answer points at them
-  without naming them. Six repositories were searched — the web app and its locale files, the
-  backend, the agent skill, the BCL contracts, the governance contracts and the tipping contract —
-  and the only official account any of them identifies is `@superhero_chain` on X, named in the
-  posting-reward copy rather than as a support route. Superhero must publish the list, or a
-  maintainer must confirm it; **do not add a Discord or Telegram link to this page on any weaker
-  evidence.** See [Official Links](/resources/links).
-- **Is there a security disclosure policy or bug bounty?** No `SECURITY.md`, no security address and
-  no bounty programme exists in any of the six repositories. Whether
-  `superherowallet@protonmail.com` is monitored for security reports — and by whom — is not
-  established anywhere. Closing this means Superhero publishing a `SECURITY.md` or a disclosure
-  address; until then, assume a report to that address may sit with a legal or privacy inbox rather
-  than an engineer.
-- **Is there a response-time expectation?** None is published for any channel. The GitHub trackers
-  are public, so their issue history is the only available signal, and it is a signal about past
-  behaviour rather than a commitment.
+- [Official Links](/resources/links) — every official URL and contact.

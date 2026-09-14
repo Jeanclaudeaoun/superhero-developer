@@ -1,90 +1,64 @@
 ---
-title: "Names: Custom, Chain and X"
-description: "The name types that still exist, the one that does not, and how a public name is resolved today."
+title: "Names"
+description: "The name types attached to an address, how a public name is resolved, and how to link, reverse-resolve and normalize one."
 ---
 
-# Names: Custom, Chain and X
+# Names
 
-The whitepaper describes three categories of public name held in `ProfileRegistry.aes` — custom,
-chain and X — with a precedence ladder and an auto-rename that could take a name away from its
-owner. **That system is not running.** Profile linkage moved to the `AddressLink` contract,
-custom names went away entirely, and public-name resolution is now a server-side ladder rather
-than a contract entrypoint. If you are building anything that displays a Superhero handle, read
-this page before you cache one.
+An address can carry several names — a preferred `.chain` name, a middleware-resolved chain
+name, an X handle — and the Superhero API resolves one of them into a `public_name` for
+display. The name types differ in how much evidence backs them, so know which one you are
+looking at before you cache it.
 
-## What still exists
+## Name types
 
 | Type | Where it lives | How it gets there | Verified? |
 | --- | --- | --- | --- |
 | Preferred AENS name | `AddressLink`, provider `prefaens` | `link_principal`, which calls `AENSv2.lookup` inside the contract | **Yes** — ownership is checked on chain |
-| Chain name | `accounts.chain_name` in the API database | Derived from the middleware, refreshed on a sweep and on a stale read | Yes, but by derivation rather than by claim |
+| Chain name | `chain_name` on the account | Resolved from the middleware, refreshed on an hourly sweep and on a stale read | Yes, by resolution rather than by claim |
 | X handle | `AddressLink`, provider `x` | `link` after an OAuth check the backend performs | Off chain only — see [X verification](/identity/x-verification) |
-| Legacy username | `profile_cache.username` | Nothing. It was written by the removed ProfileRegistry indexer. | No |
+| Legacy username | `profile.username` | Read-only legacy field | No |
 
-And what does not:
+## How a public name is resolved
 
-| Gone | Replaced by |
-| --- | --- |
-| `set_custom_name` / `clear_custom_name` and the custom-name namespace | Nothing. You cannot claim a self-declared handle. |
-| `set_display_source` and the `display_source` field | Nothing. The server picks, you do not. |
-| `resolve_public_name` and the chain → X → custom ladder | A server-side ladder in `ProfileReadService` |
-| `CustomNameAutoRenamed` and the four-digit suffix rename | Nothing — with no custom names there is nothing to displace |
-| `set_chain_name` storing a caller-supplied expiry | `link_principal`, which verifies ownership instead of trusting an expiry |
-
-The practical upshot: **a name can no longer be taken away from you by somebody else
-registering a verified name.** The scenario the whitepaper warns about — claiming `vitalik` and
-losing it to `vitalik.chain` — cannot happen, because the namespace you would have squatted in
-does not exist.
-
-## How a public name is resolved now
-
-Not by a contract call. `ProfileReadService.resolvePublicName` walks four steps and returns the
-first non-empty value:
+The API walks four steps and returns the first non-empty value:
 
 ```text
 prefered_aens_name   (links.prefaens — the AENS name you explicitly linked)
-chain_name           (accounts.chain_name, derived from the middleware)
-username             (the frozen registry-era cache field)
+chain_name           (resolved from the middleware)
+username             (the legacy profile field)
 address              (the ak_… itself)
 ```
 
-A user-set preferred name overrides the middleware-derived one on purpose: an address can own
-several AENS names, and the middleware just hands back the first. Linking one says which.
+A linked preferred name overrides the middleware-resolved one on purpose: an address can own
+several AENS names, and the middleware returns the first. Linking one says which.
 
-That resolved value is the `public_name` on `GET /api/profile/{address}` and
-`GET /api/accounts/{address}`. There is no on-chain equivalent and no per-account preference
-that changes the order.
+The resolved value is `public_name` on `GET /api/profile/{address}` and
+`GET /api/accounts/{address}`. There is no per-account preference that changes the order.
 
 ### How the chain name stays fresh
 
-`accounts.chain_name` is cached with a `chain_name_updated_at` timestamp. An hourly sweep in
-`AccountService` refreshes it, and `GET /api/accounts/{address}` additionally refreshes on read
-when the cached value is older than the staleness window, writing the new value back
-asynchronously. So an expired or transferred AENS name drops out of the profile within about an
-hour without anyone doing anything.
+`chain_name` is cached with a `chain_name_updated_at` timestamp. An hourly sweep refreshes it,
+and `GET /api/accounts/{address}` additionally refreshes on read when the cached value is older
+than the staleness window, writing the new value back asynchronously. An expired or transferred
+AENS name therefore drops out of the profile within about an hour.
 
-The `chain_expires_at` field in the profile aggregate is a different thing: it is a frozen
-`profile_cache` column, written by the removed registry indexer, so it is stale for old records
-and null for everything created since. **Do not use it to decide whether a name is live.**
-Resolve the name through AENS, or trust that `chain_name` disappearing within the hour is the
-signal.
+`chain_expires_at` in the profile aggregate is a legacy field and is not refreshed. To check
+whether a name is live, resolve it through AENS.
 
 ## Reverse resolution
 
-`AddressLink` gives you two reverse lookups, both free dry-run reads:
+`AddressLink` provides two reverse lookups, both free dry-run reads backed by the contract's
+`reverse` map:
 
 | Call | Answers |
 | --- | --- |
 | `resolve(provider, value)` | Which address holds this provider value — for example which address linked the X handle `superherocom` |
 | `resolve_signer(principal)` | Which address linked this AENS name as a principal |
 
-These are backed by the contract's `reverse` map, so they are consensus state rather than an
-index the API maintains.
+## What the app displays
 
-## What the app actually displays
-
-The web client does not read the contract for the profile header. It takes the first non-empty
-value of:
+The profile header takes the first non-empty value of:
 
 ```text
 links.prefered_aens_name   (the preferred AENS name from the account aggregate)
@@ -93,13 +67,10 @@ chainName                  (the AENS name looked up for the address)
 formatAddress(address)     (a shortened ak_… fallback)
 ```
 
-A separate verified badge is rendered when an X link resolves. That badge means an `x` link
-exists in the contract, nothing more — see
-[Verifying Your X Account](/identity/x-verification) for what it does and does not prove.
+A verified badge is rendered when an `x` link exists for the account — see
+[Verifying Your X Account](/identity/x-verification) for what that link proves.
 
 ## Normalization
-
-Three layers normalize, and they do not do the same thing.
 
 | Layer | Rule |
 | --- | --- |
@@ -108,15 +79,15 @@ Three layers normalize, and they do not do the same thing.
 | Backend, on write | The value must be at most 200 characters and must not contain a `:`, because the signed message is colon-delimited |
 
 The `site` provider also strips the scheme — `https://example.com/blog` is stored as
-`example.com/blog` — for the same colon reason, and a port is rejected outright.
+`example.com/blog` — and rejects a port.
 
-There is no case folding on the contract side. `AddressLink` stores the value string verbatim,
-so whatever the backend normalized is what is on chain.
+The contract stores the value string verbatim, so whatever the backend normalized is what is
+on chain.
 
 ## Worked examples
 
-**Linking a `.chain` name.** Claim the AENS name first — the identity layer does not claim it
-for you — then run the claim-sign-submit flow at `/api/address-links/prefered-aens-name/`. The
+**Link a `.chain` name.** Claim the AENS name first — the identity layer does not claim it for
+you — then run the claim-sign-submit flow at `/api/address-links/prefered-aens-name/`. The
 signed message puts the name in the subject slot rather than your address:
 
 ```text
@@ -127,36 +98,22 @@ The backend calls `link_principal`, and the contract verifies with `AENSv2.looku
 the name. `PRINCIPAL_NOT_FOUND` means the name is not registered; `PRINCIPAL_MISMATCH` means
 you do not own it.
 
-**Linking an X handle.** Complete the OAuth leg, sign `link:ak_…:x:yourhandle:<nonce>`, and
+**Link an X handle.** Complete the OAuth leg, sign `link:ak_…:x:yourhandle:<nonce>`, and
 submit with the verification token. The handle is stored lowercased.
 
-**Changing which name shows.** Link a different `.chain` name, or unlink `prefaens` to fall
-back to whatever the middleware reports. There is no display-source switch.
+**Change which name shows.** Link a different `.chain` name, or unlink `prefaens` to fall back
+to the middleware-resolved name.
 
-**Removing a name.** `unclaim` then `unclaim/submit` on the matching provider path. Only your
+**Remove a name.** `unclaim` then `unclaim/submit` on the matching provider path. Only your
 own signature is required — no OAuth, no AENS check.
 
-## Open questions
+## Related
 
-- **Can two addresses link the same provider value?** The contract keeps a `reverse` map from
-  `(provider, value)` to address, which suggests one owner per value, and the backend surfaces
-  an `ALREADY_CLAIMED` abort described as "this provider is already linked to a different value
-  for this address" — which is the *other* direction. Whether a second address linking an
-  already-claimed value overwrites, aborts, or silently coexists needs the `AddressLink.aes`
-  source; only the ACI is vendored.
-- **Is there a length or character limit on a linked name beyond the contract's own?** The
-  contract caps any value at 200 characters and forbids `:`. No shorter limit appears in the
-  backend for `prefaens` or `x`. AENS names carry their own protocol rules — see
-  [Chain Names (AENS)](/identity/chain-names).
-
-## Read more
-
-- [The AddressLink contract](/identity/profile-registry) — the contract behind every link, and
-  what happened to each registry feature.
+- [AddressLink](/identity/profile-registry) — the contract behind every link.
 - [Chain Names (AENS)](/identity/chain-names) — how to get the `.chain` name that sits at the
   top of the resolution ladder.
 - [Verifying Your X Account](/identity/x-verification) — the `x` link, and what a verified
-  badge actually means.
+  badge means.
 - [Profiles & Accounts](/identity/profiles) — where the resolved name ends up on screen.
 - [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) —
   the protocol-level name system a chain name is anchored to.

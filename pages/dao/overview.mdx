@@ -1,27 +1,26 @@
 ---
 title: "How DAOs Work"
-description: "Treasury, proposals, votes and execution in one picture."
+description: "The community DAO lifecycle — deployment, funding, proposals, voting, execution and withdrawal — with the contract and entrypoint at each step."
 ---
 
 # How DAOs Work
 
 A community DAO turns trading activity into a treasury and gives the people holding the token
-a way to spend it. This page walks the whole lifecycle — deployment, funding, proposing,
-voting, execution and withdrawal — and names the contract and entrypoint responsible at each
-step, so you can follow a real proposal on-chain rather than take the summary on trust.
+a way to spend it. Each step below names the contract and entrypoint responsible, so you can
+follow a real proposal on-chain.
 
 ## The lifecycle
 
 1. Trading fees accumulate in the DAO treasury — **0.5% of every buy** on the community's
    bonding curve.
-2. Any holder at or above the community threshold can open a vote through
+2. Any holder at or above the community threshold opens a vote through
    `DAO.add_vote(metadata)`, paying **555 AE** to the DAO.
 3. The vote stays open for **two weeks**, measured in key-blocks.
 4. Holders cast a binary vote by locking tokens in the newly deployed `DAOVote` contract.
 5. It passes with at least **55% of the voted stake in favour** and at least **10% of total
-   token stake participating**.
+   token supply participating**.
 6. A passed vote must be applied within roughly **two days** of closing, via
-   `DAO.apply_vote_subject(vote_seq_id)`. Any account — or a script — can trigger it.
+   `DAO.apply_vote_subject(vote_seq_id)`. Any account can trigger it.
 7. Voters call `withdraw()` to reclaim their locked tokens.
 
 ## Step 1 — deployment
@@ -34,12 +33,11 @@ CommunityFactory.create_community(collection_name, name, initial_buy_count,
   -> (DAO, TokenSale, CommunityManagement)
 ```
 
-The `DAO` is created as both the **owner** and the **beneficiary** of the token sale. The
-same call deploys `CommunityManagement` with an initial moderator and an initial minimum
-token threshold. The token sale contract, the bonding curve and the AEX-9 token are deployed
-in the same sequence.
+The `DAO` is created as both the **owner** and the **beneficiary** of the token sale. The same
+call deploys `CommunityManagement` with an initial moderator and an initial minimum token
+threshold, plus the sale contract, the bonding curve and the AEX-9 token.
 
-The DAO's own state is small:
+The DAO's state:
 
 ```text
 DAO.state = { token_sale   : option(TokenSale)
@@ -48,32 +46,25 @@ DAO.state = { token_sale   : option(TokenSale)
             , factory      : Factory }
 ```
 
-`votes` is the registry of every vote ever opened on this DAO, keyed by a sequential id. The boolean
-in each entry is the **applied** flag: `apply_vote_subject` reads it as
-`require(!applied, "VOTE_ALREADY_APPLIED")` and sets it to `true` once the subject executes. Read
-the map with `votes()`, or the whole record with `get_state()`.
+`votes` is the registry of every vote opened on this DAO, keyed by a sequential id starting at
+zero. The boolean is the **applied** flag: `apply_vote_subject` requires it to be `false`
+(`VOTE_ALREADY_APPLIED` otherwise) and sets it to `true` once the subject executes. Read the map
+with `votes()`, or the whole record with `get_state()`.
 
-The id is `Map.size(state.votes)` at the moment of creation, so ids are dense and sequential from
-zero, and `vote_timeout` is set once at deployment to `(60 / 3) * 24 * 2` — 960 key blocks.
+`vote_timeout` is set once at deployment to `(60 / 3) * 24 * 2` — 960 key-blocks.
 
 ## Step 2 — funding
 
-Proceeds do not arrive as a bare `Chain.spend`. The token sale calls:
+The token sale forwards the DAO's share of each buy by calling:
 
 ```text
 stateful payable entrypoint record_sale_transaction(buyer: address, buy_price: int) : unit
 ```
 
-The AE arrives with the transaction, and the buyer and the price arrive as arguments. That
-signature is also part of the `ReplaceableDAO` interface, which is what makes a custom DAO
-able to do something other than simply accumulate the money. See
-[The Treasury](/dao/treasury) and [Replaceable DAOs](/dao/replaceable-dao).
-
-In the stock `DAO.aes` the body is literally empty — `payable stateful entrypoint
-record_sale_transaction(buyer : address, buy_price : int) = ()`. The AE is retained because the
-contract is `payable`; the arguments are recorded nowhere. **It is unpermissioned**: there is no
-check that the caller is the linked token sale, so any account can call it with any value and any
-arguments. See [The Treasury](/dao/treasury) for what that does and does not let someone do.
+The AE arrives with the call; the buyer and the price arrive as arguments. The stock DAO keeps
+the AE and does not store the arguments. The signature is part of the `ReplaceableDAO`
+interface, so a custom DAO can act on income as it lands. See [The Treasury](/dao/treasury)
+and [Replaceable DAOs](/dao/replaceable-dao).
 
 The other source of treasury funds is the 555 AE paid by whoever opens a vote. It is a
 donation to the DAO, not a refundable deposit.
@@ -93,11 +84,11 @@ DAOVote.metadata = { subject     : VoteSubjects.subject
 ```
 
 `subject` is the machine-readable action, drawn from a closed set of seven constructors.
-`description` and `link` are free text for humans; nothing on-chain validates the link, so
-treat it as untrusted input. `add_vote` deploys a fresh `DAOVote` contract, registers it in
-`DAO.votes` under the next sequential id, and returns both the id and the contract.
+`description` and `link` are free text for humans; nothing on-chain validates the link.
+`add_vote` deploys a fresh `DAOVote` contract, registers it in `DAO.votes` under the next
+sequential id, and returns both the id and the contract.
 
-Who may call it, exactly, from `bcl-contracts/contracts/DAO.aes`:
+`add_vote` enforces two conditions:
 
 ```sophia
 payable stateful entrypoint add_vote(metadata : DAOVote.metadata) =
@@ -110,19 +101,19 @@ payable stateful entrypoint add_vote(metadata : DAOVote.metadata) =
           "ADD_VOTE_TOKEN_HOLDER_MISSMATCH")
 ```
 
-Three things that table does not say in prose:
+- **Exactly 555 AE.** `Call.value` must equal `555 * 10^18` aettos — attaching more fails
+  the same way as attaching less.
+- **The caller's balance is read at call time**, live from the AEX-9 contract. There is no
+  snapshot height and no holding period.
+- A missing balance counts as zero, so a community whose threshold is `0` lets any account
+  with 555 AE open a proposal.
 
-- **The balance is read at call time**, live from the AEX-9 contract, for `Call.caller` only. There is no snapshot height and no holding period. Buy the threshold, propose, and sell again in the next block if you like — the proposal stands.
-- **555 AE exactly.** `Call.value == 555 * 10^18`, not "at least". Attaching more aborts just as surely as attaching less, and there is no refund path because there is no surplus.
-- **An account with no balance at all passes if the threshold is zero**, because `Option.default(0, …)` maps a missing balance to zero. A community that voted its threshold down to `0` has open proposals for anyone with 555 AE.
-
-See [Quorum and Thresholds](/dao/quorum-and-thresholds) for where that number lives and
-[Proposals and Vote Subjects](/dao/proposals) for what you can put in `subject`.
+See [Proposals and Vote Subjects](/dao/proposals) for what you can put in `subject`.
 
 ### Where the threshold comes from
 
-The threshold is the `minimum_token_threshold` field on the community's
-`CommunityManagement` contract. Read it directly:
+The threshold is the `minimum_token_threshold` field on the community's `CommunityManagement`
+contract:
 
 ```text
 CommunityManagement.minimum_token_threshold() : int
@@ -131,8 +122,7 @@ CommunityManagement.minimum_token_threshold() : int
 Reach that contract from the DAO with `DAO.get_community_management()`, which returns an
 `option(CommunityManagement)`. The value is in the token's smallest unit, so divide by
 `10^decimals` — read `decimals` from the token's `meta_info()` — before comparing it to a
-displayed balance. The same number is changed by a `ChangeMinimumTokenThreshold` vote, so it
-is not constant over a community's life.
+displayed balance. A `ChangeMinimumTokenThreshold` vote changes it.
 
 ## Step 4 — voting
 
@@ -148,32 +138,30 @@ DAOVote.state = { metadata      : DAOVote.metadata
                 , author        : address }
 ```
 
-`vote_state` is the running tally: total stake in favour under the key `true`, total stake
-against under `false`. `vote_accounts` records, per voter, the amount staked, which way they
-voted, and whether they have withdrawn.
+`vote_state` is the running tally: total stake in favour under `true`, total stake against
+under `false`. `vote_accounts` records, per voter, the amount staked, which way they voted,
+and whether they have withdrawn.
 
-Voting requires an AEX-9 allowance and locks your tokens. That surprises people, so it has
-its own page: [Voting](/dao/voting).
+Voting requires an AEX-9 allowance and locks your tokens. See [Voting](/dao/voting).
 
 ## Step 5 — the outcome
 
-When `Chain.block_height` passes `close_height`, `is_closed()` returns true and
-`final_vote_state()` stops returning `None`. Two conditions decide the result, and both are checked
-inside `apply_vote_subject` rather than by the vote contract:
+When `Chain.block_height` reaches `close_height`, `is_closed()` returns true and
+`final_vote_state()` stops returning `None`. `apply_vote_subject` then checks:
 
-| Condition | Test in `DAO.aes` | Abort message |
+| Condition | Test | Abort message |
 | --- | --- | --- |
 | Any turnout | `total_vote_stake > 0` | `NO_VOTE_STAKE` |
 | Any supply | `token_total_supply > 0` | `NO_TOKEN_SUPPLY` |
 | Approval | `(vote_state[true] * 100) / total_vote_stake >= 55` | `GREATER_55_PERCENT_AGREEMENT_REQUIRED` |
 | Participation | `(total_vote_stake * 100) / token_total_supply >= 10` | `GREATER_10_PERCENT_STAKE_REQUIRED` |
 
-Both are needed. A proposal with 100% approval and 4% turnout does not pass.
-
-Two details the prose usually glosses:
+Both thresholds are needed. A proposal with 100% approval and 4% turnout does not pass.
 
 - **`total_vote_stake` is yes plus no**, so revoked votes reduce turnout as well as approval.
-- **`token_total_supply` is read at execution time, not at the close.** The contract's own comment says so: "the total token supply can change after the vote has closed, thus impacting this check, therefore we keep the application timeout short to minimize the security impact." A large buy between closing and execution mints new supply and can push a passed vote below the 10% quorum. That is the real reason the execution window is two days rather than two weeks.
+- **`token_total_supply` is read at execution time, not at the close.** A large buy between
+  closing and execution mints new supply and can push a passed vote below the 10% quorum.
+  This is why the execution window is short.
 
 ## Step 6 — execution
 
@@ -181,28 +169,24 @@ Two details the prose usually glosses:
 stateful entrypoint apply_vote_subject(vote_seq_id: int) : unit
 ```
 
-Execution is a separate transaction from the vote. It is **permissionless**: any account, or
-an automated script, can call `apply_vote_subject` with the vote's sequential id, and the DAO
-checks the result itself before acting. Nobody has a special right to apply a passed vote,
-and nobody can block one by refusing to.
+Execution is a separate transaction from the vote, and it is **permissionless**: any account
+or script can call `apply_vote_subject` with the vote's sequential id. The DAO checks the
+result itself before acting.
 
-The window is bounded by `require(vote.close_height() + state.vote_timeout >= Chain.block_height,
-"VOTE_RESULT_TIMEOUTED")`. `vote_timeout` is `960` key blocks — approximately two days — set once at
-DAO deployment; read it live with `vote_timeout()`. Note there is no lower bound in that check: the
-"not yet final" case is caught separately, by `final_vote_state()` returning `None` before the
-closing height.
+The window is `vote.close_height() + state.vote_timeout >= Chain.block_height`, otherwise
+`VOTE_RESULT_TIMEOUTED`. `vote_timeout` is 960 key-blocks — about two days — and is readable
+with `vote_timeout()`.
 
-**A passed vote that is never applied in time simply does nothing.** The treasury is not
-paid out, the moderator is not appointed, and the 555 AE is not returned. The proposal has to
-be opened again from scratch, at full cost. If you care about a proposal passing, plan for
-somebody to call `apply_vote_subject` promptly — the vote detail page in the app exposes an
-Apply action once the vote is applicable.
+**A passed vote that is not applied in time does nothing.** The treasury is not paid out, the
+moderator is not appointed, and the 555 AE is not returned. Plan for somebody to call
+`apply_vote_subject` promptly — the vote's page in the app shows an Apply action once the
+vote is applicable.
 
 ## Step 7 — withdrawal
 
 After the closing height, every voter calls `withdraw()` on the vote contract to unlock their
-tokens. Withdrawing after the close does not change the recorded outcome. Tokens left
-unwithdrawn stay locked until their owner acts; nothing sweeps them automatically.
+tokens. Withdrawing does not change the recorded outcome. Tokens stay locked until their owner
+withdraws; nothing sweeps them automatically.
 
 ## Following a proposal in the app
 
@@ -212,23 +196,15 @@ unwithdrawn stay locked until their owner acts; nothing sweeps them automaticall
 | One community's treasury and its proposals | `/trends/dao/:saleAddress` |
 | A single proposal, with voters and actions | `/trends/dao/:saleAddress/vote/:voteId/:voteAddress` |
 
-The proposal route carries both the sequential `voteId` and the `DAOVote` contract address,
-because the DAO needs the id to apply the subject and the vote contract address to read the
-ballot.
+The proposal route carries both the sequential `voteId` and the `DAOVote` contract address:
+the DAO needs the id to apply the subject, and the vote contract address is where the ballot
+is read.
 
 ## Read more
 
-- [Proposals and Vote Subjects](/dao/proposals) — what you can actually put in a proposal.
-- [Voting](/dao/voting) — the allowance step and the locking behaviour, in detail.
+- [Proposals and Vote Subjects](/dao/proposals) — what you can put in a proposal.
+- [Voting](/dao/voting) — the allowance step and the locking behaviour.
 - [Quorum and Thresholds](/dao/quorum-and-thresholds) — every constant, with the key-block arithmetic.
 - [The Treasury](/dao/treasury) — reading a DAO's balance on-chain and through the API.
 - [DAO contract reference](/contracts/dao) — the full entrypoint table.
-- [Open a community's DAO](https://superhero.com/trends/daos) — the live list to start from.
-
-## Open questions
-
-- **No mainnet proposal has been walked end to end with transaction hashes on this page.** To
-  produce one, list a community's votes with `DAO.votes()` for a sale address taken from
-  `/trends/daos`, then look up the `add_vote`, `vote` and `apply_vote_subject` transactions for that
-  vote contract on [æScan](https://aescan.io). A worked example would be worth more than any of the
-  prose above.
+- [Open a community's DAO](https://superhero.com/trends/daos) — the live list.

@@ -1,20 +1,14 @@
 ---
 title: "Identity"
-description: "SuperheroID: decentralized identity linking your wallet, chain names and social accounts."
+description: "SuperheroID: an æternity address with signed, revocable links to your names, X handle and Nostr key."
 ---
 
 # Identity
 
 Your identity on Superhero is your æternity address plus whatever you choose to attach to it.
-Those attachments live in the `AddressLink` contract as provider links, each authorised by your
-own signature over a nonce-bearing message — so there is no account system to be locked out of,
-and only you can remove a link.
-
-**`ProfileRegistry.aes` is not the identity layer any more.** Linkage moved to `AddressLink`
-and the registry's indexer was removed from the backend. Custom names and the display-source
-preference went with it. Anything you read in the whitepaper's "Superhero Onchain ID" section
-describes a design that is not running — see
-[The AddressLink contract](/identity/profile-registry) for the before-and-after.
+Attachments are provider links in the `AddressLink` contract, each authorised by your own
+signature over a nonce-bearing message. There is no account to be locked out of, and only you
+can remove a link.
 
 ## The shape of an identity
 
@@ -22,39 +16,34 @@ describes a design that is not running — see
 | --- | --- | --- |
 | Address | `ak_…` public key derived from your seed | The æternity chain; you hold the key |
 | Preferred AENS name | A `.chain` name you own and linked | `AddressLink`, provider `prefaens`, ownership checked on chain |
-| Chain name | An AENS name derived for your address | The middleware, cached and refreshed hourly |
-| X handle | An X handle you consented to link | `AddressLink`, provider `x`, OAuth checked off chain |
+| Chain name | An AENS name resolved for your address | The Superhero API, refreshed hourly from the middleware |
+| X handle | An X handle you linked after OAuth | `AddressLink`, provider `x` |
 | Nostr key | The npub your chat identity uses | `AddressLink`, provider `nostr` |
 | Bio and website | Free-text links | `AddressLink`, providers `bio` and `site` |
-| Fullname, avatar, legacy username | Registry-era fields with no writer left | The frozen `profile_cache` table |
+| Fullname, avatar, username | Legacy profile fields, read-only | The Superhero API |
 
 A name is never the identity. Resolution always ends at an address, and the name types differ
-in how much evidence backs them. Read [Names](/identity/names) before you assume a displayed
-handle means anything.
+in how much evidence backs them — see [Names](/identity/names).
 
 ## In this section
 
-- [SuperheroID](/identity/superhero-id) — the product-level story: what an identity links, what
-  is on chain, and how much of the W3C DID claim is substantiated today.
-- [The AddressLink contract](/identity/profile-registry) — the contract reference: data model,
-  entrypoints, events, the provider-ownership model, and what replaced each registry feature.
-- [Names: Custom, Chain and X](/identity/names) — which name types still exist, and how a
-  public name is resolved now that there is no contract entrypoint for it.
+- [SuperheroID](/identity/superhero-id) — what an identity links, what is on chain, and how a
+  third party verifies each link.
+- [AddressLink](/identity/profile-registry) — the contract reference: data model, entrypoints,
+  events, providers and the signed message format.
+- [Names](/identity/names) — the name types, and how a public name is resolved.
 - [Chain Names (AENS)](/identity/chain-names) — registering, pointing, extending and losing a
   `.chain` name, including the sponsored free claim.
 - [Verifying Your X Account](/identity/x-verification) — the OAuth plus claim-sign-submit flow,
-  documented precisely enough to reimplement, and exactly what it proves.
+  in enough detail to reimplement.
 - [Profiles & Accounts](/identity/profiles) — what an account page shows, which fields are
   editable, and how each edit is authorised.
-- [DIDs and the W3C Standard](/identity/did-standard) — how the model maps onto W3C DID Core,
-  and the DID namespace the contract reserves but nobody fills.
+- [Identity and DIDs](/identity/did-standard) — how the model maps onto W3C DID Core.
 
-## Read more
+## Related
 
 - [On-chain social](/concepts/on-chain-social) — why identity, content and money share one
   address on Superhero.
 - [Chat](/social/chat) — the `nostr` link, and the pipeline that consumes it for token-gated
   rooms.
 - [Accounts and keys](/aeternity/accounts-and-keys) — where an `ak_` address comes from.
-- [The Superhero whitepaper](https://superhero.com/whitepaper) — the "Superhero Onchain ID"
-  section, which documents the retired registry design rather than what runs.

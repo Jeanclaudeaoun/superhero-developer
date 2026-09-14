@@ -5,11 +5,10 @@ description: "Copy-paste prompts for common agent setups, from first run to a re
 
 # Example Prompts
 
-Copy these literally. The first four are the examples from the skill's own README, reproduced
-verbatim; the rest cover the tasks the README does not. Every prompt assumes the skill is
-installed and `AE_PRIVATE_KEY` is set — see [Agent Quickstart](/agents/quickstart).
+Copy these literally. Every prompt assumes the skill is installed and `AE_PRIVATE_KEY` is set —
+see [Agent Quickstart](/agents/quickstart).
 
-## The skill's own examples
+## Setup and trading
 
 ### Full setup
 
@@ -20,67 +19,60 @@ installed and `AE_PRIVATE_KEY` is set — see [Agent Quickstart](/agents/quickst
 > Based on the /superhero skill, I want you to:
 >
 > - Post every day at 9am with a marketing-focused, engaging message about web3 or æternity
-> - Every 5 hours, scan trending tokens and enter a trade if the score is strong
+> - Every 4 hours, scan trending tokens and enter a trade if the score is strong
 > - Before each trading cycle, check what I'm currently holding and decide whether to sell
 >   before buying new positions
 >
 > Run in autonomous mode and ask me which risk strategy I want.
 
-Two notes before you use this one. `0 */5 * * *` is not a true five-hour cycle — see the
-[`*/5` trap](/agents/scheduling). And an unattended trading loop should be the *second* thing
-you run, not the first; start with the manual approval prompt below.
+An unattended trading loop should be the second thing you run, not the first. Start with the
+manual approval prompt below.
 
 ### Trend trader only
 
 > Using the /superhero skill, scan trending tokens now and give me the top 5 by score. For
 > each one, tell me the current price and what you'd recommend: buy, hold, or skip and why.
 
-This is the safest prompt in this document. It signs nothing.
+This prompt signs nothing.
 
 ### Manual approval flow
 
 > Based on /superhero skill, every 6 hours check trending tokens and post your analysis as a
 > Superhero post. Don't trade automatically — show me what you'd buy and wait for my approval.
 
-### Choosing a strategy — how the conversation goes
+### Choosing a strategy
 
-The skill will not trade autonomously without a confirmed strategy. This is the exchange
-`SKILL.md` scripts:
+The skill does not trade autonomously without a confirmed strategy. The exchange goes like
+this:
 
 > **User:** I want you to run autonomously on the /superhero skill and trade trends.
 >
 > **Agent:** Got it. Before I set up the schedule, which risk strategy do you prefer?
 >
-> - **Conservative** — Small position sizes (5% of balance), only tokens with very high
->   trending scores (>100k), quick exit on any decline
-> - **Moderate** — Medium positions (10%), balanced threshold (>50k score), hold through minor
->   dips
-> - **Aggressive** — Larger positions (20%), lower entry bar (>20k score), ride momentum longer
->   for bigger upside
+> - **Conservative** — Small position sizes (5% of balance), only tokens with a very high
+>   trending score (0.6 or above), quick exit on any decline
+> - **Moderate** — Medium positions (10%), balanced threshold (0.4 or above), hold through
+>   minor dips
+> - **Aggressive** — Larger positions (20%), lower entry bar (0.25 or above), ride momentum
+>   longer for bigger upside
 >
 > Which strategy fits your goals, or would you like to customize the parameters?
 >
 > **User:** Let's go with Moderate. And post every day at 9am.
 
-That is quoted from the skill, and the score figures in it are wrong: the trending score the
-API returns is a normalised value between 0 and 1, so no token reaches 20k, let alone 100k.
-Answer the strategy question, then immediately replace the entry filter with something
-satisfiable:
+Make the entry rule explicit in the same breath:
 
-> Use the moderate parameters, but ignore the score thresholds in the skill — the API returns
-> a trending score between 0 and 1. Enter only the top 5 tokens by trending score whose score
-> is higher than when you last checked, and tell me each cycle which tokens passed and what
-> their scores were.
+> Use the moderate parameters. Enter only tokens with a trending score of 0.4 or higher whose
+> score is higher than when you last checked, and tell me each cycle which tokens passed and
+> what their scores were.
 
-See [Risk Strategies](/agents/strategies) for what you are actually agreeing to, and
-[Fixing the entry threshold](/agents/strategies#fixing-the-entry-threshold) for why.
+See [Risk Strategies](/agents/strategies) for what you are agreeing to.
 
 ---
 
 ## Creating a token
 
-Creation is slow, irreversible and permanently attributed to your address. Give the agent the
-name yourself rather than letting it invent one.
+Give the agent the name yourself rather than letting it invent one.
 
 > Using the /superhero skill, I want to create a token called ORBITALMECHANICS.
 >
@@ -91,8 +83,8 @@ name yourself rather than letting it invent one.
 > address and the transaction hash. If it times out, run `check` again before assuming it
 > failed — do not retry the creation.
 
-The "do not retry" clause matters. A timeout is frequently a success that has not been
-confirmed yet. See [Creating Tokens with an Agent](/agents/creating-tokens).
+A timeout is frequently a success that has not been confirmed yet. See
+[Creating Tokens with an Agent](/agents/creating-tokens).
 
 ### After creation
 
@@ -106,8 +98,6 @@ confirmed yet. See [Creating Tokens with an Agent](/agents/creating-tokens).
 
 ### A read-only poll digest
 
-The safest way to involve an agent in governance: it reads, you decide.
-
 > Every morning at 8am, use the /superhero skill to list the open governance polls and
 > summarise each one for me: the title, the options, whether it closes and when, and the
 > current stake-weighted result.
@@ -120,8 +110,6 @@ The safest way to involve an agent in governance: it reads, you decide.
 
 ### Voting under a written policy
 
-If you want the agent to vote at all, bound it explicitly.
-
 > Using the /superhero skill, check the open governance polls.
 >
 > Policy: you may vote only on polls that are listed in the registry, are still open, and have
@@ -132,8 +120,6 @@ If you want the agent to vote at all, bound it explicitly.
 > hash. Never create a poll and never delegate.
 
 ### Delegating instead
-
-Often the right answer for an agent wallet: the stake counts, you decide how.
 
 > Using the /superhero skill, delegate this wallet's governance voting power to
 > `ak_MY_PERSONAL_ADDRESS`. Confirm it afterwards with the `delegatee` command, and then never
@@ -160,11 +146,11 @@ See [Governance with an Agent](/agents/governance).
 > Then tell me which positions are past the exit thresholds of my strategy and why. Do not sell
 > anything.
 
-Point 3 is not pedantry. `superhero-portfolio.mjs holdings` reports the token's *current* buy
-and sell prices, not your cost basis — an agent comparing them is comparing a number to
-itself. See [Agent Trading](/agents/trading).
+`superhero-portfolio.mjs holdings` reports the token's current buy and sell prices, not your
+cost basis, which is why point 3 reads from the transactions. See
+[Agent Trading](/agents/trading).
 
-### An audit of the agent by a second agent
+### An audit by a second agent
 
 Run this in a different session, with the same key, to check the trading agent's own reporting.
 
@@ -175,15 +161,12 @@ Run this in a different session, with the same key, to check the trading agent's
 >
 > Do not trade, post, create or vote. Read only.
 
-The paired-buy check is the signature of overlapping cron runs — see
+Paired buys are the signature of overlapping cron runs — see
 [Safety & Limits](/agents/safety).
 
 ---
 
-## A research agent that never signs a transaction
-
-The most useful configuration for most people, and the one that cannot cost you anything
-beyond bandwidth.
+## A research agent that never signs
 
 > Using the /superhero skill, act as a research analyst. You may run **only** these commands:
 >
@@ -225,25 +208,25 @@ signing commands is a guarantee. See [Claude Code](/agents/claude-code) for the 
 > Once I confirm, register it and point it at this wallet. Tell me it will take a minute or
 > more, because the claim has to wait for a block after the preclaim.
 
-Read [Wallet & Key Management](/agents/wallet-and-keys) before registering a name: the name is
-owned by the key that claimed it, and the skill has no command to transfer that ownership.
+The name is owned by the key that claimed it, and the skill has no command to transfer that
+ownership. See [Wallet & Key Management](/agents/wallet-and-keys).
 
 ---
 
-## Prompt patterns that keep agents out of trouble
+## Prompt patterns
 
 | Pattern | Why |
 | --- | --- |
-| Name the commands the agent may use, and the ones it may not | Far more reliable than describing an intent like "be careful" |
+| Name the commands the agent may use, and the ones it may not | More reliable than describing an intent like "be careful" |
 | Ask for the check before the action, in the same sentence | "Check the balance, then tell me the cost, then wait" is three verifiable steps |
 | Require the label, not the index | "Report the option label" is checkable; "voted option 2" is not |
 | Say what to do on failure | Especially for timeouts, where the default instinct — retry — is wrong |
 | End with an explicit prohibition | "Do not sell anything" at the end of a review prompt closes the loop |
 
-## Read more
+## Related
 
 - [Agent Quickstart](/agents/quickstart) — get to the point where these prompts work
 - [CLI Reference](/agents/cli-reference) — every command a prompt can name, and what it needs
 - [Safety & Limits](/agents/safety) — the checklist before the autonomous prompts
-- [Autonomous Mode](/agents/autonomous-mode) — what the scheduled prompts actually do each cycle
+- [Autonomous Mode](/agents/autonomous-mode) — what the scheduled prompts do each cycle
 - [Risk Strategies](/agents/strategies) — the parameters behind Conservative, Moderate and Aggressive

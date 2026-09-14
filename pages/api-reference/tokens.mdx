@@ -1,18 +1,15 @@
 ---
 title: "Tokens API"
-description: "Query community tokens: the full TokenDto, prices and their units, holders, history, performance and rankings."
+description: "Query community tokens: the TokenDto and its units, holders, price history, performance, rankings and trending score."
 ---
 
 # Tokens API
 
-Community tokens are the centre of the Superhero API — the trending list, a user's portfolio,
-every chart and every trade record all resolve back to a token. This page documents the twelve
-token endpoints and the `TokenDto` they return, field by field, including which numbers are in AE
-and which are in aettos.
+Community tokens are the centre of the API: the trending list, portfolios, charts and trade
+records all resolve to a token. Twelve endpoints return tokens and their derived data.
 
-All paths are relative to `https://api.superhero.com`. Reads need no authentication, and none of
-these routes carries the per-IP rate-limit guard — see
-[Conventions](/api-reference/conventions#rate-limits) for which ones do.
+All paths are relative to `https://api.superhero.com`. Reads need no authentication and are not
+rate-limited.
 
 ## Endpoints
 
@@ -20,11 +17,11 @@ these routes carries the per-IP rate-limit guard — see
 | --- | --- | --- |
 | `GET /api/tokens` | `order_by`, `order_direction`, `collection`, `limit`, `page`, `search`, `owner_address`, `creator_address`, `factory_address` | Paginated `TokenDto` list |
 | `GET /api/tokens/{address}` | — | One `TokenDto` |
-| `GET /api/tokens/{address}/holders` | `limit`, `page` | Paginated `TokenHolderDto` |
+| `GET /api/tokens/{address}/holders` | `limit`, `page` | Paginated holder rows |
 | `GET /api/tokens/{address}/transactions` | `interval`, `start_date`, `end_date`, `convertTo`, `mode` | Aggregated trade series |
 | `GET /api/tokens/{address}/history` | `interval`, `convertTo`, `limit`, `page` | OHLC candles — a bare array |
 | `GET /api/tokens/{address}/performance` | — | Four price-movement windows |
-| `GET /api/tokens/{address}/performance-raw` | — | Same payload, database-view backed. Kept for backward compatibility |
+| `GET /api/tokens/{address}/performance-raw` | — | Alias of `performance`, kept for backward compatibility |
 | `GET /api/tokens/{address}/rankings` | `limit`, `page` | Neighbouring tokens by rank |
 | `GET /api/tokens/{address}/score` | — | Trending-score breakdown. Recomputes and persists the score |
 | `GET /api/tokens/{address}/trending-eligibility` | — | Whether the token qualifies for the trending list |
@@ -33,8 +30,8 @@ these routes carries the per-IP rate-limit guard — see
 
 ### `{address}` accepts a name
 
-Every one of these path parameters is documented in the generated client as **"Token address or
-name"**. `ct_...` sale address, `ct_...` AEX-9 address and the plain token name all resolve:
+Every `{address}` path parameter accepts a `ct_...` sale address, a `ct_...` AEX-9 address or
+the plain token name:
 
 ```bash
 # Resolve by name
@@ -44,13 +41,7 @@ curl -s "https://api.superhero.com/api/tokens/SUPERHERO"
 curl -s "https://api.superhero.com/api/tokens/ct_YOUR_SALE_ADDRESS"
 ```
 
-The agent skill relies on this: `superhero-token-swap.mjs lookup` tries
-`/api/tokens/{query}` first and only falls back to a `search` over `/api/tokens` when that 404s.
-
 ## `TokenDto`
-
-The full shape, from `src/api/generated/models/TokenDto.ts` in the web app and
-`superhero-api/src/tokens/dto/token.dto.ts` plus `entities/token.entity.ts` in the backend.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -66,47 +57,44 @@ The full shape, from `src/api/generated/models/TokenDto.ts` in the web app and
 | `bonding_curve_address` | string | `ct_...` of the curve contract used for pricing |
 | `collection` | string | Collection id, `NAME-ak_deployer` |
 | `collection_info` | `CollectionInfoDto` or null | Resolved collection metadata; null when unknown to the factory |
-| `metaInfo` | object | Free-form creator metadata map. Note the camelCase — it is the only camelCase field on the DTO |
+| `metaInfo` | object | Free-form creator metadata map. The only camelCase field on the DTO |
 | `unlisted` | boolean | Hidden from curated listings |
-| `last_sync_tx_count` | number | Indexer bookkeeping: transactions seen at last sync |
+| `last_sync_tx_count` | number | Transactions seen at last sync |
 | `tx_count` | number | Total trades recorded against the token |
 | `address` | string | `ct_...` of the **AEX-9 token contract** |
 | `name` | string | Token name, e.g. `SUPERHERO` |
 | `symbol` | string | Ticker |
 | `decimals` | **string** | Decimal places. `18` for factory-minted tokens. Parse before use |
-| `rank` | number | Position in the market-cap ranking across the current factory. 1 is highest. `2147483647` means "not yet ranked" |
+| `rank` | number | Position in the market-cap ranking across the current factory. 1 is highest. `2147483647` means not yet ranked |
 | `holders_count` | number | Distinct holding addresses |
 | `price` | string | Current **buy** price per token, in **AE** |
 | `price_data` | `PriceDto` | The same buy price in all nine currencies |
 | `sell_price` | string | Current **sell** price per token, in **AE** |
 | `sell_price_data` | `PriceDto` | The same sell price in all nine currencies |
-| `market_cap` | string | Market capitalisation in **aettos**. Computed as `total_supply * price` |
-| `market_cap_data` | `PriceDto` | Market cap in all nine currencies, all on the same aettos scale |
+| `market_cap` | string | Market capitalisation in **aettos**. `total_supply * price` |
+| `market_cap_data` | `PriceDto` | Market cap in all nine currencies, all on the aettos scale |
 | `total_supply` | string | The sale contract's `total_supply()`, in **token base units** |
-| `circulating_supply` | string or null | The middleware's AEX-9 `eventSupply`, in base units. Null when the middleware did not answer |
+| `circulating_supply` | string or null | The middleware's AEX-9 `eventSupply`, in **base units**. Null when the middleware did not answer |
 | `dao_balance` | string | AE held by the token's DAO, in **aettos** |
 | `trending_score` | number | Score driving the trending list. A decimal in `[0, 1]`, six decimal places |
 | `trending_score_update_at` | string | ISO 8601 timestamp of the last score recompute |
 | `performance` | `TokenPerformanceDto` or null | Inlined performance summary |
 | `created_at` | string | ISO 8601 creation timestamp |
 
-An extra `collection_rank` field appears on list rows when the app renders a
-collection-scoped ranking. It is read as an untyped field by the web app and is not part of the
-generated DTO — treat it as best-effort.
+List rows may also carry `collection_rank`, the token's position within its collection.
 
 ### `address` versus `sale_address`
 
-They are two different contracts and both are on every token:
+Both are on every token and they are different contracts:
 
 - **`sale_address`** is the token *sale* contract — the bonding curve you buy from and sell back
   into. It is the identifier the rest of the API keys on: `token_address` on `/api/transactions`,
-  the WebSocket `token-updated` channel, the portfolio PnL map, the DAO routes and
-  `/trends/dao/{saleAddress}` in the web app all mean the sale address.
-- **`address`** is the AEX-9 fungible token contract that actually holds balances. It is what a
-  wallet needs in order to display the token and what the middleware's `/v3/aex9/{address}`
-  endpoint takes.
+  the WebSocket `token-updated` channel, the portfolio PnL map and the DAO routes all mean the
+  sale address.
+- **`address`** is the AEX-9 fungible token contract that holds balances. It is what a wallet
+  needs to display the token and what the middleware's `/v3/aex9/{address}` endpoint takes.
 
-When in doubt, use `sale_address`. The web app's own fallback is `token.sale_address || token.address`.
+When in doubt, use `sale_address`.
 
 ### `PriceDto`
 
@@ -117,23 +105,10 @@ Wherever a value has a price, the API returns all nine currencies at once:
   "brl": 0.0071, "cad": 0.0018, "chf": 0.001, "gbp": 0.00097, "xau": 0.0000004 }
 ```
 
-**Every key is on the same scale.** The backend builds a `PriceDto` in one place —
-`AePricingService.getPriceData(value)` in `superhero-api/src/ae-pricing/ae-pricing.service.ts` —
-and it does exactly this:
-
-```text
-ae  = value                              (the value it was handed, unchanged)
-usd = value * rates.usd                  (and likewise eur, aud, brl, cad, chf, gbp, xau)
-```
-
-So the fiat keys are not a re-denomination into "normal" units; they are the *same number* in
-the same scale, multiplied by an AE-to-currency rate. If the `ae` key is in aettos — as it is on
-`market_cap_data` — then so is every other key, and `market_cap_data.usd / 1e18` is the USD
-market cap. Dividing the whole object by 1e18 once, as the web app does, is correct.
-
-The rates come from the `coin_prices` table, refreshed from CoinGecko by a cron every ten
-minutes (`AppService.syncAeCoinPricing`). When rates are unavailable every key except `ae` is
-`null` — handle that rather than assuming a number.
+**Every key is on the same scale as `ae`.** `usd` is `ae * rate.usd`, and likewise for the
+other seven. On `market_cap_data` the `ae` key is in aettos, so every other key is too, and
+`market_cap_data.usd / 1e18` is the USD market cap. Rates refresh every ten minutes; when they
+are unavailable every key except `ae` is `null`.
 
 ### `CollectionInfoDto`
 
@@ -144,48 +119,18 @@ minutes (`AppService.syncAeCoinPricing`). When rates are unavailable every key e
 | `description` | string or null | Optional |
 | `allowed_name_length` | string | Maximum token name length in this collection |
 
-## Units — resolved
+## Units
 
-`price` and `sell_price` are in **AE**. `market_cap`, `dao_balance` and `total_supply` are in
-**base units** and need dividing by 1e18. `decimals` is a **string**.
-
-The backend confirms each of these directly:
-
-| Field | Where it comes from in `superhero-api` | Unit |
-| --- | --- | --- |
-| `price` | `TokensService.getTokeLivePrice` reads `instance.price(1)` — the sale contract's price for one token | AE |
-| `sell_price` | the same method's `instance.sellReturn('1')` | AE |
-| `total_supply` | the AEX-9 contract's `total_supply()` view, unscaled | base units |
-| `market_cap` | `total_supply.multipliedBy(price)` in the same method — base units times AE, so 1e18 times AE | aettos |
-| `dao_balance` | `sdk.getBalance(metaInfo.beneficiary)`, a raw node balance | aettos |
-| `circulating_supply` | `eventSupply` from the middleware's `/v3/aex9/` endpoint | base units |
-| `decimals` | a TypeORM `bigint` column, which the driver returns as a string | string |
-| holder `balance` | a `numeric` column filled from the AEX-9 balance map | base units |
-
-The earlier reading of the web app's render path agrees with all of it:
-
-```ts
-// price: used directly, no conversion
-perTokenAe = Decimal.from(priceData.ae);          // TokenPriceFormatter.tsx
-perTokenAe = Decimal.from(token.price);           // fallback, same scale
-
-// market_cap: the `bignumber` flag makes the formatter run toAe() first
-<PriceDataFormatter bignumber priceData={token.market_cap_data} />   // TokenListTableRow.tsx
-aePrice={Decimal.from(toAe(t.market_cap))}                           // DaoListView.tsx
-
-// dao_balance: same
-aePrice={Decimal.from(toAe(token.dao_balance))}                      // TokenSummary.tsx
-
-// total_supply: same
-{Decimal.from(toAe(token.total_supply)).shorten()}                   // TokenListTableRow.tsx
-```
-
-where `toAe(x)` is `new BigNumber(x).dividedBy(1e18)`.
-
-The agent skill agrees on `price`: `superhero-trending.mjs` maps `price_ae: t.price` with no
-conversion. It passes `market_cap` through unconverted, which is why the raw script output shows
-a market cap eighteen orders of magnitude too large — a reason to do the division yourself rather
-than copy that mapping.
+| Field | Unit |
+| --- | --- |
+| `price` | AE — the sale contract's price for one token |
+| `sell_price` | AE — the sale contract's sell return for one token |
+| `total_supply` | token base units |
+| `market_cap` | aettos — `total_supply * price` |
+| `dao_balance` | aettos |
+| `circulating_supply` | token base units |
+| `decimals` | string |
+| holder `balance` | token base units |
 
 A worked check:
 
@@ -203,47 +148,37 @@ Decimal.from(holder.balance).div(10 ** (parseInt(token.decimals) || 18))
 
 ## `GET /api/tokens`
 
-The workhorse. Accepted `order_by` values:
-
 | `order_by` | Sorts on |
 | --- | --- |
-| `name`, `price`, `created_at`, `holders_count`, `rank`, `trending_score` | the column of that name |
+| `name`, `price`, `created_at`, `holders_count`, `rank`, `trending_score` | The column of that name |
 | `market_cap` | `rank`, with the direction flipped — see below |
-| `treasury` | **`dao_balance`** — the DAO's AE balance in aettos |
+| `treasury` | `dao_balance` — the DAO's AE balance in aettos |
 
-`treasury` is not a column. `TokensService.buildTokensOrderClause` maps it:
-`const orderColumn = orderBy === 'treasury' ? 'dao_balance' : orderBy`. So
-`order_by=treasury&order_direction=DESC` is "richest treasuries first".
-
-`order_direction` is `ASC` or `DESC`.
+`order_direction` is `ASC` or `DESC`. `order_by=treasury&order_direction=DESC` is "richest
+treasuries first".
 
 | Parameter | Notes |
 | --- | --- |
 | `collection` | `all` (default) returns every collection. Otherwise a collection name such as `WORDS` or `CHINESE`, or a full collection id such as `CHINESE-ak_...` |
-| `search` | Substring match on name, `ILIKE`. Rejected with 400 above 100 characters |
+| `search` | Substring match on name, case-insensitive. Rejected with 400 above 100 characters |
 | `owner_address` | Tokens with a non-zero holder row for this `ak_...` |
 | `creator_address` | Tokens created by this `ak_...` |
 | `factory_address` | Tokens from a specific factory deployment |
-| `limit`, `page` | `limit` defaults to 100 and is capped at 100 — outside 1–100 it is a 400, not a clamp |
+| `limit`, `page` | `limit` defaults to 100 and is capped at 100 — outside 1–100 it is a 400 |
 
-Three behaviours of this endpoint are worth knowing before you build on it, all from
-`superhero-api/src/tokens/tokens.controller.ts` and `tokens.service.ts`:
+Three behaviours to know:
 
-- **An unknown `order_by` is silently ignored, not rejected.** The controller falls back to
-  `market_cap` and an unknown `order_direction` falls back to `DESC`. Most other list endpoints
-  in this API throw a 400 instead, so do not rely on an error to catch a typo here.
-- **`order_by=market_cap` is rewritten to `rank` with the direction reversed.** `rank` is a
-  persisted column refreshed every five minutes by `RefreshTokenRanksService`, so a market-cap
-  sort is really a sort on a periodically recomputed rank. Rank 1 is the highest market cap;
-  unranked tokens carry the sentinel `2147483647` and sort last.
+- **An unknown `order_by` falls back to `market_cap`** and an unknown `order_direction` to
+  `DESC`, without an error.
+- **`order_by=market_cap` sorts on `rank` with the direction reversed.** `rank` is a persisted
+  column refreshed every five minutes. Rank 1 is the highest market cap; unranked tokens carry
+  `2147483647` and sort last.
 - **`order_by=trending_score` applies an eligibility gate.** Only tokens with at least 5 holders,
-  2 all-time posts mentioning the symbol and 3 all-time trades are returned
-  (`TOKEN_LIST_ELIGIBILITY_CONFIG` in `src/configs/constants.ts`). If *no* token clears the gate
-  the query is re-run without it, so the tab is never empty. Zero-score tokens fall back to
-  newest-first. Results for this sort are cached for 15 minutes; every other sort is cached for
-  60 seconds.
+  2 all-time posts mentioning the symbol and 3 all-time trades are returned. If no token clears
+  the gate the query is re-run without it. Zero-score tokens fall back to newest-first. Results
+  for this sort are cached for 15 minutes; every other sort for 60 seconds.
 
-`unlisted = true` tokens are excluded from this endpoint entirely.
+Tokens with `unlisted = true` are excluded.
 
 ```bash
 # The ten highest-scoring trending tokens
@@ -255,7 +190,7 @@ Response is the standard `items` + `meta` envelope described in
 
 ### `GET /api/tokens/{address}/trending-eligibility`
 
-Explains, for one token, why it does or does not clear that gate:
+One token's standing against the gate:
 
 ```json
 {
@@ -276,24 +211,17 @@ Paginated holder rows, ordered by `balance` descending, filtered to `balance > 0
 | `id` | string | Row id |
 | `aex9_address` | string | `ct_...` of the AEX-9 contract this balance belongs to |
 | `address` | string | Holder `ak_...` |
-| `balance` | string | Balance in token base units |
+| `balance` | string | Balance in **token base units** |
 | `block_number` | number | Height at which the balance was last synced |
 | `last_tx_hash` | string | `th_...` of the transfer that produced this balance |
 | `created_at` | string | ISO 8601, first seen holding |
 
-The generated client's `TokenHolderDto` also declares a `balance_data` `PriceDto`. **It is not
-populated.** The endpoint paginates the `TokenHolder` entity directly and that entity has no such
-column (`superhero-api/src/tokens/entities/token-holders.entity.ts`) — the DTO exists only to
-describe the route to Swagger. Do not build against `balance_data`; multiply `balance` by
-`price_data` yourself. By the same token `aex9_address`, `block_number` and `last_tx_hash` are on
-the wire even though the DTO omits them.
+A holder's share of supply is `balance / total_supply` — both are in base units, so the scaling
+cancels. To value a holding, multiply `balance` by `price_data` and divide by 10 raised to
+`decimals`.
 
-A holder's share of supply is `balance / total_supply` — both are in base units, so the division
-cancels the scaling.
-
-Requesting holders for a token whose holder table is empty (a count of one row or fewer)
-enqueues a background holder sync for that sale address, so a second request a few seconds later
-often returns more.
+Requesting holders for a token whose holder table is empty enqueues a background holder sync, so
+a second request a few seconds later often returns more.
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens/SUPERHERO/holders?limit=20&page=1"
@@ -307,11 +235,11 @@ Returns `token_id`, `sale_address` and four windows:
 past_24h · past_7d · past_30d · all_time
 ```
 
-Each window carries exactly these eleven fields:
+Each window carries these eleven fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `current` | `PriceDto` | Latest buy price inside the window |
+| `current` | `PriceDto` | Latest buy price inside the window, in **AE** |
 | `current_date` | string | Timestamp of `current` |
 | `current_change` | number or null | Latest minus first, in AE |
 | `current_change_percent` | number or null | The same as a percentage of the first price |
@@ -321,43 +249,31 @@ Each window carries exactly these eleven fields:
 | `last_updated` | string | ISO 8601, same instant as `current_date` |
 | `volume` | string or null | Window volume in **whole tokens** |
 
-There is no `high_change` / `low_change` group. The generated client's `PriceMovementDto`
-declares one, but the response is served straight out of the materialised view
-`token_performance_view`
-(`superhero-api/src/tokens/entities/tokens-performance.view.ts`), whose `json_build_object` emits
-only the fields above. Treat the DTO as aspirational and the view as the contract.
+Prices are trade buy prices in AE — the same scale as `TokenDto.price`. `volume` is already in
+whole tokens; do not divide it.
 
-Two more things the view settles:
+The underlying view is rebuilt every five minutes, so a brand-new trade is not reflected
+immediately. A token with no indexed transactions returns 404.
 
-- **`volume` is in whole tokens, not base units.** It is `SUM(transactions.volume)`, and the
-  indexer stores `volume` already divided by 1e18 (`toAe()` in
-  `src/transactions/services/transaction.service.ts`). Do not divide it again.
-- **Prices are `transactions.buy_price`**, in AE — the same scale as `TokenDto.price`.
-
-The view is rebuilt every five minutes by `RefreshPerformanceViewService`, so a brand-new trade
-is not reflected immediately. A token with no indexed transactions at all has no row in the view
-and this endpoint returns 404.
-
-The same structure appears inlined on `TokenDto.performance`. Prefer the inlined copy when you
-already have the token; it saves a request and comes from the same view.
+The same structure appears inlined on `TokenDto.performance`; prefer that copy when you already
+have the token.
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens/SUPERHERO/performance"
 ```
 
-`GET /api/tokens/{address}/performance-raw` calls the identical handler — it is a literal alias
-kept for backward compatibility.
+`GET /api/tokens/{address}/performance-raw` returns the identical payload.
 
 ## `GET /api/tokens/{address}/history`
 
-OHLC candles for charting. **Returns a bare JSON array**, not an `items` envelope — the web
-app's infinite query detects the end of the series with `Array.isArray(page) && page.length === 0`.
+OHLC candles for charting. **Returns a bare JSON array**, not an `items` envelope; you have
+reached the end when a page comes back empty.
 
 | Parameter | Default | Notes |
 | --- | --- | --- |
 | `interval` | `3600` | Candle width **in seconds** |
 | `convertTo` | `ae` | One of the nine currency codes |
-| `limit`, `page` | — | The app requests `limit=100` |
+| `limit`, `page` | — | Standard pagination; `limit=100` is typical |
 
 Each element carries `timeOpen`, `timeClose`, `timeHigh`, `timeLow` and a `quote`:
 
@@ -380,56 +296,43 @@ Each element carries `timeOpen`, `timeClose`, `timeHigh`, `timeLow` and a `quote
 }
 ```
 
-**Candle units differ from `TokenDto` units.** These numbers are aggregated from the
-`transactions` table, where the indexer already converted every value with `toAe()`
-(`superhero-api/src/transactions/services/transaction.service.ts`). So `volume` and
-`total_supply` are in **whole tokens**, and `market_cap` is in **AE** — not aettos, and not base
-units. `open` / `high` / `low` / `close` are buy prices in whichever currency `convertTo` names.
-`open` is overwritten with the previous candle's `close` so the series is continuous.
+**Candle units differ from `TokenDto` units.** `volume` and `total_supply` are in **whole
+tokens**, and `market_cap` is in **AE** — not aettos and not base units. `open`, `high`, `low`
+and `close` are buy prices in the `convertTo` currency. `open` is set to the previous candle's
+`close` so the series is continuous.
 
 `GET /api/tokens/{address}/transactions` covers the same ground with absolute `start_date` /
-`end_date` bounds instead of paging. Its defaults differ: `interval` is 3600 seconds, `mode` is
-**`aggregated`**, and `start_date` is **two days ago** — so an unparameterised call gives you 48
-hourly candles, not the whole history. `mode=normal` returns the underlying rows instead of
-buckets. Note the snake_case date parameters here against the camelCase ones on the account
-endpoints.
+`end_date` bounds instead of paging. Its defaults: `interval` 3600 seconds, `mode`
+`aggregated`, `start_date` two days ago — so an unparameterised call returns 48 hourly candles.
+`mode=normal` returns the underlying rows instead of buckets.
 
-Responses on `/history` are cached for 5 seconds and on `/transactions` for 60 seconds.
+`/history` responses are cached for 5 seconds and `/transactions` for 60 seconds.
 
 ## `GET /api/tokens/{address}/rankings`
 
-The tokens adjacent to this one in the global ranking, so a token page can show "you are three
-places behind X". Items are full token rows with `performance` attached and a resolved
-`collection_info`; the envelope is `items` plus a `meta`.
+The tokens adjacent to this one in the global ranking. Items are full token rows with
+`performance` and a resolved `collection_info`; the envelope is `items` plus `meta`.
 
-`limit` defaults to **5** here, not 100. The web app widens it for the top of the table — rank 1
-requests 8 rows, rank 2 requests 6, everything else requests 5 — so that the current token is
-never at the edge of the window. The handler centres the window on the target and spends whatever
-the short side could not use on the other side, so an edge-of-board token still returns `limit`
+`limit` defaults to **5**. The window is centred on the target token, and whatever the short
+side cannot use is spent on the other side, so an edge-of-board token still returns `limit`
 rows.
 
-It returns an **empty page**, not a 404, in four cases: the token is unknown; its `rank` is still
-the unranked sentinel; it belongs to a different factory than the current one; or it is
-`unlisted`. `meta.totalItems` is the number of neighbours returned, not a board size, and
-`totalPages` is always 1 — this endpoint is not really pageable.
+It returns an **empty page**, not a 404, when the token is unknown, still unranked, from a
+different factory than the current one, or `unlisted`. `meta.totalItems` is the number of
+neighbours returned and `totalPages` is always 1.
 
 ## `GET /api/tokens/preview/{address}`
 
-A compact payload for feed cards and link previews, with `interval` taking a keyword rather than
-seconds: `1d`, `7d`, `30d`, `90d`, `180d` or `all-time`. The sibling
-`/api/tokens/preview/{address}/sparkline.svg` returns a rendered SVG with the same `interval`
-plus `background`, `height` and `width` — useful for embedding a chart where you cannot run
-JavaScript.
+A compact payload for cards and link previews. `interval` takes a keyword rather than seconds:
+`1d`, `7d`, `30d`, `90d`, `180d` or `all-time`.
+
+`GET /api/tokens/preview/{address}/sparkline.svg` returns a rendered SVG with the same
+`interval` plus `background`, `height` and `width`.
 
 ## `GET /api/tokens/{address}/score`
 
-The trending-score debugger. It is a `GET`, but it **recomputes and persists** the score before
-answering — `TokensController.getTokenScore` calls `TokensService.updateTokenTrendingScore`,
-which writes `trending_score` and `trending_score_update_at` back to the token row. Use it to
-inspect a score, not in a polling loop.
-
-The response is `{ metrics, token }`. `token` is the token row with the freshly written score;
-`metrics` is the full breakdown:
+Recomputes the trending score, persists `trending_score` and `trending_score_update_at` on the
+token, and returns `{ metrics, token }`. Use it to inspect a score, not in a polling loop.
 
 ```json
 {
@@ -462,17 +365,16 @@ The response is `{ metrics, token }`. `token` is the token row with the freshly 
 }
 ```
 
-The values above are illustrative; the `raw` counts come from your token's own 24-hour window.
-The `cap` values, the weights and the decay constants are fixed and shared by every token — which
-is what makes `trending_score` comparable across tokens. The full formula is on
-[Trending tokens and tags](/api-reference/trending#the-trending-score-formula).
+The values are illustrative; `raw` counts come from the token's own 24-hour window. The `cap`
+values, weights and decay constants are shared by every token, which is what makes
+`trending_score` comparable across tokens. The full formula is on
+[Trending & Topics](/api-reference/trending#the-trending-score-formula).
 
-## Read more
+## Related
 
 - [API Conventions](/api-reference/conventions) — pagination, the `limit` cap and the full unit table
 - [Transactions API](/api-reference/transactions) — the trade records behind `tx_count` and the price series
 - [Accounts API](/api-reference/accounts) — the same tokens from the holder's side, with portfolio value and PnL
-- [WebSocket API](/api-reference/websocket) — push updates for `TokenDto` instead of polling this endpoint
+- [WebSocket API](/api-reference/websocket) — push updates for `TokenDto` instead of polling
+- [Trending & Topics](/api-reference/trending) — the trending-score formula behind `trending_score`
 - [Bonding curve](/tokens/bonding-curve) — why buy price and sell price differ
-- [Trending tokens and tags](/api-reference/trending) — the full trending-score formula behind `trending_score`
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the same list this endpoint backs

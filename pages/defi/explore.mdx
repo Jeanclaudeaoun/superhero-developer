@@ -1,52 +1,32 @@
 ---
 title: "Exploring the DEX"
-description: "Browse every token, pool and transaction on the exchange, and the /api/dex endpoints behind the three views."
+description: "Browse every token, pool and transaction on the exchange, and the /api/dex endpoints behind each view."
 ---
 
 # Exploring the DEX
 
-The Explore section is the DEX's read-only side: every token the exchange indexes, every
-pair, and every transaction that has hit the router. Use it to check a pair's depth before
-swapping, to find which pools a token is in, or to trace a specific transaction.
+Explore is the DEX's read-only side: every token the exchange indexes, every pair, and every
+transaction that has gone through the router. Use it to check a pair's depth before swapping, to
+find which pools a token is in, or to trace a transaction.
 
 Everything on these pages comes from the DEX indexer over `/api/dex/*`, not from the chain
-directly. The backend is open source
-([superhero-com/superhero-api](https://github.com/superhero-com/superhero-api)), so the answers to
-"how fresh is this" and "what does that column mean" are readable rather than guessable — and one of
-them is a trap, so read [What the columns actually measure](#what-the-columns-actually-measure)
-before you sort by TVL.
-
-## The three views
+directly.
 
 | View | Route | Answers |
 | --- | --- | --- |
 | Tokens | `/defi/explore/tokens` | What can I trade, and how liquid is it? |
 | Pools | `/defi/explore/pools` | Which pairs exist, and how busy are they? |
-| Transactions | `/defi/explore/transactions` | What has actually been traded, by whom? |
+| Transactions | `/defi/explore/transactions` | What has been traded, by whom? |
 
 Token and pool rows link to detail pages at `/defi/explore/tokens/<address>` and
 `/defi/explore/pools/<address>`.
 
-## Explore Tokens
+## Tokens
 
-Lists the tokens the DEX indexes, as a table on desktop and cards on mobile. Ten per page,
-default ordering **30-day volume, descending**.
-
-Sortable columns, which map straight onto the endpoint's `order_by` values:
-
-| Sort key | Meaning |
-| --- | --- |
-| `pairs_count` | How many pools this token is in |
-| `price` | Current price |
-| `tvl` | **Not TVL** — all-time traded volume in AE; see below |
-| `24hchange`, `7dchange`, `30dchange` | Price change over the window |
-| `24hvolume`, `7dvolume`, `30dvolume` | Traded volume over the window |
-| `name`, `symbol` | Alphabetical |
-| `created_at` | Listing age |
-
-Clicking a column you are already sorting by flips the direction; clicking a new one resets
-to descending. There is a free-text search, and each row carries **Swap** and **Add** actions
-that jump into the swap form or the add-liquidity form with that token pre-selected.
+Lists the tokens the DEX indexes, ten per page, ordered by **30-day volume, descending** by
+default. Clicking a column you are already sorting by flips the direction; clicking a new one
+resets to descending. Each row carries **Swap** and **Add** actions that open the swap or
+add-liquidity form with that token pre-selected.
 
 ```text
 GET /api/dex/tokens
@@ -54,19 +34,21 @@ GET /api/dex/tokens
     &listed=<true or false>&search=<text>&page=<n>&limit=<n>
 ```
 
-The `listed` parameter filters to only listed or only unlisted tokens; omitting it returns
-everything. The web UI does not expose that filter, so the explorer shows both.
+| Sort key | Meaning |
+| --- | --- |
+| `pairs_count` | How many pools this token is in |
+| `price` | Current price |
+| `tvl` | Total value locked |
+| `24hchange`, `7dchange`, `30dchange` | Price change over the window |
+| `24hvolume`, `7dvolume`, `30dvolume` | Traded volume over the window |
+| `name`, `symbol` | Alphabetical |
+| `created_at` | Listing age |
 
-**`listed` is a manual operator flag, not a quality signal.** The column is
-`dex_tokens.listed boolean NOT NULL DEFAULT false`
-(`superhero-api/src/dex/services/dex-schema-bootstrap.service.ts`), so every token starts unlisted,
-and the only thing that changes it is `POST /api/dex/tokens/<address>/listed` — which is guarded by
-`ApiKeyGuard`, meaning it takes an operator API key, not a wallet signature, a vote or a fee. There
-is no eligibility rule in the code, no automatic promotion and no appeal path. Read `listed: true`
-as "somebody at Superhero flipped a switch" and `listed: false` as "nobody has", which is the
-default state of most tokens rather than a judgement about them.
+`listed` filters to listed or unlisted tokens; omit it to return both, which is what the web UI
+shows. Tokens start unlisted, and the flag is set by the Superhero operator through the
+API-key-protected `POST /api/dex/tokens/<address>/listed`.
 
-Detail and analytics endpoints for a single token:
+Endpoints for a single token:
 
 | Endpoint | Returns |
 | --- | --- |
@@ -76,18 +58,17 @@ Detail and analytics endpoints for a single token:
 | `GET /api/dex/tokens/<address>/summary` | Aggregated summary |
 | `GET /api/dex/tokens/<address>/history` | Historical series |
 
-## Explore Pools
+## Pools
 
-Lists every pair. Search is by token name or symbol. Sorting is narrower than on tokens —
-only two keys:
+Lists every pair, searchable by token name or symbol, with two sort keys:
 
 | Sort key | Meaning |
 | --- | --- |
 | `transactions_count` | Busiest pools first |
 | `created_at` | Newest pools first |
 
-Arriving with a `?tokenAddress=` query parameter filters to pools containing that token,
-which is how the token detail page links through to "pools for this token".
+A `?tokenAddress=` query parameter filters to pools containing that token — this is how a token
+detail page links through to its pools.
 
 ```text
 GET /api/dex/pairs
@@ -95,9 +76,8 @@ GET /api/dex/pairs
     &token_address=<ct_...>&search=<text>&page=<n>&limit=<n>
 ```
 
-The pool detail page at `/defi/explore/pools/<address>` composes four calls' worth of data
-into a header, a stats overview, current reserves, a candlestick chart, pool composition and
-a recent-transactions table:
+The pool detail page at `/defi/explore/pools/<address>` shows a header, a stats overview, current
+reserves, a candlestick chart, pool composition and recent transactions:
 
 | Endpoint | Feeds |
 | --- | --- |
@@ -106,28 +86,25 @@ a recent-transactions table:
 | `GET /api/dex/pairs/<address>/history` | Chart data, paginated |
 | `GET /api/dex/pairs/<address>/preview` | Compact preview payload |
 
-Two more pair lookups exist for routing work:
-`GET /api/dex/pairs/from/<from_token>/to/<to_token>` resolves a direct pair, and adding
-`/providers` to it finds the pairs that could serve those two tokens.
+For routing work, `GET /api/dex/pairs/from/<from_token>/to/<to_token>` resolves a direct pair,
+and appending `/providers` returns the pairs that could serve those two tokens.
 
-## Explore Transactions
+## Transactions
 
-A filterable feed of DEX transactions. Three filters, combinable:
+A filterable feed of DEX transactions. Three filters combine:
 
-- **Transaction type** — one of the eleven router functions, or All.
+- **Transaction type** — one of the router functions below, or All.
 - **Pair address** — a `ct_` pair contract.
-- **Account address** — trace one wallet's activity.
-
-The type filter covers every router entrypoint that mutates a pool:
+- **Account address** — one wallet's activity.
 
 | Group | Types |
 | --- | --- |
 | Swaps | `swap_exact_tokens_for_tokens`, `swap_tokens_for_exact_tokens`, `swap_exact_ae_for_tokens`, `swap_exact_tokens_for_ae`, `swap_tokens_for_exact_ae`, `swap_ae_for_exact_tokens` |
 | Liquidity | `add_liquidity`, `add_liquidity_ae`, `remove_liquidity`, `remove_liquidity_ae` |
 
-Reading the type tells you the shape of the trade without opening it: an `exact_tokens_for`
-variant means the trader fixed their input, a `tokens_for_exact` variant means they fixed
-their output, and an `_ae` suffix means native AE was on one side and the router wrapped it.
+The type names the shape of the trade: `exact_tokens_for` means the trader fixed the input,
+`tokens_for_exact` means they fixed the output, and `_ae` means native AE was on one side and
+the router wrapped it.
 
 ```text
 GET /api/dex/transactions
@@ -138,81 +115,49 @@ GET /api/dex/transactions
 ```
 
 The date filters are inclusive on both ends and are not exposed in the UI. Single lookups:
-`GET /api/dex/transactions/<txHash>` and
-`GET /api/dex/transactions/pair/<pairAddress>`.
+`GET /api/dex/transactions/<txHash>` and `GET /api/dex/transactions/pair/<pairAddress>`.
 
-## What the columns actually measure
+Failed transactions do not appear in the feed. A reverted call emits no events, so there is
+nothing to index; the feed is a record of trades that happened.
 
-The sort keys are not all what their names suggest, and one is actively misleading.
+## How the figures are computed
 
-**`tvl` does not sort by TVL.** The backend has no TVL column at all — neither `dex_tokens` nor
-`dex_token_summaries` stores one. Sorting by `tvl` runs this
-(`superhero-api/src/dex/services/dex-token.service.ts`):
+**Windows.** Volume and price change come in three rolling windows — `24h`, `7d` and `30d`,
+measured back from the moment the summary was last recomputed — plus an all-time total.
 
-```sql
-ORDER BY ("summary".total_volume->>'ae')::numeric
-```
-
-That is **all-time traded volume in AE**, not value locked. A token that was heavily traded a year
-ago and now has an empty pool sorts above a token with deep current liquidity. The repository does
-contain a design note (`src/dex/docs/token-calculation.md`) specifying a proper
-`TokenTVL = Σ reserves × price` across pools, but it is a specification of what TVL *should* be, not
-a description of what is implemented. If you want depth, open the pool and read the reserves.
-
-**Volume and change windows are exactly three, plus all-time.** `dex-token-summary.service.ts`
-computes `24h`, `7d` and `30d` as `now - N` against `pair_transactions.created_at` — rolling
-windows anchored at the moment the summary is recomputed, not calendar days — alongside an all-time
-`total_volume`.
-
-**Everything is aggregated in AE, then converted.** Per-pair `volume0` and `volume1` are summed raw,
-converted to an AE amount using the pair's own reserve ratio and token decimals, and only then
-passed through `AePricingService.getPriceData`, which multiplies by the AE rate for each supported
-currency. So every figure you see is one AE-denominated number rendered in your display currency:
+**Everything is aggregated in AE, then converted.** Per-pair volumes are summed, converted to an
+AE amount using the pair's own reserve ratio and token decimals, and only then multiplied by the
+AE rate for each supported currency:
 
 | Field | What it is |
 | --- | --- |
-| `price.ae`, `volume.ae` | The real, computed quantity |
+| `price.ae`, `volume.ae` | The computed quantity |
 | `price.usd`, `.eur`, `.gbp`, … | That same number × the current AE rate |
 
-The rate comes from **CoinGecko** (`src/ae/coin-gecko.service.ts`), cached in memory and Redis and
-snapshotted to a `coin_prices` table, refreshed on a cron and re-read at most every 30 seconds. The
-practical consequence: a USD figure moving does not mean the pool moved. It may only mean AE did.
+The AE rate comes from CoinGecko, refreshed on a schedule and re-read at most every 30 seconds.
+A USD figure moving does not necessarily mean the pool moved; it may only mean AE did.
 
-**Price change can be computed against a different pair than you expect.** The 24h/7d/30d percentage
-compares the current median price against the earliest in-window ratio from a candidate pair,
-skipping "dust-state" start ratios from near-empty pools so a single wei of liquidity cannot produce
-a multi-million-percent change.
+**Price change** compares the current price against the earliest in-window ratio of a candidate
+pair, skipping dust-state start ratios from near-empty pools so a single wei of liquidity cannot
+produce a multi-million-percent change.
 
-## How fresh any of this is
+## How fresh the data is
 
-Three different clocks, and they are not the same one:
+| Data | Refresh |
+| --- | --- |
+| Pairs, swaps, liquidity events | Live, from the chain indexer's middleware WebSocket subscription |
+| Token prices, token summaries, pair summaries | Every 10 minutes by default |
+| AE fiat rates | Re-read at most every 30 seconds |
 
-| Data | Refresh | Source |
-| --- | --- | --- |
-| Pairs, swaps, liquidity events | Live — the `dex` plugin runs on the chain indexer, fed by middleware WebSocket subscriptions with a backfill loop behind it | `src/plugins/dex/` |
-| Token prices, token summaries, pair summaries | **Every 10 minutes** by default (`DEX_PRICE_SYNC_CRON`, else `EVERY_10_MINUTES`) | `src/dex/services/dex-sync.service.ts` |
-| AE fiat rates | Cron-synced, re-read at most every 30 seconds | `src/ae-pricing/`, `src/ae/coin-gecko.service.ts` |
+A swap shows up in the transaction feed promptly, while the token's price, volume and change
+columns can be up to ten minutes behind. The indexer reads the æternity middleware, so the
+middleware's own lag is the floor on all of it. For anything you are about to sign against, read
+the pair contract directly.
 
-So a swap appears in the transaction feed promptly, while the token's price, volume and change
-columns can be up to ten minutes stale. The recompute takes a Postgres advisory lock so only one
-container runs it, and it is skipped entirely when `DISABLE_MDW_SYNC=true`.
+## DEX tokens and community tokens
 
-The whole chain of custody bottoms out at the æternity middleware — the indexer reads
-`MIDDLEWARE_URL`, not a node directly — so the middleware's own lag is the floor on all of it. For
-anything you are about to sign against, read the pair contract.
-
-**Failed transactions do not appear in the feed**, but not because anything filters them out. The
-`dex` plugin's filter matches only on transaction type, contract id and entrypoint name, with no
-success check; the exclusion happens one step later, where
-`dex-transaction-processor.service.ts` builds each row by decoding `tx.raw.log` with
-`$decodeEvents`. A reverted call emits no logs, so it decodes to nothing and is skipped. The
-practical upshot is the same — the feed is a record of trades that happened — but do not read it as
-a deliberate success filter, and do not expect a failed swap of yours to show up there.
-
-## DEX tokens are not bonding-curve tokens
-
-This is the single most common confusion, and the explorer makes it easy to fall into because
-both kinds of asset are "tokens on Superhero".
+Both are "tokens on Superhero", and a community token can appear in both places if somebody has
+created a pool for it. They are different markets with different prices.
 
 | | Community token | DEX token |
 | --- | --- | --- |
@@ -220,35 +165,13 @@ both kinds of asset are "tokens on Superhero".
 | API | `/api/tokens` | `/api/dex/tokens` |
 | Price comes from | The exponential bonding curve | Pool reserve ratios |
 | "Volume" means | Buys and sells against the curve | Swaps through pools |
-| "TVL" means | Not applicable — the curve holds a reserve | Value locked in pools containing this token |
 | Has a DAO and a treasury | Yes | Only if it is also a community token |
-
-A community token **can** appear in both places, if somebody created a pool for it. When it
-does, the two listings show genuinely different prices for the same asset, because they are
-different markets. Neither is "wrong" and nothing arbitrages them automatically. Check which
-explorer you are looking at before comparing numbers.
 
 See [the full comparison](/defi) on the DeFi overview.
 
-## Open questions
-
-- **On what criteria does Superhero set `listed`?** The mechanism is settled — an API-key-guarded
-  `POST /api/dex/tokens/<address>/listed`, defaulting to `false` — but the code contains no
-  eligibility rule, so the policy behind the switch exists only as an operator practice. Only
-  Superhero can state it.
-- **Will `tvl` be fixed to mean TVL?** `src/dex/docs/token-calculation.md` specifies the correct
-  computation and the code does not implement it, so this is either an unfinished task or a
-  deliberate proxy. A maintainer would have to say which; until then treat the column as volume.
-
 ## Read more
 
-- [Swapping](/defi/swap) — use the explorer to pick a pair, then trade it here.
-- [Liquidity Pools](/defi/pools) — check a pool's depth and volume here before providing.
+- [Swapping](/defi/swap) — pick a pair here, then trade it.
+- [Liquidity Pools](/defi/pools) — check a pool's depth and volume before providing.
 - [DEX API](/api-reference/dex) — the full REST reference for these endpoints.
 - [Bonding curves](/tokens/bonding-curve) — the other market, and why its prices differ.
-- [Explore DEX tokens on superhero.com](https://superhero.com/defi/explore/tokens) — the live
-  token table.
-- [Explore DEX pools on superhero.com](https://superhero.com/defi/explore/pools) — the live
-  pair list.
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the bonding-curve
-  listing, for comparison.

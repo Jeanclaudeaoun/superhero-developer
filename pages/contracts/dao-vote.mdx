@@ -1,6 +1,6 @@
 ---
 title: "DAOVote"
-description: "One proposal, its options, and the token stake locked behind them."
+description: "One proposal, its options, and the token stake locked behind them: entrypoints, close height, voting and withdrawal."
 ---
 
 # DAOVote
@@ -9,13 +9,10 @@ description: "One proposal, its options, and the token stake locked behind them.
 so its address is the proposal's identity. It holds the subject being voted on, the tally, and
 the community tokens voters have locked behind each side.
 
-The ACI lives inside `superhero-agent-skill/contracts/CommunityFactory.aci.json`; the source is
-`bcl-contracts/contracts/DAOVote.aes`.
+Its interface is inlined in `CommunityFactory.aci.json`.
 
-One correction worth making up front, because it is widely assumed the other way round:
-**`DAOVote` contains no quorum or supermajority logic.** It counts stake and gates on height.
-The 10% and 55% tests are in `DAO.apply_vote_subject` — see
-[Passing conditions](#passing-conditions).
+`DAOVote` counts stake and gates on height. The quorum and supermajority checks are in
+`DAO.apply_vote_subject` — see [Passing conditions](#passing-conditions).
 
 ## Entrypoints
 
@@ -64,16 +61,13 @@ record state =
   , author        : address }
 ```
 
-Two things fall out of these type aliases that the names hide.
+**`vote_option` is `bool`.** Every proposal is a yes/no on its subject. Pass `true` to support
+and `false` to oppose. (æternity governance polls differ: `Poll.vote_option` is
+`map(int, string)` and a poll can carry any number of named options. See
+[Registry and Poll](/contracts/governance-contracts).)
 
-**`vote_option` is just `bool`.** There are no multiple-choice votes here — every proposal is
-a yes/no on its subject. Pass `true` to support and `false` to oppose. (This is the opposite
-of æternity governance polls, where `Poll.vote_option` is `map(int, string)` and a poll can
-carry any number of named options. See [Registry and Poll](/contracts/governance-contracts).)
-
-**`amount` is just `int`, in token base units.** Community tokens have 18 decimals, so voting
-with one whole token means passing `10 ** 18`. Your voting weight is the number of tokens you
-lock, not one-address-one-vote.
+**`amount` is `int`, in token base units.** Community tokens have 18 decimals, so voting with
+one whole token means passing `10 ** 18`. Your voting weight is the number of tokens you lock.
 
 `vote_accounts` maps each voter to a three-element tuple, decoded in JavaScript as an array:
 
@@ -93,7 +87,7 @@ datatype event =
 
 ## Close height
 
-The close height is set at deployment, from the public Sophia source:
+The close height is set at deployment:
 
 ```text
 close_height = Chain.block_height + (60 / 3) * 24 * 7 * 2
@@ -101,10 +95,8 @@ close_height = Chain.block_height + (60 / 3) * 24 * 7 * 2
 
 `60 / 3` is one hour in key blocks at a three-minute key block time, so the expression is
 20 × 24 × 7 × 2 = **6,720 key blocks**, about two weeks. Voting is open until the chain
-reaches that height and closed from then on.
-
-Note that this is measured in key blocks, not in wall-clock time. If block production slows,
-the vote stays open longer in real time.
+reaches that height and closed from then on. The window is measured in key blocks, not
+wall-clock time: if block production slows, the vote stays open longer in real time.
 
 `is_closed()` is the single predicate every height gate goes through:
 
@@ -114,15 +106,15 @@ entrypoint is_closed() : bool = Chain.block_height >= state.close_height
 
 Note the `>=`: the vote is closed *at* `close_height`, not after it.
 
-`init` also caps the proposal text — `require(String.length(metadata.description) =< 300,
-"DESCRIPTION_STRING_TOO_LONG")`. A description over 300 characters makes `DAO.add_vote` abort,
-taking the whole 555 AE transaction with it. `link` is unchecked.
+`init` caps the proposal text — `require(String.length(metadata.description) =< 300,
+"DESCRIPTION_STRING_TOO_LONG")`. A description over 300 characters makes `DAO.add_vote`
+abort, taking the whole 555 AE transaction with it. `link` is unchecked.
 
 ## The allowance you need before voting
 
 `vote` locks your tokens in the vote contract by pulling them with the AEX-9 allowance
-mechanism. You must grant that allowance on the **token** contract first, to the vote
-contract's address rewritten from `ct_` to `ak_`:
+mechanism. Grant that allowance on the **token** contract first, to the vote contract's
+address rewritten from `ct_` to `ak_`:
 
 ```javascript
 const forAccount = voteAddress.replaceAll('ct_', 'ak_');
@@ -145,7 +137,7 @@ await vote.vote(true, amount, { omitUnknown: true });
 
 `allowance` returns `option(int)`, so a never-granted allowance decodes to `undefined` and
 needs `create_allowance`; an existing one is adjusted with `change_allowance`, which takes a
-**delta**. Forgetting this is the single most common reason a `vote` call reverts.
+**delta**. A missing allowance is the most common reason a `vote` call reverts.
 
 Locking is what makes the tally meaningful: the tokens cannot be transferred, sold back to the
 curve, or used in another concurrent vote while they are held here.
@@ -163,12 +155,11 @@ to the tally.
 | Repeatable | Yes, after voting again | No — `AMOUNT_ALREADY_WITHDRAWN` |
 | Use it to | Change your mind, or exit before close | Reclaim locked tokens from a finished vote |
 
-**Both gates are enforced on chain, by block height, not by the client.** They are exact
-complements of each other through `is_closed()`, so at every height exactly one of the two is
-callable. There is no window where both work and none where neither does.
+Both gates are enforced on chain by block height. They are exact complements of each other
+through `is_closed()`, so at every height exactly one of the two is callable.
 
-Each also requires that you actually voted — `require(Map.member(Call.caller,
-state.vote_accounts), "VOTER_NOT_VOTED")`.
+Each also requires that you voted — `require(Map.member(Call.caller, state.vote_accounts),
+"VOTER_NOT_VOTED")`.
 
 ### Changing your mind
 
@@ -178,16 +169,16 @@ state.vote_accounts), "VOTER_NOT_VOTED")`.
 require(!Map.member(Call.caller, state.vote_accounts), "VOTER_ALREADY_VOTED")
 ```
 
-`revoke_vote` deletes your entry from `vote_accounts` outright, rather than flagging it. So the
-sequence **vote, revoke, vote again works** — and the second vote may use a different option
-and a different amount. That is the supported way to switch sides or resize a position while a
-vote is open. What you cannot do is add to an existing position without revoking it first.
+`revoke_vote` deletes your entry from `vote_accounts` outright, so the sequence **vote,
+revoke, vote again works** — and the second vote may use a different option and a different
+amount. That is the supported way to switch sides or resize a position while a vote is open.
+To add to an existing position, revoke first.
 
-`has_withdrawn(voter)` returns `option(bool)` — `None` if that address never voted at all or
-has revoked, `Some(false)` if they voted and have not withdrawn, `Some(true)` if they have.
+`has_withdrawn(voter)` returns `option(bool)` — `None` if that address never voted or has
+revoked, `Some(false)` if they voted and have not withdrawn, `Some(true)` if they have.
 
-If you voted and never withdraw, your tokens stay locked in the vote contract indefinitely.
-Nothing expires them back to you.
+Tokens stay locked in the vote contract until you call `withdraw`; nothing returns them
+automatically.
 
 ## `current_vote_state` versus `final_vote_state`
 
@@ -197,9 +188,9 @@ Nothing expires them back to you.
 | Before close height | The running tally, changing with every vote and revoke | `None` |
 | After close height | Still readable | `Some(tally)` — the frozen result |
 
-The `option` wrapper is the mechanism, not a detail. `DAO.apply_vote_subject` switches on
-`final_vote_state()` and aborts with `VOTE_NOT_YET_FINAL` when it gets `None`, which is
-exactly what stops a proposal being executed mid-vote on a favourable intermediate tally.
+`DAO.apply_vote_subject` switches on `final_vote_state()` and aborts with `VOTE_NOT_YET_FINAL`
+when it gets `None`, which is what stops a proposal being executed mid-vote on a favourable
+intermediate tally.
 
 For a progress bar, read `current_vote_state()`. For anything that decides an outcome, read
 `final_vote_state()` and handle the `None` case.
@@ -210,8 +201,8 @@ const inFavour = current.get(true) ?? 0n;
 const against  = current.get(false) ?? 0n;
 ```
 
-The map is keyed by the boolean option, and an option nobody has voted for is simply absent —
-hence the `?? 0n`.
+The map is keyed by the boolean option, and an option nobody has voted for is absent — hence
+the `?? 0n`.
 
 ## Passing conditions
 
@@ -220,8 +211,8 @@ A vote must clear both:
 - at least **10%** of the token's total supply participating, and
 - at least **55%** of the participating stake in favour.
 
-Neither test is in this contract. Both are in `DAO.apply_vote_subject`, which reads the frozen
-tally out of `final_vote_state()` and then does the arithmetic itself:
+Both tests are in `DAO.apply_vote_subject`, which reads the frozen tally out of
+`final_vote_state()` and does the arithmetic itself:
 
 ```sophia
 let total_vote_stake = vote_state[true] + vote_state[false]
@@ -232,23 +223,21 @@ let stake_percentage = (total_vote_stake * 100) / get_token().total_supply()
 require(stake_percentage >= 10, "GREATER_10_PERCENT_STAKE_REQUIRED")
 ```
 
-Three consequences for anyone predicting an outcome from this contract's state alone:
+Three details for anyone predicting an outcome from this contract's state alone:
 
 - **The 55% denominator is votes cast**, `yes + no`, not supply. Non-voters do not count
   against a proposal.
-- **The 10% denominator is `total_supply()` read at execution time.** It is not snapshotted at
-  creation and not snapshotted at close. Buys between the close height and the
-  `apply_vote_subject` call inflate the denominator and can drop a passing vote below quorum;
-  sells can lift a failing one above it. The source acknowledges this directly and cites the
-  short 960-key-block application window as the mitigation.
+- **The 10% denominator is `total_supply()` read at execution time**, not at creation or at
+  close. Buys between the close height and the `apply_vote_subject` call raise the
+  denominator; sells lower it. The short 960-key-block application window limits the effect.
 - **Both are truncating integer divisions compared with `>=`.** 55 and 10 exactly pass; one
   base unit short rounds down and fails.
 
-So `final_vote_state()` tells you the tally. To know whether a proposal will actually execute
-you additionally need `get_token().total_supply()` at the height you expect execution to
-happen. See [DAO](/contracts/dao) for the full gate list.
+`final_vote_state()` tells you the tally. To know whether a proposal will execute you also
+need `get_token().total_supply()` at the height you expect execution to happen. See
+[DAO](/contracts/dao) for the full gate list.
 
-## Read more
+## Related
 
 - [DAO](/contracts/dao) — the contract that deploys these, runs the thresholds, and executes the result
 - [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance calls voting depends on

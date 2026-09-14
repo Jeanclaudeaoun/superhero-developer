@@ -1,26 +1,19 @@
 ---
 title: "Official Links"
-description: "Every verified Superhero URL in one place — and a warning about everything else."
+description: "The official Superhero domains, apps, repositories, service endpoints and contacts, in one place."
 ---
 
 # Official Links
 
-This is an anti-phishing reference first and a convenience page second. **Every URL below appears in
-the Superhero repositories or in official æternity documentation.** Anything not on this page has
-not been verified from those sources — which does not make it hostile, but does mean you should not
-connect a wallet to it on this page's authority.
-
-URLs are shown as literal strings rather than links in the tables, so you can compare them character
-by character against whatever you were sent.
+Every official Superhero URL, shown as a literal string so you can compare it character by character
+against whatever you were sent.
 
 ## The rule
 
 > Superhero lives on `superhero.com` and `wallet.superhero.com`. Nothing else is the app.
 
 Check the domain before you sign anything. A phishing site can copy the entire interface — the
-palette, the logo, the copy — but it cannot copy the domain. The registered marks are also
-protected: using Superhero branding on another domain is both a fraud signal and, per
-[the terms](https://superhero.com/terms), a breach.
+palette, the logo, the copy — but it cannot copy the domain.
 
 ## Product
 
@@ -35,14 +28,11 @@ protected: using Superhero branding on another domain is both a fraud signal and
 | Superhero Wallet, Chrome | `https://chromewebstore.google.com/detail/superhero-wallet/mnhmmkepfddpifjkamaligfeemcbhdne` |
 | Superhero Wallet, Firefox | `https://addons.mozilla.org/en-US/firefox/addon/superhero-wallet` |
 
-The Chrome extension ID is `mnhmmkepfddpifjkamaligfeemcbhdne`; an extension listing with any other
-ID is not Superhero Wallet, whatever it is called. The app also references the older
+The Chrome extension ID is `mnhmmkepfddpifjkamaligfeemcbhdne`. The older
 `https://chrome.google.com/webstore/detail/superhero-wallet/mnhmmkepfddpifjkamaligfeemcbhdne` form
-of the same listing — same ID, older host.
+is the same listing — same ID, older host.
 
 ## Routes on superhero.com
-
-Derived from the app's route table, so each of these resolves to a real page.
 
 | Page | Path |
 | --- | --- |
@@ -79,6 +69,8 @@ Machine-readable entry points, all served from the same origin: `/llms.txt` (als
 
 ## Source code
 
+The GitHub organisation is `superhero-com`.
+
 | Repository | URL |
 | --- | --- |
 | Web app | `https://github.com/superhero-com/superhero` |
@@ -88,23 +80,16 @@ Machine-readable entry points, all served from the same origin: `/llms.txt` (als
 | Superhero Wallet | `https://github.com/superhero-com/superhero-wallet` |
 | AI agent skill | `https://github.com/superhero-com/superhero-agent-skill` |
 
-The GitHub organisation is `superhero-com`. A repository under any other owner is a fork or an
-impersonation, not the official source — with two documented exceptions, both under `aeternity`
-rather than Superhero because Superhero deploys contracts it did not author:
+Two contracts Superhero deploys are maintained under the `aeternity` organisation:
 
 | Repository | URL | What it is |
 | --- | --- | --- |
 | Tipping contract | `https://github.com/aeternity/tipping-contract` | `Tipping_v3.aes`, the post registry |
 | Governance contracts | `https://github.com/aeternity/aepp-governance` | `Registry.aes` and `Poll.aes`, behind `/voting` |
 
-The API's own README additionally points at `https://github.com/bctsl/bctsl-contracts` and
-`https://github.com/bctsl/bctsl-sdk` under the `bctsl` organisation — BCTSL is the copyright holder
-named in the contracts' ISC licence headers.
-
 ## Backend services
 
-You do not need these to use Superhero, but you do need them to build against it — and knowing them
-lets you spot an app pointed somewhere it should not be.
+You do not need these to use Superhero, but you do need them to build against it.
 
 | Service | Mainnet | Testnet |
 | --- | --- | --- |
@@ -117,8 +102,8 @@ lets you spot an app pointed somewhere it should not be.
 | Governance server | `https://governance-server-mainnet.prd.service.aepps.com` | `https://governance-server-testnet.prd.service.aepps.com` |
 | Chat relay | `wss://relay.superhero.chat` | `wss://relay.superhero.chat` |
 
-The agent skill's scripts use `https://mainnet.aeternity.io` as their node rather than the web app's
-configured `mdw.wordcraft.fun`; both are æternity mainnet.
+The agent skill's scripts use `https://mainnet.aeternity.io` as their node; both it and
+`mdw.wordcraft.fun` are æternity mainnet.
 
 ## Third-party services the app uses
 
@@ -132,72 +117,25 @@ These are not operated by Superhero, but the app links to them, so seeing one is
 | æternity docs | `https://docs.aeternity.com` | Chain-level documentation |
 | æternity faucet | `https://faucet.aepps.com` | Testnet AE |
 
-## Contact
+## Social and contact
 
-| Purpose | Address |
+| Channel | Address |
 | --- | --- |
-| Legal, privacy, data-protection and general enquiries | `superherowallet@protonmail.com` |
+| X | `https://x.com/superhero_chain` |
+| Privacy, data-protection and general enquiries | `superherowallet@protonmail.com` |
 | Bugs and product feedback | The GitHub issue tracker above |
 
-## What is not on this list
-
-**One X account, and nothing else.** The app's own copy for the X posting reward tells you to
-"mention `@superhero_chain` or link superhero.com", and the backend's reward checker treats exactly
-those two strings as qualifying (`superhero/src/locales/en.json`;
-`superhero-api/src/profile/profile.constants.ts`). So:
-
-| Channel | URL | Evidence |
-| --- | --- | --- |
-| X | `https://x.com/superhero_chain` | Named in the app's own reward copy and in the backend's keyword list |
-
-That is the complete list. **No Discord server, Telegram group, Reddit community, forum or mailing
-list for Superhero appears in any of the six repositories** — the web app and its locale files, the
-backend, the agent skill, the BCL contracts, the governance contracts or the tipping contract. The
-other X and Telegram references in the codebase are share intents — the buttons that post *your*
-content to *your* accounts — and the OG banner's description of the card used when someone shares a
-link. The FAQ's reference to "official channels listed in the app" still cannot be resolved to a
-concrete list.
-
-Treat that as a live risk. An unofficial Discord or Telegram claiming to be Superhero support is the
-standard setup for a key-phishing or fake-airdrop scam, and this page cannot tell you which invites
-are legitimate. Use the GitHub trackers and the email address above, and assume anyone who
-direct-messages you offering help is not support — including from an account that looks like the one
-above.
-
-**No other domains.** `superhero.io`, `superhero.app`, `superhero.finance`, `superheroswap.com` and
-anything similar are not referenced anywhere in these repositories. A "Superhero" token sale,
-airdrop, presale, migration or wallet-verification page on any domain other than the two above is
-not Superhero.
+A "Superhero" token sale, airdrop, presale, migration or wallet-verification page on any domain
+other than `superhero.com` and `wallet.superhero.com` is not Superhero.
 
 **No one ever needs your key.** Not support, not a migration, not a verification, not an airdrop
 claim, not a "wallet sync". Every legitimate Superhero action is a transaction you sign in your own
 wallet. See [Security Best Practices](/wallets/security).
 
-## Read more
+## Related
 
-- [Support](/resources/support) — the report path, and the security-disclosure position.
+- [Support](/resources/support) — the report path, and how to disclose a vulnerability.
 - [Security Best Practices](/wallets/security) — what to check before signing anything.
-- [Choosing a Wallet](/wallets/choosing-a-wallet) — which of the wallet listings above you actually want.
+- [Choosing a Wallet](/wallets/choosing-a-wallet) — which of the wallet listings above you want.
 - [Networks & Endpoints](/aeternity/networks) — the backend table above, explained.
 - [superhero.com](https://superhero.com) — the app itself.
-
-## Open questions
-
-Each of these needs a statement from Superhero. No further code reading will settle them.
-
-- **Is there an official community channel beyond the X account above?** The FAQ refers to "official
-  channels listed in the app" in the plural. Six repositories were searched and only
-  `@superhero_chain` is identifiable. If a Discord or Telegram exists, Superhero must publish it —
-  **do not add an invite to this page on the strength of a search result, a social post, or someone
-  saying so.** The whole value of this page is that every URL on it traces to a repository or to
-  official æternity documentation.
-- **Is `testnet.api.dev.tokensale.org` a permanent testnet endpoint?** The hostname still reads as a
-  development deployment, and the backend repository does not name it — neither `.env.example` nor
-  `.env.testnet.example` carries a testnet API hostname, so the value in the web app's
-  `src/config.ts` is the only record of it. Superhero would have to state whether it is supported.
-- **What availability can you expect from `mdw.wordcraft.fun`?** Its operator is now reasonably
-  clear — the backend's deployment guide pulls mainnet database backups from `dev.wordcraft.fun`,
-  and the API's package name (`wordcraft-api`) and Swagger title ("WORD CRAFT Scan") share the
-  brand, so it is almost certainly the same team rather than a third party. What is unpublished is
-  any commitment: no SLA, rate limit, version policy or maintenance window for that host appears
-  anywhere.

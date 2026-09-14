@@ -1,18 +1,14 @@
 ---
 title: "Calling Contracts"
-description: "Read and write Superhero contracts with the æternity JavaScript SDK."
+description: "Read and write Superhero contracts with the æternity JavaScript SDK: setup, dry runs, gas, events and revert reasons."
 ---
 
 # Calling Contracts
 
-This page takes you from an empty directory to a signed, mined contract call. It covers SDK
-setup from a secret key, attaching an ACI to a deployed address, read calls, payable write
-calls, dry runs for quoting, gas limits, decoding the events a call emitted, and reading the
-revert reason when a call aborts.
-
-Every pattern here is taken from working code in the agent skill —
-`superhero-token-swap.mjs`, `superhero-token-create.mjs` and `superhero-invite.mjs` — not
-invented for the docs.
+From an empty directory to a signed, mined contract call: SDK setup from a secret key,
+attaching an ACI to a deployed address, read calls, payable write calls, dry runs for quoting,
+gas limits, decoding the events a call emitted, and reading the revert reason when a call
+aborts.
 
 ## Install
 
@@ -20,8 +16,7 @@ invented for the docs.
 npm install @aeternity/aepp-sdk bignumber.js
 ```
 
-The agent skill pins `@aeternity/aepp-sdk` `^14.1.0` and `bignumber.js` `^10.0.2`. The
-Superhero web app uses the same SDK major version. The code below targets SDK 14.
+The code below targets `@aeternity/aepp-sdk` 14.
 
 You also need the ACI files. Copy them from
 [`superhero-agent-skill/contracts/`](https://github.com/superhero-com/superhero-agent-skill)
@@ -120,7 +115,7 @@ console.log('events:', result.decodedEvents.map((e) => e.name));
 | `Contract.initialize` | Needs `aci` plus `address`. Pass `onNode` always, and `onAccount` only when you intend to sign. Without `onAccount` the instance can still do read calls. |
 | `.decodedResult` | Every call returns a result envelope. `decodedResult` is the value, already decoded against the ACI — integers come back as `BigInt`, records as plain objects, maps as `Map`. |
 | `{ amount }` | The AE attached to a payable call, in aettos (1 AE = 10^18 aettos). |
-| `omitUnknown: true` | Drops call-option keys the SDK does not recognise instead of throwing. The skill sets it on every write. |
+| `omitUnknown: true` | Drops call-option keys the SDK does not recognise instead of throwing. Set it on every write. |
 
 ### Arguments and types
 
@@ -139,8 +134,7 @@ The ACI drives argument encoding, so pass JavaScript values that match the Sophi
 | `option(t)` | `undefined` for `None`, the bare value for `Some` |
 
 A `Map` is required where the ACI says `map`. `create_community` takes
-`meta_info : map(string, string)`, so the skill builds `new Map()` — an object literal fails
-to encode.
+`meta_info : map(string, string)`, so pass `new Map()` — an object literal fails to encode.
 
 Variants use the one-key-object form. To create a DAO payout vote:
 
@@ -157,7 +151,7 @@ await dao.add_vote(
 
 ## Dry runs: quoting without spending gas
 
-Two different things are called "dry run", and the distinction matters.
+Two different things are called "dry run".
 
 **A non-stateful entrypoint is already free.** `price`, `sell_return`, `buy_price`,
 `balance`, `meta_info`, `total_supply`, `has_community` and every other read in these
@@ -178,18 +172,13 @@ console.log(dry.result.gasUsed);       // measured gas
 ```
 
 Use this before any write you are unsure about. A revert shows up as a thrown error in the
-dry run exactly as it would on chain, but without costing a transaction fee.
+dry run exactly as it would on chain, without costing a transaction fee.
 
 ## Gas estimation and gas limits
 
 `result.result.gasUsed` on a dry run is the measured consumption for that call against
-current state. That path is stable across the SDK versions the Superhero ecosystem uses:
-the `bcl-contracts` test suite pins `@aeternity/aepp-sdk` at `^13.3.3` and reads exactly
-`applyVoteSubject.result.gasUsed` and `sell.result.gasUsed`, and SDK 14 puts it in the same
-place. Alongside it, `result.gasPrice` gives the price the call actually paid — the contract
-tests multiply the two to reconcile an account's balance change.
-
-Set an explicit `gasLimit` from it with a margin:
+current state, and `result.gasPrice` is the price the call paid. Set an explicit `gasLimit`
+from the measurement with a margin:
 
 ```javascript
 const dry = await sale.buy(count, { amount, callStatic: true });
@@ -206,8 +195,8 @@ Two caveats:
 - **`create_community` is expensive.** It deploys four contracts in one transaction — a
   `CommunityManagement`, a `DAO`, an `AffiliationBondingCurveTokenSale`, and the AEX-9 token
   the sale creates in its own `init` — then makes three more cross-contract calls to wire them
-  together, and optionally performs an initial buy on top. Do not dry-run-and-trim its gas
-  limit aggressively; let the SDK use its default unless you have measured repeatedly.
+  together, and optionally performs an initial buy on top. Do not trim its gas limit
+  aggressively; let the SDK use its default unless you have measured repeatedly.
 
 You can also set `gasPrice` explicitly. Leave it alone unless you are fighting for inclusion;
 the SDK's default tracks the node's minimum.
@@ -230,8 +219,7 @@ for (const e of result.decodedEvents) {
 ```
 
 A single buy emits `Mint` **twice** — once from the community token and once from the
-ProtocolDAO token. They are distinguished by `e.contract.address`, which is exactly how the
-Superhero app separates them:
+ProtocolDAO token. Distinguish them by `e.contract.address`:
 
 ```javascript
 const tokenMint = result.decodedEvents.find(
@@ -259,7 +247,7 @@ try {
 }
 ```
 
-Revert strings you will actually hit, with the contract that raises them:
+Revert strings you are most likely to hit, with the contract that raises them:
 
 | Revert string | Raised by | Means |
 | --- | --- | --- |
@@ -281,8 +269,8 @@ Two failure modes that are **not** reverts and need separate handling:
 - **Insufficient balance.** The transaction is rejected before execution. Check
   `aeSdk.getBalance(address)` first.
 - **Not mined.** `await` on a write resolves when the transaction is mined by default. Pass
-  `waitMined: false` to get the hash immediately and poll yourself — the Superhero app does
-  this for `create_community` so the UI can navigate straight to a pending token page.
+  `waitMined: false` to get the hash immediately and poll yourself — useful for
+  `create_community`, so a UI can navigate to a pending token page straight away.
 
 ## Selling needs an allowance first
 
@@ -310,7 +298,7 @@ await sale.sell(count, minReturn, { omitUnknown: true });
 
 `allowance` returns `option(int)`, so a never-granted allowance decodes to `undefined` and
 you must `create_allowance`; an existing one is adjusted with `change_allowance`, which takes
-a **delta**, not an absolute value. The same allowance dance is required before
+a **delta**, not an absolute value. The same allowance step is required before
 `DAOVote.vote`.
 
 ## Read-only setup
@@ -331,22 +319,11 @@ const factory = await Contract.initialize({
 await factory.has_community(collectionId, 'MYTOKEN');
 ```
 
-## Open questions
-
-- **Whether `callStatic` reports the same gas as a mined call for multi-contract
-  transactions.** `create_community` deploys a `CommunityManagement`, a `DAO`, a sale and its
-  AEX-9 token through `Chain.create` in one call, and then optionally performs an initial buy
-  that reaches two more contracts. Whether a dry run's `gasUsed` covers all of that identically
-  to a mined call needs one measurement against a live node: run `create_community` with
-  `callStatic: true`, note `result.gasUsed`, then mine the same call and compare. Until someone
-  does, keep the 30% margin the page recommends.
-
-## Read more
+## Related
 
 - [Deployed Addresses](/contracts/addresses) — the addresses these examples need, and how to resolve them at runtime
 - [Events](/contracts/events) — the full event catalogue and how to read events you did not submit
 - [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the buy and sell entrypoints in detail
 - [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance model the sell flow depends on
-- [Agent CLI reference](/agents/cli-reference) — the ready-made scripts these patterns came from
+- [Agent CLI reference](/agents/cli-reference) — ready-made scripts for buying, selling, creating tokens and inviting
 - [æternity JavaScript SDK contract guide](https://docs.aeternity.com/developer-documentation/aepp-sdk-js/docs/guides/contracts) — the upstream reference for `Contract.initialize` and call options
-- [@aeternity/aepp-sdk on npm](https://www.npmjs.com/package/@aeternity/aepp-sdk) — versions and changelog

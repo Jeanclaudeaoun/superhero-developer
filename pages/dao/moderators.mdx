@@ -1,6 +1,6 @@
 ---
 title: "Moderators & Write Thresholds"
-description: "How a community controls who can post in it."
+description: "How a community controls who can post in it — the CommunityManagement contract, moderator powers, and the minimum token threshold."
 ---
 
 # Moderators & Write Thresholds
@@ -8,8 +8,7 @@ description: "How a community controls who can post in it."
 A community's governance layer and its moderation layer are the same thing. Moderators are
 appointed and removed by DAO vote; the token balance you need to post is changed by DAO vote.
 Both live in one contract, `CommunityManagement.aes`, deployed alongside the DAO when the
-community is created. This page documents what that contract holds, who can change what, and
-where each change comes from.
+community is created.
 
 ## The contract
 
@@ -23,32 +22,28 @@ CommunityManagement.state =
   , meta_info               : map(string, string) }
 ```
 
-It is deployed by `CommunityFactory.create_community` in the same transaction that creates the
+`CommunityFactory.create_community` deploys it in the same transaction that creates the
 token, the sale and the DAO:
 
-```sophia
-let community_management = Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityManagement
+```text
+Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityManagement
 ```
-
-So the factory supplies the first two arguments itself:
 
 | Argument | Value at creation |
 | --- | --- |
 | `initial_moderator` | `Call.caller` — whoever created the community |
-| `minimum_token_threshold` | `10 ^ 18`, that is **exactly one whole token** (`decimals()` is a hardcoded `18`) |
-| `is_private` | Passed through from `create_community`; the web app always sends `false` |
+| `minimum_token_threshold` | `10 ^ 18` — exactly one whole token (`decimals()` is `18`) |
+| `is_private` | Passed through from `create_community`; the web app sends `false` |
 | `meta_info` | Passed through from `create_community` |
 
-`owner` is set to `Call.caller` in `init` — the factory — and reassigned to the DAO two lines later
-by `community_management.set_owner(dao.address)`. The creator therefore ends up as the sole
-moderator but not the owner, and cannot change the threshold or appoint anyone else without a vote.
+`owner` is set to the factory in `init` and immediately reassigned to the DAO with
+`community_management.set_owner(dao.address)`. The creator ends up as the sole moderator but
+not the owner, and cannot change the threshold or appoint anyone else without a vote.
 
-Reach it from the DAO with `get_community_management()`, which returns
+Reach the contract from the DAO with `get_community_management()`, which returns
 `option(CommunityManagement)`.
 
 ## Who can change what
-
-This is the part worth getting right, because the two authorities are different.
 
 | Change | Entrypoint | Authorised by |
 | --- | --- | --- |
@@ -63,24 +58,20 @@ This is the part worth getting right, because the two authorities are different.
 Moderators mute and unmute. Everything structural — who the moderators are, what the
 threshold is, what the community says about itself — is a token-holder decision that goes
 through a proposal and a two-week vote. A moderator cannot appoint another moderator, cannot
-change the threshold, and cannot remove themselves from the set. That separation is the point:
-day-to-day moderation is fast and delegated, the moderator roster is slow and collective.
+change the threshold, and cannot remove themselves from the set. Day-to-day moderation is
+fast and delegated; the moderator roster is slow and collective.
 
 The `owner` of `CommunityManagement` is the DAO, which is how a passed vote reaches these
-entrypoints at all. `set_owner` is not one of the seven vote subjects, so there is no proposal that
-reassigns it directly: the only path that calls it after creation is a `ChangeDAO` migration, which
-hands it to the replacement DAO as part of the same transaction. See
-[Replaceable DAOs](/dao/replaceable-dao).
+entrypoints. `set_owner` is not one of the seven vote subjects; the only path that calls it
+after creation is a `ChangeDAO` migration, which hands it to the replacement DAO in the same
+transaction. See [Replaceable DAOs](/dao/replaceable-dao).
 
 ## The minimum token threshold
 
-`minimum_token_threshold` is the amount of the community's own token an account needs to write
-in the community. The whitepaper scopes it to users with verified accounts.
-
-It carries a second job: it is also the bar for **opening a DAO proposal**. A holder at or
-above the threshold can call `DAO.add_vote`. So raising the threshold makes a community both
-harder to post in and harder to propose in, and lowering it does the reverse. Communities
-routinely overlook the second effect when they vote on the first.
+`minimum_token_threshold` is the amount of the community's own token an account needs to
+write in the community. It has a second job: it is also the bar for **opening a DAO
+proposal**. Raising the threshold makes a community both harder to post in and harder to
+propose in; lowering it does the reverse.
 
 Read it directly:
 
@@ -89,30 +80,20 @@ CommunityManagement.minimum_token_threshold() : int
 ```
 
 The value is in the token's smallest unit. Divide by `10^decimals` — read `decimals` from the
-token's `meta_info()` — before comparing it to a balance shown in a wallet. Every community starts
-at `10^18`, one whole token, until a `ChangeMinimumTokenThreshold` vote moves it.
+token's `meta_info()` — before comparing it to a balance shown in a wallet. Every community
+starts at `10^18`, one whole token, until a `ChangeMinimumTokenThreshold` vote moves it.
 
-**Nothing on-chain enforces it for posting.** `CommunityManagement` stores the number and hands it
-out; no entrypoint in the contract gates a write against it, and posts do not pass through this
-contract at all. The only on-chain consumer is `DAO.add_vote`, which reads it through
-`get_community_management()` and requires the proposer's balance to clear it. Posting is gated by
-clients and by the backend — see [Moderation](/social/moderation) — so a client that ignored the
-threshold could publish anyway, and conforming clients would still filter what it produced.
-
-That asymmetry is worth stating plainly: **the threshold is advisory for posting and binding for
-proposing.**
+The contract stores the threshold and hands it out. The app and the backend enforce it for
+posting — see [Moderation](/social/moderation) — and `DAO.add_vote` enforces it for
+proposals, requiring the proposer's balance to clear it.
 
 ### Choosing one
 
-There is no protocol guidance and no default that fits every community, but the mechanics
-constrain the choice:
-
 - **The token price is not fixed.** The threshold is a token count, and the bonding curve
-  price rises with supply. A threshold set when the token was cheap becomes expensive later
+  price rises with supply, so a threshold set when the token was cheap becomes expensive later
   without anyone voting to change it.
-- **It gates proposals as well as posts.** Set it high enough to keep out drive-by spam, low
-  enough that more than a handful of accounts can still open a vote — otherwise the community
-  cannot govern itself.
+- **It gates proposals as well as posts.** Set it high enough to keep out drive-by spam and low
+  enough that more than a handful of accounts can still open a vote.
 - **Changing it is slow and costs 555 AE.** Treat it as a decision you revisit a few times a
   year, not a dial you tune.
 
@@ -127,38 +108,25 @@ stateful entrypoint unmute_user_id(user_id: string) : unit
 
 Read the set with `muted_user_ids()` and the roster with `moderator_accounts()`.
 
-### What a mute actually does
+### What a mute does
 
-**It removes the account from the community's chat room and stops it being re-added. It hides
-nothing.**
+A mute removes the account from the community's token-gated chat room and prevents it being
+re-added, regardless of token balance. A muted holder who clears the threshold is still
+excluded from the room.
 
-The type is `Set.set(string)`, which is looser than the use. The only thing that reads it is the
-token-gated-rooms subsystem in `superhero-api`: `room-state.service.ts` copies `muted_user_ids` from
-the contract into the `community_room.muted` array, and two places consume that array, both
-comparing entries against a holder's `ak_` **address**:
+`user_id` is a string; pass the account's `ak_` address. Entries are matched against member
+addresses, so any other string mutes nobody.
 
-| Consumer | Effect |
-| --- | --- |
-| `eligibility.service.ts` — `isEligible(balance, threshold, muted, memberAddress)` | Returns `false` for a muted address regardless of balance, so the account is marked ineligible for the room |
-| `membership-sync.service.ts` | Refuses to publish a relay add for a muted member — "never re-add a member currently in the room's muted set" |
+A mute does **not** hide or filter content. A muted account's existing posts stay visible
+everywhere they were visible before. It is also separate from the per-user room mute in the
+app, which is a notification preference an account sets for itself.
 
-So a mute overrides the token threshold in one direction only: a muted holder who clears the
-threshold is still excluded. And because the entries are matched against `member_address`, **a
-string that is not an `ak_` address is inert** — it will never equal a member address, so it mutes
-nobody. The `string` type buys no extra expressiveness in practice.
-
-Two things a mute does **not** do:
-
-- **It does not hide or filter any content.** Nothing in the feed, post or search paths consults `muted_user_ids` or `community_room.muted`. A muted account's existing posts stay visible everywhere they were visible before.
-- **It is not the same thing as the per-user room mute in the app.** That is a notification preference (`room_notification_preference.muted`, set by the account for itself); this is a moderator action recorded on-chain. They share a word and nothing else.
-
-There is no post deletion, no edit, no ban, no timed mute and no appeal mechanism in the contract.
-Moderation here is membership control, not content control. See
+There is no post deletion, no edit, no ban, no timed mute and no appeal mechanism in the
+contract. Moderation here is membership control, not content control. See
 [Moderation](/social/moderation).
 
 Muting is not governance. A moderator does not need a vote to mute, and a mute is not
-reversible by vote — only another moderator action, or removing the moderator and having the
-next one unmute, changes it.
+reversed by vote — only a moderator's `unmute_user_id` changes it.
 
 ## The `is_private` flag
 
@@ -172,36 +140,23 @@ init(initial_moderator : address,
      meta_info : CommunityManagement.meta_info)
 ```
 
-It is exposed on the factory too, so whoever creates the community chooses it:
+Whoever creates the community chooses it through the factory:
 
 ```text
 CommunityFactory.create_community(collection_name, name, initial_buy_count,
                                   is_private, meta_info)
 ```
 
-It is fixed at creation. `CommunityManagement` has no `set_is_private` entrypoint, it is not in the
-vote-subject set, and `change_meta_info` only replaces the metadata map. **A community cannot become
-private, or stop being private, after it is created** — not by moderator action and not by DAO vote.
-The only way to change it is a new community.
+It is fixed at creation. `CommunityManagement` has no `set_is_private` entrypoint, it is not
+in the vote-subject set, and `change_meta_info` only replaces the metadata map. **A community
+cannot become private, or stop being private, after it is created.** The only way to change
+it is a new community.
 
-### What it restricts
-
-**Nothing, on-chain.** No function in `CommunityManagement.aes` reads `state.is_private`, and no
-other BCL contract reads it either. There is not even a getter: the only way to see it is
-`get_state()`. The flag is storage that the contract itself ignores.
-
-What it actually does is gate **reading the community's chat room**. The flag travels from the
-contract into the backend's room record, is served as `is_private` on `GET /api/rooms`, and the web
-app uses it to decide whether to authenticate before touching the relay:
-
-- Each community has a NIP-29 group on a Nostr relay, keyed by its `sale_address`.
-- When `isPrivate` is set, the client performs a NIP-42 `AUTH` handshake before fetching history or subscribing. Without it, the relay rejects the read and the app shows an `auth-required` state.
-- The room still appears in listings — both the Communities view and the inbox render a private badge next to it. Privacy here means "you must prove who you are to read the messages", not "you cannot see that this community exists".
-
-So `is_private` restricts **reading the chat**, enforced by the relay; it does not restrict reading
-the token, the feed, the trades, the holders or any on-chain state, all of which are public
-regardless. It is also not the write gate — that is `minimum_token_threshold`, which applies to
-every community, private or not.
+`is_private` only affects chat-room visibility: a private community's chat requires an
+authenticated relay session (a NIP-42 `AUTH` handshake) before history can be read, while the
+room still appears in listings with a private badge. The token, the feed, the trades, the
+holders and all on-chain state stay public, and the write gate is `minimum_token_threshold`
+for every community, private or not.
 
 ## The metadata map
 
@@ -209,15 +164,14 @@ every community, private or not.
 CommunityManagement.meta_info = map(string, string)
 ```
 
-A free-form string map holding the community's descriptive metadata. It is replaced wholesale
-by `change_meta_info`, which is reached through a `ChangeMetaInfo` vote — so a proposal that
-means to change one key must carry every other key unchanged, or they are dropped. There is no
-per-key update entrypoint.
+A free-form string map holding the community's descriptive metadata. `change_meta_info`
+replaces it wholesale, through a `ChangeMetaInfo` vote — a proposal that means to change one
+key must carry every other key unchanged. There is no per-key update entrypoint.
 
 ## Events
 
-`CommunityManagement` emits an event for every state change, which is what makes the
-moderation history auditable without replaying contract state:
+`CommunityManagement` emits an event for every state change, so moderation history is
+auditable without replaying contract state:
 
 | Event | Fields |
 | --- | --- |
@@ -237,11 +191,6 @@ later undone. See [Contract events](/contracts/events).
 - [Proposals and Vote Subjects](/dao/proposals) — the four subjects that reach this contract, with their parameter shapes.
 - [How DAOs Work](/dao/overview) — how a moderator appointment travels from proposal to execution.
 - [Quorum and Thresholds](/dao/quorum-and-thresholds) — the vote a moderator change has to clear.
-- [Moderation](/social/moderation) — how muting is applied to the social feed.
+- [Moderation](/social/moderation) — how muting and the threshold are applied in the app.
 - [Community Management contract reference](/contracts/community-management) — the full entrypoint table.
-- [Replaceable DAOs](/dao/replaceable-dao) — a `ChangeDAO` migration transfers this contract's ownership too, so these entrypoints survive it.
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the "Community Management" section is the canonical description of moderator powers.
-
-## Open questions
-
-- **Whether a muted member is actively removed from the relay, or only blocked from re-joining.** The backend refuses to re-add a muted member and marks them ineligible, and eligibility flips normally drive a `pending_remove` transition — but whether an already-published member is removed promptly on being muted, or lingers until the next membership sync, was not traced here. `membership-sync.service.ts` and the `tgr.eligibility.changed` consumer in `superhero-api/src/token-gated-rooms/` would settle it.
+- [Replaceable DAOs](/dao/replaceable-dao) — a `ChangeDAO` migration transfers this contract's ownership too.

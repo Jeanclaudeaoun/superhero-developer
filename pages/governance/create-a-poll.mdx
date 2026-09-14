@@ -1,6 +1,6 @@
 ---
 title: "Creating a Poll"
-description: "Deploy a poll contract and register it, from the UI or the CLI."
+description: "Deploy a poll contract and register it in the Registry, from the web app or the CLI, with every field limit."
 ---
 
 # Creating a Poll
@@ -8,10 +8,9 @@ description: "Deploy a poll contract and register it, from the UI or the CLI."
 Creating a poll takes **two on-chain transactions** — deploy the poll contract, then register
 it in the `Registry` — and costs roughly 0.02 AE. Allow 2–5 minutes for both to mine.
 
-Front-load the constraints, because **a poll cannot be edited after it is deployed**. There is
-no entrypoint to change the title, fix a typo in the description, add an option, or move the
-close height. The only correction is a new poll, which means two more transactions and a
-split, confusing record. Get the text and the options right before you sign.
+**A poll cannot be edited after it is deployed.** There is no entrypoint to change the title,
+fix a typo in the description, add an option, or move the close height. The only correction is
+a new poll. Get the text and the options right before you sign.
 
 ## Before you start
 
@@ -34,36 +33,28 @@ split, confusing record. Get the text and the options right before you sign.
 | Close height | A future key-block height, or `0` for a poll that never closes. |
 | Listing | Listed by default; unlisted keeps it out of the public listing. |
 
-Two of those limits are enforced on chain, in `Poll.aes` / `Poll_Iris.aes`:
+The title and description limits are enforced on chain:
 
 ```sophia
 require(String.length(metadata.title) =< 50, "TITLE_STRING_TO_LONG")
 require(String.length(metadata.description) =< 300, "DESCRIPTION_STRING_TO_LONG")
 ```
 
-Nothing else is. The link is never inspected, `spec_ref` is never inspected, the option map is never
-inspected — **a poll with zero options, or one option, deploys perfectly happily** and is then
-unvotable, because `vote` requires the option to exist in the map. The "at least 2 options" rule is
-the clients'. So is the `http`/`https` prefix rule.
+The lengths are counted in **characters, not bytes**, so 300 characters is 300 characters
+whatever alphabet they are in.
 
-One inconsistency worth knowing: the CLI enforces the 300-character description limit and
-rejects anything longer, while the web form only requires the description to be non-empty and
-does not check its length. The chain will reject an over-long description either way, with
-`DESCRIPTION_STRING_TO_LONG` — so the web form's omission costs you a failed deploy rather than a
-bad poll.
+The link, `spec_ref` and the option map are not inspected by the contract; the `http`/`https`
+prefix rule and the two-option minimum are enforced by the clients. A poll with fewer than two
+options deploys but cannot be voted on usefully, because `vote` requires the option to exist
+in the map.
 
-The lengths are counted in **characters, not bytes**: Sophia's string functions operate on unicode
-code points under FATE, so 300 characters is 300 characters whatever alphabet they are in.
+The `link` is stored on-chain as a string. Clients that render it must treat it as untrusted
+input; the Superhero app runs it through a URL-safety check before putting it in an `href`.
 
-The `link` is stored on-chain as an unvalidated string. Nothing checks that it resolves, and
-the `http`/`https` prefix rule is enforced by the clients rather than by the contract. Clients
-that render it must treat it as untrusted input; the Superhero app runs it through a
-URL-safety check before putting it in an `href`.
+## Choose a close height
 
-## Choosing a close height
-
-`close_height` is a **key-block** height. æternity targets one key-block every three minutes,
-so:
+`close_height` is a **key-block** height. æternity produces one key-block roughly every three
+minutes:
 
 ```text
 key-blocks per day = (24 * 60) / 3 = 480
@@ -78,26 +69,23 @@ close_height = current_height + days * 480
 | 14 days | 6,720 |
 | 30 days | 14,400 |
 
-The web form defaults to 30 days, computed as exactly `current_height + 14400`.
+The web form defaults to 30 days, computed as `current_height + 14400`.
 
-Setting `0` — or omitting it in the CLI — creates a poll that **never closes**. That has a real
-consequence for the result: stake weighting is computed against the state at the close height,
-so an open-ended poll has no snapshot and produces a continuously moving figure rather than a
-settled outcome. Use it for standing sentiment, not for a decision.
+Micro-blocks arrive about every three seconds, but `close_height` is a key-block height, so
+always convert at three minutes per block.
 
-> **Do not use the three-second figure.** æternity's *micro*-blocks arrive about every three
-> seconds, but `close_height` is a key-block height. The agent skill's governance guide
-> currently derives close heights at one block per three seconds; a height computed that way
-> lands roughly sixty times too far in the future — a "7-day" poll would run for well over a
-> year.
+Setting `0` — or omitting it in the CLI — creates a poll that **never closes**. Stake weighting
+is computed against the state at the close height, so an open-ended poll has no snapshot and
+produces a continuously moving figure rather than a settled outcome. Use it for standing
+sentiment, not for a decision.
 
-## Creating from the web app
+## Create from the web app
 
 Go to [superhero.com/voting/create](https://superhero.com/voting/create), or open
 [superhero.com/voting](https://superhero.com/voting) and pick the **Create Poll** tab.
 
 1. Connect a wallet with at least 0.02 AE.
-2. Enter the **title** (50 characters) and the **description**.
+2. Enter the **title** (50 characters) and the **description** (300 characters).
 3. Enter the **link**. If it does not point at `forum.aeternity.com`, the form suggests opening
    a forum thread and linking that instead — a hint, not a requirement.
 4. Choose **Publicly Listed** or **Not Listed**.
@@ -115,7 +103,7 @@ If the second transaction fails after the first succeeds, you have a deployed bu
 poll. It exists on-chain and can be voted on by address, but it will not appear in any listing
 until somebody calls `add_poll` for it.
 
-## Creating from the CLI
+## Create from the CLI
 
 ```bash
 node scripts/superhero-governance.mjs create \
@@ -131,8 +119,6 @@ node scripts/superhero-governance.mjs create \
 | `close_height` | Optional. A future height; `0` or omitted means open-ended. |
 | `--unlisted` | Optional. Equivalent to `--listed false`. Listed by default. |
 
-A real invocation:
-
 ```bash
 node scripts/superhero-governance.mjs create \
   "Should we upgrade to protocol v3?" \
@@ -141,7 +127,7 @@ node scripts/superhero-governance.mjs create \
   "Yes,No,Abstain"
 ```
 
-And a 14-day, unlisted poll, assuming a current height of 1,000,000:
+A 14-day, unlisted poll, assuming a current height of 1,000,000:
 
 ```bash
 node scripts/superhero-governance.mjs create \
@@ -173,7 +159,7 @@ against the node's current height so it cannot be set in the past. On success it
 Keep `poll_address` — it is what every other command takes. `poll_id` is the registry's
 sequential id, usable with `info-by-id`.
 
-## Deploying without the script
+## Deploy without the script
 
 If you are building your own client, the two calls are:
 
@@ -194,33 +180,16 @@ Deploy the poll from the **account that should be its author**: `Poll.state.auth
 deployment and `is_author` checks against it. The author has no special power over the poll
 afterwards — they cannot close it, edit it or delete it — but the attribution is permanent.
 
-### Registration is open, and permanent
+`Registry.add_poll` can be called by any account for any deployed poll, and the caller sets
+`is_listed`. The registry has no `remove_poll`, no `set_listed` and no update entrypoint, so
+a registration is permanent: the id, the cached title and the `is_listed` flag are fixed. If
+you register with the wrong `is_listed` value, register the poll again with the other value —
+both entries remain — or deploy a fresh poll.
 
-`Registry.add_poll` has **no access control at all** — no owner, no allowlist, no deposit, not even
-a check that the argument is really a poll:
-
-```sophia
-stateful entrypoint add_poll(poll : Poll, is_listed : bool) : int =
-  let poll_seq_id = state.seq_id
-  let poll_data = { poll = poll, is_listed = is_listed, title = poll.title(), close_height = poll.close_height() }
-  put(state{ polls[state.seq_id] = poll_data, seq_id = state.seq_id + 1 })
-  Chain.event(AddPoll(poll, poll_seq_id))
-  poll_seq_id
-```
-
-Anyone can register any deployed poll, including one they did not author, and set `is_listed`
-themselves while doing it. The only implicit validation is that the target must answer `title()` and
-`close_height()`, or the call reverts.
-
-**Nothing can be undone.** The registry has no `remove_poll`, no `set_listed` and no update
-entrypoint of any kind, so once a poll is registered its id, its cached title and its `is_listed`
-flag are fixed forever. There is no moderation path: an abusive or mistaken poll stays in
-`polls()` permanently, and listing filtering is something clients do, not something the registry
-offers. The same poll can also be registered twice under two different ids, since nothing checks for
-duplicates.
-
-If you get `is_listed` wrong, the only remedy is to register the poll again with the other value —
-which leaves both entries in place — or to deploy a fresh poll.
+Deploy the standard poll bytecode as shipped with the app or the agent skill. The governance
+backend computes `stake_weighted_results` only for polls built from the unmodified
+`Poll_Iris.aes` source; a poll compiled from modified source can be voted on but has no
+official result.
 
 ## Costs
 
@@ -230,23 +199,10 @@ which leaves both entries in place — or to deploy a fresh poll.
 | Vote | 1 | about 0.0001 AE |
 | Revoke a vote | 1 | about 0.0001 AE |
 
-## Deploy a recognised build
-
-The governance backend will only compute stake-weighted results for a poll whose contract-create
-bytecode hashes to one of the builds it knows. **Deploy the poll bytecode as shipped — do not
-recompile a modified source.** Both Superhero paths already do: the web app deploys the
-`Poll_Iris.aes` build compiled with aesophia 8.0.0, the agent skill the same source compiled with
-7.0.1, and both digests are in the backend's table.
-
-If you deploy your own build, the poll will work — people can vote on it and the votes are on
-chain — but `stake_weighted_results` will be `null` permanently and there is no official result.
-See [Polls](/governance/polls) for how that check works.
-
 ## Read more
 
 - [Polls](/governance/polls) — the data model you are populating, and which result figure counts.
-- [Voting on Polls](/governance/voting) — what happens once people start voting on it.
+- [Voting on Polls](/governance/voting) — what happens once people start voting.
 - [The Governance Registry](/governance/registry) — `add_poll`, the registry addresses, and the governance API.
 - [Governance with an agent](/agents/governance) — the guarded workflow for creating polls from an agent.
 - [Create a poll](https://superhero.com/voting/create) — the live form.
-- [æternity forum](https://forum.aeternity.com) — where the app suggests hosting the discussion thread you link.

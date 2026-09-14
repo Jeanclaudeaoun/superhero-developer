@@ -1,18 +1,13 @@
 ---
 title: "API Conventions"
-description: "Pagination, ordering, errors, units and authentication — the contract every api.superhero.com endpoint shares."
+description: "Pagination, ordering, units, errors, rate limits and authentication shared by every api.superhero.com endpoint."
 ---
 
 # API Conventions
 
-Everything on `api.superhero.com` is a plain JSON REST API. This page pins down the parts that
-repeat across every endpoint — base URLs, pagination, the shared query parameters, units, error
-bodies and the signature-based write flow — so the endpoint pages can stay short.
-
-The facts here are taken from the API server itself (`superhero-api`, a NestJS app) and from the
-Superhero web app: `src/config.ts`, the hand-written client in `src/api/backend.ts`, and the
-OpenAPI-generated client under `src/api/generated/`. Where the two disagree, the server wins and
-this page says so.
+Every endpoint on `api.superhero.com` is plain JSON over HTTPS. The rules below — base URLs,
+pagination, shared query parameters, units, errors, rate limits and the signature-based write
+flow — apply everywhere and are not repeated on the endpoint pages.
 
 ## Base URLs
 
@@ -21,60 +16,31 @@ this page says so.
 | Mainnet | `https://api.superhero.com` | `ae_mainnet` |
 | Testnet | `https://testnet.api.dev.tokensale.org` | `ae_uat` |
 
-Both hosts serve the same paths. The web app sets the base once at startup and every request —
-hand-written or generated — goes through it:
+Both hosts serve the same paths. Every path is relative to the base and begins with `/api/`. The
+only versioned prefix is `/api/v2/mdw/*`, the indexed chain mirror — see
+[Node & Middleware](/api-reference/node-and-middleware).
 
-```ts
-// src/main.tsx
-OpenAPI.BASE = (CONFIG.SUPERHERO_API_URL || 'https://api.superhero.com').replace(/\/$/, '');
-```
-
-Every path in this reference is relative to that base and begins with `/api/`. That prefix is set
-once, globally, with `app.setGlobalPrefix('api')` in `superhero-api/src/main.ts` — which is why
-controllers in the source declare `@Controller('tokens')` and serve `/api/tokens`. The only
-versioned prefix in the whole surface is `/api/v2/mdw/*` (the indexed chain mirror — see
-[Node & Middleware](/api-reference/node-and-middleware)).
-
-### Is there a published OpenAPI document?
-
-Yes, but it is off by default in production. `main.ts` builds a Swagger document titled
-*"WORD CRAFT Scan"*, version `1.0`, and mounts it with `SwaggerModule.setup('api', app, document)`
-— **only** when `NODE_ENV !== 'production'` or the operator sets `ENABLE_SWAGGER=true`:
-
-```text
-GET /api        Swagger UI (HTML)
-GET /api-json   the OpenAPI 3 document (JSON)
-```
-
-If those return a 404 on a given deployment, Swagger is simply not mounted there — that is the
-default posture for production, deliberately, so the full endpoint surface and every parameter
-schema are not free reconnaissance. Ask the operators to enable it, or generate a client from a
-non-production deployment.
-
-A GraphQL endpoint exists alongside the REST API (Apollo, schema at `src/schema.gql`), but
-introspection and GraphiQL are likewise disabled when `NODE_ENV === 'production'`.
+Outside production the server also serves Swagger UI at `/api` and the OpenAPI 3 document at
+`/api-json`.
 
 ## Authentication
 
-**Reads need no credentials.** The generated client ships with `TOKEN`, `USERNAME`, `PASSWORD`
-and `HEADERS` all `undefined` and `WITH_CREDENTIALS: false`, and nothing in the app ever sets
-them. No API key, no bearer token, no cookie, no session — for everything the generated client
-covers. A bare `curl` gets the same bytes the web app gets:
+**Reads need no credentials.** No API key, bearer token, cookie or session:
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens?limit=3&order_by=market_cap&order_direction=DESC"
 ```
 
-**Writes are authenticated by wallet signature, not by a credential.** There is no login
-endpoint and no token to store. Every mutating flow is the same three steps:
+**Writes are authorised by wallet signature.** There is no login endpoint and no token to store.
+Every mutating flow is three steps:
 
-1. `POST` a challenge endpoint with your `ak_...` address. It returns a `nonce` (or
-   `verification_token`) plus a human-readable `message` and an expiry.
-2. Sign `message` with the private key for that address (the wallet's `signMessage`).
+1. `POST` the challenge endpoint with your `ak_...` address. It returns a `nonce` (or
+   `verification_token`), a human-readable `message` and an expiry.
+2. Sign `message` with the private key for that address.
 3. `POST` the submit endpoint with the nonce, the signature and the value you are claiming.
 
-The server verifies the signature against the address in the request, so possession of the key
-*is* the authorization. Endpoints that use this pattern:
+The server verifies the signature against the address in the request. Endpoints that use this
+pattern:
 
 | Flow | Challenge | Submit |
 | --- | --- | --- |
@@ -88,11 +54,11 @@ The server verifies the signature against the address in the request, so possess
 | Push-notification device | `POST /api/notifications/devices/challenge` | `POST /api/notifications/devices` |
 | Notification preferences | `POST /api/notifications/preferences/challenge` | `POST /api/notifications/{address}/preferences` |
 
-Each `claim` flow has a matching `unclaim` and `unclaim/submit` pair that reverses it, signed the
-same way. See [Profile](/api-reference/profile) for the exact bodies.
+Each `claim` flow has a matching `unclaim` and `unclaim/submit` pair, signed the same way. See
+[Profile](/api-reference/profile) for request bodies.
 
-**One subsystem does issue a bearer token.** The notification feed trades a single wallet
-signature for a session token, and then uses it as a normal `Authorization: Bearer` header:
+**The notification feed uses a bearer session token.** One wallet signature is exchanged for a
+token, which is then sent as a normal `Authorization: Bearer` header:
 
 ```text
 POST /api/notifications/{address}/feed/challenge   ->  { nonce }
@@ -101,38 +67,26 @@ POST /api/notifications/{address}/feed/session     ->  { token, expiresAt }
 GET  /api/notifications/{address}/feed?limit=50    ->  Authorization: Bearer {token}
 ```
 
-The token is cached in `localStorage` until 30 seconds before `expiresAt` (the client falls back
-to a six-day lifetime if the timestamp will not parse), so the user signs once rather than on
-every page load. `GET /api/notifications/web-push/vapid-public-key` is explicitly a public route
-and needs no token. This is the only session-based authentication anywhere in the API.
+`GET /api/notifications/web-push/vapid-public-key` is public and needs no token.
 
-**Two endpoints use a shared secret, and it is the same secret.**
-`POST /api/trending-tags` and `PATCH /api/dex/tokens/{address}/listed` are both guarded by
-`ApiKeyGuard` (`superhero-api/src/trending-tags/guards/api-key.guard.ts`) — the DEX controller
-imports it from the trending-tags module rather than defining its own — so both check the value of
-`TRENDING_TAGS_API_KEY`. Send it as either header:
+**Two endpoints take an API key.** `POST /api/trending-tags` and
+`PATCH /api/dex/tokens/{address}/listed` accept it as either header:
 
 ```text
 x-api-key: YOUR_KEY
 Authorization: Bearer YOUR_KEY
 ```
 
-The comparison is constant-time. A missing key, a wrong key, or a server whose own key is unset or
-shorter than 16 characters all give `401` — a misconfigured deployment fails closed rather than
-open. Both are operator endpoints and the key is not in any public repository. Note that the
-generated client declares no credential for `POST /api/trending-tags`; the generated client is
-wrong.
+A missing or wrong key is a `401`.
 
-**One endpoint really is an unauthenticated write.** `POST /api/affiliations` takes a
-`sender_address` and a list of `codes` and returns a generated ten-character affiliation code,
-with no guard and no signature check
-(`superhero-api/src/affiliation/controllers/affiliation.controller.ts`). Its sibling
-`POST /api/affiliations/invites/{code}/{provider}/{access_code}` is authenticated indirectly: it
-verifies the `access_code` with GitHub, Google or X before handing out a private invite code.
+**`POST /api/affiliations` takes no credential.** It accepts a `sender_address` and a list of
+`codes` and returns a generated ten-character affiliation code. Its sibling
+`POST /api/affiliations/invites/{code}/{provider}/{access_code}` verifies `access_code` with
+GitHub, Google or X before handing out a private invite code.
 
 ## Pagination
 
-Most list endpoints return an envelope of `items` plus `meta`:
+Most list endpoints return `items` plus `meta`:
 
 ```json
 {
@@ -157,100 +111,83 @@ Most list endpoints return an envelope of `items` plus `meta`:
 
 Pass `page` (1-based) and `limit` to walk it.
 
-### The `limit` cap is 100, and it is enforced two different ways
+### The `limit` cap is 100
 
-100 is both the **default** and the **maximum** everywhere. What differs is what happens when you
-ask for more:
+100 is both the default and the maximum. What happens when you exceed it depends on the endpoint
+family:
 
 | Endpoint family | `limit=101` | `page=0` |
 | --- | --- | --- |
-| `/api/tokens`, `/api/accounts`, `/api/posts`, `/api/trending-tags`, `/api/tips`, `/api/invitations` and the other hand-written list controllers | **`400`** — `Limit must be between 1 and 100` (wording varies slightly per controller) | `400` — `Page must be greater than or equal to 1` |
-| `/api/v2/mdw/*` (the generated base controller) | **`400`** — `Maximum limit is 100 items per request` | `400` — `Page must be greater than or equal to 1` |
-| `/api/dex/*` lists | **silently clamped to 100** | silently clamped to 1 |
+| `/api/tokens`, `/api/accounts`, `/api/posts`, `/api/trending-tags`, `/api/tips`, `/api/invitations` and the other list endpoints | `400` — `Limit must be between 1 and 100` (wording varies per endpoint) | `400` — `Page must be greater than or equal to 1` |
+| `/api/v2/mdw/*` | `400` — `Maximum limit is 100 items per request` | `400` — `Page must be greater than or equal to 1` |
+| `/api/dex/*` lists | Silently clamped to 100 | Silently clamped to 1 |
 
-The DEX paths run every request through `clampPaginationOptions`
-(`superhero-api/src/utils/pagination.ts`), which is why they never error: `DEFAULT_PAGE_LIMIT`
-and `MAX_PAGE_LIMIT` are both `100`, so `limit` is floored to an integer and pinned into `[1, 100]`.
-Check `meta.itemsPerPage` rather than assuming your `limit` was honoured.
+Read `meta.itemsPerPage` rather than assuming your `limit` was honoured. `page` on
+`/api/v2/mdw/*` is capped at 1,000,000.
 
-**`page` has a ceiling too.** The generated base controller refuses `page` above `500` with
-`400 Maximum page is 500` — deep `OFFSET` paging makes Postgres scan and discard every prior row.
-The chain-mirror tables raise their own ceiling to 1,000,000 because an explorer walking history
-has no range-filter alternative, so `/api/v2/mdw/txs` really is pageable that deep. Application
-tables are not.
+### Invalid `order_by`
 
-### Invalid `order_by` is usually a 400 — but not always
+Most list endpoints hold an allow-set and return `400 Invalid order_by value: {value}` for
+anything outside it. `GET /api/tokens` is the exception: an unrecognised `order_by` falls back
+to `market_cap` and an unrecognised `order_direction` to `DESC`, with no error.
 
-Most list controllers hold an explicit allow-set and throw
-`400 Invalid order_by value: {value}` for anything outside it. `GET /api/tokens` is the notable
-exception: an unrecognised `order_by` there falls back to `market_cap` and an unrecognised
-`order_direction` falls back to `DESC`, with no error. Do not use an error to catch a typo on
-that endpoint.
-
-### Four shapes that are not this envelope
-
-Do not write a generic paginator that assumes `items` everywhere.
+### Responses that are not the envelope
 
 | Endpoint | Shape |
 | --- | --- |
-| `GET /api/tokens/{address}/history` | A bare JSON array. Still takes `page` and `limit`; you have reached the end when a page comes back empty. |
-| `GET /api/accounts/{address}/portfolio/history` | A bare JSON array of snapshots, bounded by `startDate` / `endDate` / `interval` rather than by pages. |
-| `GET /api/accounts/leaderboard` | `items` plus a different `meta`: `page`, `limit`, `totalItems`, `totalPages`, `window`, `sortBy`, `sortDir`, and `timeFilter`. Note `page`, not `currentPage`. |
-| `GET /api/feed` | Keyset pagination: `items` plus `next_cursor`. Pass the cursor back as `cursor`; there is no page number. |
+| `GET /api/tokens/{address}/history` | A bare JSON array. Still takes `page` and `limit`; you have reached the end when a page comes back empty |
+| `GET /api/accounts/{address}/portfolio/history` | A bare JSON array of snapshots, bounded by `startDate`, `endDate` and `interval` rather than by pages |
+| `GET /api/accounts/leaderboard` | `items` plus a different `meta`: `page`, `limit`, `totalItems`, `totalPages`, `window`, `sortBy`, `sortDir` and `timeFilter`. Note `page`, not `currentPage` |
+| `GET /api/feed` | Keyset pagination: `items` plus `next_cursor`. Pass the cursor back as `cursor`; there is no page number |
 
-The analytics series endpoints also return bare arrays, and the totals endpoints return a scalar
-or a small object — see [Analytics](/api-reference/analytics).
+The analytics series endpoints return bare arrays and the totals endpoints return a scalar or a
+small object — see [Analytics](/api-reference/analytics).
 
 ## Shared query parameters
 
 | Parameter | Applies to | Notes |
 | --- | --- | --- |
 | `page` | list endpoints | 1-based |
-| `limit` | list endpoints | capped at 100 |
+| `limit` | list endpoints | Capped at 100 |
 | `order_by` | most list endpoints | Enum per endpoint; the value set is not shared |
 | `order_direction` | most list endpoints | `ASC` or `DESC` |
 | `search` | tokens, posts, topics, accounts, DEX tokens, DEX pairs | Substring match, server-side |
-| `convertTo` | price/history endpoints | See below |
+| `convertTo` | price and history endpoints | See below |
 | `interval` | history endpoints | Seconds, not a keyword |
-| `includes` | `/api/transactions` | Currently only `token`, which inlines the token object |
+| `includes` | `/api/transactions` | Only `token`, which inlines the token object |
 
-### Casing is not consistent — check per endpoint
+### Parameter casing
 
-Query keys are mostly snake_case, with real exceptions. Getting this wrong silently returns the
-unfiltered result rather than an error, so it is worth a look:
+Query keys are mostly snake_case, with exceptions. An unrecognised key returns unfiltered data
+rather than an error, so match the spelling per endpoint:
 
 | Spelling | Used by |
 | --- | --- |
-| `start_date` / `end_date` | all `/api/analytics/*`, `GET /api/tokens/{address}/transactions`, `/api/bcl-affiliation/analytics*` |
+| `start_date` / `end_date` | All `/api/analytics/*`, `GET /api/tokens/{address}/transactions`, `/api/bcl-affiliation/analytics*` |
 | `startDate` / `endDate` | `/api/accounts/leaderboard`, all `/api/accounts/{address}/portfolio/*` |
 | `from_date` / `to_date` | `GET /api/dex/transactions` |
-| `convertTo` | every endpoint that takes it, on both sides of the divide |
+| `convertTo` | Every endpoint that takes it |
 | `sortBy` / `sortDir` | `/api/accounts/leaderboard` only — everything else uses `order_by` / `order_direction` |
 
 ### Currency conversion
 
-Endpoints that accept `convertTo` take one of: `ae` (default), `usd`, `eur`, `aud`, `brl`, `cad`,
-`chf`, `gbp`, `xau`. The same nine keys make up the `PriceDto` object that the API returns
-wherever a value has a price:
+Endpoints that accept `convertTo` take one of `ae` (default), `usd`, `eur`, `aud`, `brl`, `cad`,
+`chf`, `gbp`, `xau`. The same nine keys make up the `PriceDto` object returned wherever a value
+has a price:
 
 ```json
 { "ae": 0.0421, "usd": 0.0013, "eur": 0.0011, "aud": 0.002,
   "brl": 0.0071, "cad": 0.0018, "chf": 0.001, "gbp": 0.00097, "xau": 0.0000004 }
 ```
 
-Live AE fiat rates come from `GET /api/coins/aeternity/rates`, which returns a flat map of
-lowercase currency code to number.
+Live AE fiat rates come from `GET /api/coins/aeternity/rates`, a flat map of lowercase currency
+code to number.
 
 ## Units
 
-This is the single easiest thing to get wrong, and the API mixes two conventions in the same
-object. There is one rule that predicts almost everything:
-
-> **A value the indexer wrote is in whole units. A value read live off a contract is raw.**
-
-The indexer converts with `toAe()` as it decodes each event, so everything stored in the
-`transactions` table is already divided by 1e18. `TokensService.getTokeLivePrice`, by contrast,
-copies the sale contract's `total_supply()` and the node's `getBalance()` through unchanged.
+The API mixes two conventions. Values in trade records and OHLC candles are in whole units (AE,
+whole tokens). Values read live from a contract — a token's `market_cap`, `total_supply` and
+`dao_balance` — are raw (aettos, base units).
 
 | Field family | Unit | Conversion |
 | --- | --- | --- |
@@ -260,135 +197,80 @@ copies the sale contract's `total_supply()` and the node's `getBalance()` throug
 | `TokenDto.total_supply`, `circulating_supply`, holder `balance` | **token base units** | divide by 10 raised to `decimals` (18 for every token the factory mints) |
 | Invitation `amount`, and the `total_amount_ae` aggregates built from it | **AE** | none |
 
-So `market_cap` means two different scales depending on where you read it: on a token it is
-aettos, on a transaction or an OHLC candle it is AE. They differ by exactly 1e18.
+`market_cap` therefore means two different scales depending on where you read it: on a token it
+is aettos, on a transaction or an OHLC candle it is AE. They differ by exactly 1e18.
 
-**Every key of a `PriceDto` is on the same scale as its `ae` key.**
-`AePricingService.getPriceData(value)` returns `ae: value` and `code: value * rates[code]` for
-each of the other eight currencies. The fiat keys are not a re-denomination — if `ae` is in
-aettos, so is `usd`. When rates are unavailable every key except `ae` is `null`.
+**Every key of a `PriceDto` is on the same scale as its `ae` key.** Each fiat key is
+`ae * rate[code]`, not a re-denomination — if `ae` is in aettos, so is `usd`. When rates are
+unavailable every key except `ae` is `null`.
 
-Note also that `decimals` is a **string** in `TokenDto`, not a number — it is a TypeORM `bigint`
-column and the Postgres driver returns those as strings. Parse it before using it as an exponent.
-Most numeric token fields are strings for the same reason: they are `numeric` big integers that
-do not survive a `double`.
+`decimals` is a **string** in `TokenDto`, not a number. Parse it before using it as an exponent.
+Most numeric token fields are strings for the same reason: they are big integers that do not
+survive a `double`.
 
 ## Errors
 
-Failures are ordinary HTTP status codes with a JSON body. The web app's error handler reads
-`message` first, then `error`, then falls back to the raw body text:
-
-```ts
-// src/api/backend.ts
-const json = JSON.parse(body);
-errorMessage = json.message || json.error || `Request failed with status ${res.status}`;
-```
-
-That is the NestJS default envelope — expect `statusCode`, `message` and `error` keys. The
-generated client throws an `ApiError` carrying `url`, `status`, `statusText`, `body` and the
-original request.
+Failures are ordinary HTTP status codes with a JSON body carrying `statusCode`, `message` and
+`error`.
 
 | Status | When you will see it |
 | --- | --- |
-| `400` | Invalid parameters: `limit` or `page` out of range, an `order_by` outside the allow-set, a malformed `ak_`/`ct_`/`th_` argument, a `search` longer than 100 characters, a start date after an end date, or an unknown property in a validated request body. |
-| `401` | A missing or wrong `x-api-key` on the two operator endpoints, or a missing/expired feed session token. |
-| `404` | Unknown token, post, account or name. |
-| `429` | The per-IP rate-limit guard, on the routes listed below; and separately `POST /api/profile/{address}/x-posting-reward/recheck`, which enforces a once-per-24h cap and returns a body carrying `nextAllowedAt`. |
+| `400` | Invalid parameters: `limit` or `page` out of range, an `order_by` outside the allow-set, a malformed `ak_`/`ct_`/`th_` argument, a `search` longer than 100 characters, a start date after an end date, or an unknown property in a validated request body |
+| `401` | A missing or wrong API key on the two key-guarded endpoints, or a missing or expired feed session token |
+| `404` | Unknown token, post, account or name |
+| `429` | The per-IP rate limit on the routes listed below; and `POST /api/profile/{address}/x-posting-reward/recheck`, which enforces a once-per-24h cap and returns a body carrying `nextAllowedAt` |
 
-A successful response with no body is possible: the app's client returns `null` when
-`content-length` is `0` or the `content-type` is not JSON, rather than failing.
-
-### Request validation is strict on bodies, lenient on loose query parameters
-
-`main.ts` installs one global pipe:
-
-```ts
-app.useGlobalPipes(new ValidationPipe({
-  whitelist: true, forbidNonWhitelisted: true, transform: true,
-}));
-```
-
-For any handler that binds a **DTO class** — every `POST` body, and query DTOs such as the
-leaderboard's and the portfolio history's — that means an unknown property is a `400`, not a
-silently ignored extra, and declared types are coerced (`"5"` becomes `5`). For handlers that
-bind individual parameters (`@Query('page')`, the majority of the list endpoints), there is no
-DTO to whitelist against, so an unrecognised query key is ignored without complaint. That is why
-adding `order_by` to `/api/transactions` neither works nor errors.
+Request bodies and DTO-bound query parameters (the leaderboard, portfolio history) are validated
+strictly: an unknown property is a `400`, and declared types are coerced (`"5"` becomes `5`).
+Individually bound query parameters — most list endpoints — ignore unrecognised keys silently.
 
 ## Rate limits
-
-There **is** a rate limiter, and it is narrow. `RateLimitGuard`
-(`superhero-api/src/api-core/guards/rate-limit.guard.ts`) is an in-process fixed-window counter:
 
 | Property | Value |
 | --- | --- |
 | Allowance | **10 requests per minute** |
 | Window | 60 seconds, fixed, starting at your first request |
-| Bucket key | `clientIp + ":" + routePath` — **per route, not per API** |
+| Bucket key | client IP plus route path — **per route, not per API** |
 | Response when exceeded | `429` |
 | Body | `{ "status": 429, "message": "Rate limit exceeded. Maximum 10 requests per minute.", "retryAfter": <seconds> }` |
 
-Note the shape: `retryAfter` is a **field in the JSON body**, in seconds, not a `Retry-After`
-header. There are no `X-RateLimit-*` headers. Nothing is emitted on a successful request, so you
-cannot see your remaining allowance — count your own calls.
+`retryAfter` is a field in the JSON body, in seconds — there is no `Retry-After` header and no
+`X-RateLimit-*` headers. Because the key includes the route path, the budget is spent separately
+on each guarded endpoint.
 
-Because the key includes the route path, the ten-per-minute budget is spent separately on each
-guarded endpoint. And because the counter lives in a `Map` in the process, it is per-container:
-it is a cheap abuse brake, not a billing-grade quota.
+### Guarded routes
 
-### Which routes are guarded
+| Route |
+| --- |
+| `GET` and `GET {id}` on `/api/v2/mdw/txs`, `/api/v2/mdw/micro-blocks`, `/api/v2/mdw/key-blocks`, `/api/v2/mdw/sync-state`, `/api/v2/mdw/plugin-sync-state` |
+| `GET /api/announcements` |
+| `POST /api/notifications/devices/challenge`, `POST /api/notifications/devices`, `DELETE /api/notifications/devices` |
+| `POST /api/notifications/preferences/challenge`, `GET` and `POST /api/notifications/{address}/preferences` |
+| `POST /api/notifications/{address}/feed/challenge`, `POST /api/notifications/{address}/feed/session` |
+| `GET /api/notifications/web-push/vapid-public-key` |
+| `GET /api/profile/{address}/x-posting-reward`, `POST /api/profile/x-posting-reward/recheck-challenge`, `POST /api/profile/{address}/x-posting-reward/recheck`, `POST /api/profile/{address}/x-reward/referral-link` |
+| `POST /api/profile/chain-name/challenge`, `POST /api/profile/chain-name/claim` |
+| `/api/rooms/*` and the token-gated-room recheck and metrics routes |
 
-| Route | Note |
-| --- | --- |
-| `GET`/`GET {id}` on `/api/v2/mdw/txs`, `/api/v2/mdw/micro-blocks`, `/api/v2/mdw/key-blocks`, `/api/v2/mdw/sync-state`, `/api/v2/mdw/plugin-sync-state` | the guard sits on the generated base controller, so every route it produces inherits it |
-| `GET /api/announcements` | whole controller |
-| `POST /api/notifications/devices/challenge`, `POST /api/notifications/devices`, `DELETE /api/notifications/devices` | whole controller |
-| `POST /api/notifications/preferences/challenge`, `GET`/`POST /api/notifications/{address}/preferences` | whole controller |
-| `POST /api/notifications/{address}/feed/challenge`, `POST /api/notifications/{address}/feed/session` | the two unauthenticated steps of the session bootstrap |
-| `GET /api/notifications/web-push/vapid-public-key` | |
-| `GET /api/profile/{address}/x-posting-reward`, `POST /api/profile/x-posting-reward/recheck-challenge`, `POST /api/profile/{address}/x-posting-reward/recheck`, `POST /api/profile/{address}/x-reward/referral-link` | |
-| `POST /api/profile/chain-name/challenge`, `POST /api/profile/chain-name/claim` | |
-| `/api/rooms/*` and the token-gated-room recheck and metrics controllers | |
-
-**Everything else is unguarded**, including every endpoint on this reference's tokens,
-transactions, accounts, analytics, DEX, posts, trending-tags, affiliations, search and feed
-pages. So a high-volume poller against `/api/tokens` will not be throttled by this guard — but it
-is still one shared server, the list endpoints do real database work, and a `limit=100` page is
-not free. Poll considerately and prefer the [WebSocket](/api-reference/websocket) for change
-notification.
-
-One more thing worth knowing if you run a proxy in front of a self-hosted deployment: the guard
-buckets on Express's resolved `req.ip`, which is the proxy's own IP unless the operator sets
-`TRUST_PROXY`. Left unset (the default), every client behind a proxy shares one bucket.
+Everything else — tokens, transactions, accounts, analytics, DEX, posts, trending tags,
+affiliations, search and feed — is unthrottled. Poll considerately and prefer the
+[WebSocket](/api-reference/websocket) for change notification.
 
 ## CORS
 
-The API is deliberately public. `main.ts` calls `app.enableCors` with the origin computed by
-`parseAllowedOrigins()` (`superhero-api/src/configs/allowed-origins.ts`):
-
 | `ALLOWED_ORIGINS` | `Access-Control-Allow-Origin` | Credentials |
 | --- | --- | --- |
-| unset or empty (**the default**) | every origin | disabled |
+| unset or empty (the default) | every origin | disabled |
 | `*` | every origin | disabled |
 | a comma-separated list | just those origins | enabled |
 
-Allowed methods are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`. Credentials are only
-turned on alongside an explicit allow-list, because browsers reject
-`Access-Control-Allow-Credentials: true` next to a wildcard origin — and nothing here relies on
-cookies anyway, since the two authenticated schemes both use explicit headers a browser will not
-attach cross-origin by itself.
+Allowed methods are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`. A browser page on any
+origin can call `api.superhero.com` directly. The same setting governs the Socket.IO gateways.
+Responses are gzipped.
 
-So a third-party dashboard or explorer can call `api.superhero.com` from the browser with no
-arrangement. The same setting governs the Socket.IO gateways.
+## Caching
 
-`helmet` is enabled with its content-security-policy turned off (this is an API, not a browser
-app), so you also get `X-Content-Type-Options`, `Referrer-Policy`, HSTS and
-`Cross-Origin-Resource-Policy: cross-origin`. Responses are gzipped by `compression`.
-
-### Caching and staleness
-
-Several endpoints are served from an in-process LRU cache (10,000 entries, keyed per URL variant)
-rather than recomputed per request. The windows, from the `@CacheTTL` decorators in the backend:
+Several endpoints are served from an in-process cache rather than recomputed per request:
 
 | Endpoint | Cached for |
 | --- | --- |
@@ -401,71 +283,31 @@ rather than recomputed per request. The windows, from the `@CacheTTL` decorators
 | `GET /api/accounts` | 60 seconds |
 | `GET /api/feed` | 15 seconds |
 | `GET /api/analytics/total-unique-users` | 20 seconds |
-| `GET /api/accounts/leaderboard` | up to 60 seconds — `meta.timeFilter.start` / `.end` are the times the cache entry was filled, not the time of your request |
+| `GET /api/accounts/leaderboard` | up to 60 seconds — `meta.timeFilter.start` / `.end` are the times the cache entry was filled |
 
-Separately, some values are recomputed on a schedule rather than on demand, so a fresh request
-can still return a stale number. The materialised `token_performance_view` and the persisted
-`token.rank` are both refreshed every five minutes; the daily analytics rows hourly; AE fiat
-rates every ten minutes; trending scores as described on
+Some values are recomputed on a schedule: token performance and `rank` every five minutes, the
+daily analytics rows hourly, AE fiat rates every ten minutes, and trending scores as described on
 [Trending](/api-reference/trending#when-it-is-recomputed).
-
-The web app polls rather than assuming freshness: 30 seconds for owned tokens, 30 seconds for
-block height, 5 seconds while waiting on a transaction.
-
-### Timeouts
-
-The web app allows a request 90 seconds before aborting it, specifically because portfolio
-history over a long date range is slow. Its DEX helper uses 8 seconds. Budget accordingly: a
-wide `startDate`/`endDate` on `/api/accounts/{address}/portfolio/history` is the slowest call in
-the API.
-
-## Robustness notes for integrators
-
-- **Field aliases exist.** The web app normalises transaction records because the same value has
-  appeared under more than one key: `address` falls back to `account`, `price_data` falls back to
-  `unit_price` then `buy_price`, and `spent_amount_data` falls back to `amount`. The agent skill's
-  scripts read the older spellings. Read defensively on `/api/transactions`.
-- **List responses have been seen as `data` as well as `items`.** Every agent-skill script uses
-  `data.items || data.data || []`. Mirror that if you want the same tolerance.
-- **Trailing slashes are stripped** from the base URL by every client in the repo; do not rely on
-  a redirect.
-
-## Read more
-
-- [API Reference](/api-reference) — the full endpoint index, grouped by resource
-- [Tokens API](/api-reference/tokens) — the `TokenDto` these unit rules apply to, field by field
-- [Accounts API](/api-reference/accounts) — the portfolio and leaderboard endpoints with the camelCase date parameters
-- [Profile API](/api-reference/profile) — the challenge/signature write flow end to end
-- [Node & Middleware](/api-reference/node-and-middleware) — what to do when the REST API does not have the data
-- [api.superhero.com](https://api.superhero.com) — the live mainnet base URL
 
 ## Versioning and deprecation
 
-There is no version negotiation. The OpenAPI document declares version `1.0`, the deployed
-package version is reported by `GET /api/stats` as `apiVersion`, and no request header or path
-segment selects a version — `/api/v2/mdw/*` is a name inherited from the middleware's own API, not
-a version of this one.
+There is no version negotiation. The OpenAPI document declares version `1.0`, `GET /api/stats`
+reports the deployed package version as `apiVersion`, and no header or path segment selects a
+version — `/api/v2/mdw/*` is a name inherited from the middleware's own API.
 
-Deprecation is by annotation only. Nothing returns a `Deprecation` or `Sunset` header, and no
-removal dates are published. What is currently marked deprecated in the server:
+Deprecation is by annotation. A retired parameter keeps validating and stops having an effect:
 
 | What | Status |
 | --- | --- |
-| `GET /api/contracts` | Marked `deprecated: true`. Still returns a single-element array naming the community factory. Use `GET /api/factory`. |
-| `includeOnChain` on both profile read endpoints | Accepted and **ignored**; the Swagger description says "profiles are served from indexed backend data". |
-| `window` on `GET /api/posts/popular` | Accepted and ignored; popular ranking is all-time now. |
-| `points` and `maxCandidates` on `GET /api/accounts/leaderboard` | Accepted and ignored in snapshot mode. |
+| `GET /api/contracts` | Deprecated. Still returns a single-element array naming the community factory. Use `GET /api/factory` |
+| `includeOnChain` on both profile read endpoints | Accepted and ignored; profiles are served from indexed data |
+| `window` on `GET /api/posts/popular` | Accepted and ignored; popular ranking is all-time |
+| `points` and `maxCandidates` on `GET /api/accounts/leaderboard` | Accepted and ignored |
 
-The pattern is consistent: a retired parameter keeps validating so old clients do not break, and
-quietly stops having an effect. Check the field you care about is actually moving before you
-trust it.
+## Related
 
-## Open questions
-
-- **Is there a published deprecation or breaking-change policy?** The code shows the mechanism
-  (annotate, keep accepting, stop acting) but no source in any repository states a support
-  window, a notice period or a changelog location. Only the API operators can answer that.
-- **What are the operational limits in front of the app?** The application-level rate limiter
-  documented above is the only one in the source. Whether the deployment sits behind a CDN or
-  reverse proxy that adds its own throttling, request-size limits or connection caps is not
-  determinable from the repository — ask the operators before running a high-volume poller.
+- [API Reference](/api-reference) — the full endpoint index
+- [Tokens API](/api-reference/tokens) — the `TokenDto` these unit rules apply to, field by field
+- [Accounts API](/api-reference/accounts) — the portfolio and leaderboard endpoints with the camelCase date parameters
+- [Profile API](/api-reference/profile) — the challenge/signature write flow end to end
+- [Node & Middleware](/api-reference/node-and-middleware) — when the REST API does not have the data

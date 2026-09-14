@@ -1,15 +1,13 @@
 ---
 title: "Attention Markets"
-description: "Why pricing attention with a bonding curve produces a usable market signal."
+description: "Why pricing attention with a bonding curve produces a usable market signal — and what that signal does not tell you."
 ---
 
 # Attention Markets
 
-The claim Superhero makes is that **attention is already a market — it just has no price feed.**
-Hashtags trend, communities form, and value accrues to platforms rather than participants.
-Superhero gives every trend a token whose price is a deterministic function of how many people have
-bought in. This page explains the mechanism, works a real example through the actual curve, and is
-honest about what the resulting number does not tell you.
+Attention is already a market — it just has no price feed. Hashtags trend, communities form, and
+value accrues to platforms rather than participants. Superhero gives every trend a token whose price
+is a deterministic function of how many people have bought in.
 
 ## Why a curve instead of an order book
 
@@ -17,19 +15,19 @@ An order book needs two-sided interest. A brand-new hashtag has none: nobody is 
 a price for `#ThingThatHappenedAnHourAgo`. A bonding curve removes the counterparty entirely.
 
 - **No order book, no counterparty.** You always trade against the contract, so there is always
-  liquidity and always a quotable price, from the first token onward.
+  liquidity and a quotable price, from the first token onward.
 - **Price is a function of supply and nothing else.** Supply only moves when someone buys or sells,
-  so price and supply encode net conviction rather than the temporary balance of resting orders.
+  so price encodes net conviction rather than the temporary balance of resting orders.
 - **Solvency is structural.** The sell curve sits strictly below the buy curve at every supply
   level, so the reserve held by the sale contract is always enough to redeem the entire circulating
-  supply. Selling everything back is always possible; there is no bank-run state.
+  supply. There is no bank-run state.
 
 The cost of that guarantee is the spread. Superhero sets it at 1%: half to the token's DAO
 treasury, half to the affiliation chain. See [Where the Money Goes](/concepts/value-flow).
 
 ## The curve
 
-Superhero uses one exponential curve for every community token. From the whitepaper:
+Superhero uses one exponential curve for every community token:
 
 ```text
 buy(x)  = 0.001 * e^(0.00000001 * x) - 0.0009999
@@ -39,22 +37,21 @@ price paid for `amount` tokens   = integral of buy(x) from supply to supply + am
 return for selling `amount` back = integral of sell(x) from supply - amount to supply
 ```
 
-`x` is the circulating supply in whole tokens. The same three constants appear in the app's
-client-side estimator (`src/utils/bondingCurve.ts` uses `a = 0.001`, `k = 0.00000001`,
-`c = 0.0009999`), which is how the trade card shows you a quote before you sign.
+`x` is the circulating supply in whole tokens. The trade card's client-side estimator uses the same
+three constants (`a = 0.001`, `k = 0.00000001`, `c = 0.0009999`) to show you a quote before you sign.
 
 Two design consequences fall straight out of the constants:
 
 - At supply zero the marginal price is `0.001 - 0.0009999 = 0.0000001 AE`. The curve starts almost
   free, which is what makes creating a token cheap and makes being first meaningfully rewarding.
 - The exponent is small (`1e-8`), so the curve is nearly linear for the first few hundred thousand
-  tokens and then bends hard. The whitepaper notes it is "anticipated that only 10-20% of the total
-  supply will be reached, ensuring a noticeable price increase right from the start of the curve."
+  tokens and then bends hard. Only 10–20% of the total supply is expected to be reached, which gives
+  a noticeable price increase right from the start of the curve.
 
 ## A worked example
 
-Take a token at supply zero — freshly created, nobody has bought. All figures below are computed
-directly from the curve formula above.
+Take a token at supply zero — freshly created, nobody has bought. All figures are computed from the
+curve formula above.
 
 | Supply | Marginal price of the next token |
 | --- | --- |
@@ -90,19 +87,14 @@ before gas. Nothing about the curve rewards churn.
 
 ## The social loop
 
-The loop that Superhero is built around:
-
 1. Someone posts about a topic. The post is on-chain and attributed to them.
 2. Attention gathers on the topic — the feed, the hashtag page, the token's chat room.
 3. Some of that attention converts into buying pressure on the topic's token.
 4. Buying moves the supply, which moves the price, which is visible to everyone in real time.
 5. The visible price move is itself a signal that draws more attention. Back to step 1.
 
-The agent skill states the same loop as trading advice: "posting content on a topic generates
-attention, which generates buying pressure on related tokens. Coordinate posts and trades."
-
-That is a candid description of a reflexive system, and you should read it as such rather than as a
-guarantee. The loop runs in both directions.
+The loop runs in both directions. Posting about a topic generates attention, which generates buying
+pressure on the related token; fading attention drains it.
 
 ## The trending score
 
@@ -110,9 +102,7 @@ guarantee. The loop runs in both directions.
 by `GET /api/tokens`, it is the default sort (`order_by=trending_score&order_direction=DESC`), and
 there is a per-token endpoint at `GET /api/tokens/[address]/score`.
 
-It is computed off-chain by the backend, and the formula is in
-`superhero-api/src/tokens/tokens.service.ts` with every constant in
-`src/configs/constants.ts` under `TRENDING_SCORE_CONFIG`. The shape is:
+It is computed off-chain by the backend:
 
 ```text
 score = (0.35 * trading_score + 0.65 * social_score) * freshness_decay
@@ -141,11 +131,9 @@ worth far more than the next few. Both work against brute-force manufacturing of
 | Social | Tip amount in AE | 0.03 | 250 |
 | Social | Reads of mentioning posts | 0.06 | 200 |
 
-Two consequences are worth internalising before you use the number. **Social activity is weighted
-almost twice as heavily as trading** — the config comment says so outright: "Trading remains
-important, but community activity should dominate ranking." And **buys and sells count equally**, at
-0.20 each. A token being dumped trends exactly as hard as a token being accumulated. The score
-measures activity, not direction.
+**Social activity is weighted almost twice as heavily as trading**: community activity dominates
+ranking. And **buys and sells count equally**, at 0.20 each. A token being dumped trends exactly as
+hard as a token being accumulated. The score measures activity, not direction.
 
 The decay term is a Hacker-News-style gravity function on time since the *most recent* activity of
 any kind, trading or social:
@@ -162,57 +150,44 @@ backfill — so a score you read may be up to two hours behind the window it des
 Trending *tags* are a different mechanism that happens to share a word. They may not have tokens at
 all, and their `score` and `source` are **pushed in by external providers** through
 `POST /api/trending-tags` behind an API-key guard, not computed from Superhero activity. `source` is
-a free-form string naming the provider platform; the entity comment gives `x`, `facebook` and
-`github` as examples, and because it is an ordinary text column with no enum, the live set is
-whatever providers Superhero has configured rather than anything fixed in code.
+a free-form string naming the provider platform, for example `x`, `facebook` or `github`.
 
-The agent skill treats the token score as a two-sided signal: "a rising trending score means buying
-pressure is accelerating — this is your entry signal. A falling score means momentum is fading —
-this is your exit signal." Given the weights above, read that as a claim about attention, not about
-price.
+A rising trending score means attention is accelerating; a falling score means it is fading. Read
+that as a claim about attention, not about price. `trending_score` is a value between 0 and 1;
+choose entry and exit thresholds accordingly.
 
-Note the ordering carefully. The trending score is a *derived* number, not a protocol quantity: no
-contract reads it, no vote depends on it, and it can be recomputed or reweighted server-side without
-any chain event — the weights above are constants in a file that ships with the backend, and a
-deploy can change them. Treat it as a ranking aid, not as ground truth. See
-[The Trending Score](/tokens/trending-score).
+The trending score is a *derived* number, not a protocol quantity: no contract reads it, no vote
+depends on it, and the weights above are backend configuration that can change with a deploy. Treat
+it as a ranking aid, not as ground truth. See [The Trending Score](/tokens/trending-score).
 
-## Failure modes
+## What the price does not tell you
 
-A market that prices attention inherits every pathology attention has. These are real and the
-documentation should say so.
+A market that prices attention inherits every pathology attention has.
 
 **Reflexivity.** The price is supposed to measure conviction, but the price is also what creates
-conviction. A curve that moves up attracts buyers because it moved up. There is no external anchor —
-no earnings, no redemption value other than the curve itself — to break the feedback loop in either
-direction.
+conviction. There is no external anchor — no earnings, no redemption value other than the curve
+itself — to break the feedback loop in either direction.
 
-**Wash trading and self-dealing.** Nothing prevents one party from buying and selling their own
-token to manufacture volume and price movement. It costs them roughly 1% per round trip plus gas,
-which is cheap relative to the attention a moving chart buys. Holder counts and transaction lists
-are public on every token page precisely so you can check for this. See
-[Reading a Token Page](/tokens/token-page). The trending score's caps blunt this without removing
-it: a single wallet cycling trades saturates the buy and sell counts at 40 each and contributes 1 to
-a 25-cap active-wallet count, so the trading half of the score tops out well short of its ceiling.
-The price and the market cap have no such ceiling.
+**Wash trading.** Nothing prevents one party from buying and selling their own token to manufacture
+volume; it costs them roughly 1% per round trip plus gas. Holder counts and transaction lists are
+public on every token page so you can check for this — see [Reading a Token Page](/tokens/token-page).
+The trending score's caps blunt this: a single wallet cycling trades saturates the buy and sell
+counts at 40 each and contributes 1 to a 25-cap active-wallet count. The price and the market cap
+have no such ceiling.
 
-**Abandoned tokens.** Creating a token is cheap and permanent. Most tokens will end up with a thin
-supply, a near-zero DAO treasury and no activity. Rank and market cap sort them down the list but
-nothing removes them.
+**Abandoned tokens.** Creating a token is cheap and permanent. Rank and market cap sort inactive
+tokens down the list, but nothing removes them.
 
-**First-mover concentration.** Because the curve is at its cheapest at supply zero, the creator and
-the earliest buyers can accumulate a large share of the eventual supply for very little AE. That
-share is also DAO voting weight. Check the Holders tab before assuming a token's governance is
-distributed.
+**First-mover concentration.** The curve is cheapest at supply zero, so the creator and the earliest
+buyers can accumulate a large share of the eventual supply for very little AE. That share is also
+DAO voting weight. Check the Holders tab before assuming a token's governance is distributed.
 
-**Trend decay.** The curve has no notion of time. A topic that mattered for six hours keeps its
-supply, its price and its treasury indefinitely. Price is a record of cumulative net buying, not of
+**Trend decay.** The curve has no notion of time. Price is a record of cumulative net buying, not of
 current relevance.
 
-None of these are bugs in the curve — the curve does exactly what it says. They are the reasons the
-FAQ answers "Any risks I should know?" with "Volatility and smart-contract risk are real."
+Volatility and smart-contract risk are real; see [Risks](/tokens/risks).
 
-## Read more
+## Related
 
 - [Bonding Curves](/tokens/bonding-curve) — the integral, the contract entrypoints, and how a quote is produced.
 - [Curve Parameters & Units](/tokens/curve-parameters) — aettos, decimals, and the exact constants.
@@ -220,4 +195,3 @@ FAQ answers "Any risks I should know?" with "Volatility and smart-contract risk 
 - [The Trending Score](/tokens/trending-score) — what the API returns and how the app sorts by it.
 - [Risks](/tokens/risks) — the trading risks stated plainly, with the mitigations that exist.
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live market, sorted by market cap.
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the "Exponential Bonding Curve" section, which defines the formula above.

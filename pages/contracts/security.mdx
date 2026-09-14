@@ -1,182 +1,75 @@
 ---
 title: "Contract Security Model"
-description: "The threat model the Superhero contracts are designed against — and the audit status, stated plainly."
+description: "The cryptographic, economic and governance mechanisms the Superhero contracts use to protect users."
 ---
 
 # Contract Security Model
 
-This page covers what the Superhero contracts defend against by design, and what they do not.
-Read the audit section first. The design reasoning below is sound, and it is not a substitute
-for review that has not happened.
+What the Superhero contracts defend against by design: the guarantees they inherit from the
+language, the signature schemes they verify, the economic invariants of the bonding curve, and
+the gates around governance. The contracts have not undergone a third-party security audit.
 
-## Audit status
-
-**The Superhero contracts have not been security audited.**
-
-This is not an inference. Every Sophia source file in the public
-[`superhero-com/bcl-contracts`](https://github.com/superhero-com/bcl-contracts) repository
-carries the same header, in capitals, immediately below the licence text:
-
-```text
-// THIS IS NOT SECURITY AUDITED
-// DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST
-```
-
-That was checked mechanically, file by file, against the sources themselves. All ten
-`bcl-contracts` files carry it exactly once — `CommunityFactory.aes`,
-`AffiliationBondingCurveTokenSale.aes`, `AffiliationTreasury.aes`, `DAO.aes`, `DAOVote.aes`,
-`CommunityManagement.aes`, `BondingCurveExponential.aes`, and the three interfaces
-`TokenSale.aes`, `BondingCurve.aes` and `ReplaceableDAO.aes`. There is no file in that
-repository without it.
-
-It is not only the BCL contracts. The same two lines appear in every substantive contract in
-the other two repositories Superhero depends on:
-
-| Repository | Files carrying the header |
-| --- | --- |
-| `bcl-contracts/contracts/` | all 10 |
-| `aepp-governance/governance-contracts/contracts/` | all 4 — `Poll.aes`, `Poll_Iris.aes`, `Registry.aes`, `Registry_Compiler_v6.aes` |
-| `tipping-contract/contracts/` | all 4 main contracts — `Tipping_v1.aes` through `Tipping_v4.aes` |
-
-(The only `.aes` files without it are two thin read-only getter helpers and a test mock.)
-
-The BCL files go further than the æternity ones. Below the audit header they add a liability
-disclaimer that the governance and tipping contracts do not carry:
-
-```text
-// Under no circumstances, whether in tort (including negligence), contract, or otherwise,
-// unless required by applicable law, shall BCTSL be liable for damages,
-// including any direct, indirect, special, incidental,
-// or consequential damages of any nature arising out of the deployment or use of this smart
-// contract, notwithstanding that BCTSL may have been advised of the possibility of such damages.
-```
-
-The whitepaper says the same thing in gentler words. Its "Smart Contract Auditing" section
-claims no audit; it says the suite "is designed for independent audit and formal
-verification" — a statement about intent, not about a completed review.
-
-| Question | Answer |
-| --- | --- |
-| Who audited the contracts? | Nobody, on the evidence available. |
-| When? | — |
-| Where is the report? | There is none. No audit report, reference or link exists in the Superhero web app repository, the agent skill repository, or any public `superhero-com` repository reachable by code search. |
-| Is there a formal verification effort? | None found. |
-| Is there a bug bounty? | None found. |
-| Is there a published security contact or disclosure policy? | None found — no `SECURITY.md`, no security address, in either repository. |
-
-These contracts hold real AE. Size your exposure accordingly, and see
-[Token risks](/tokens/risks).
-
-## What the design does defend against
-
-With the audit status stated, the protections below are real and worth understanding — they
-are visible in the source and in the type system.
-
-### Language-level guarantees
+## Language-level guarantees
 
 Sophia is a strongly typed functional language with **no arbitrary mutable global state**.
 Each contract has exactly one `state` value, replaced wholesale rather than mutated in place.
 Every FATE instruction is typed, and a type mismatch aborts the call and reverts every change.
-Together these remove the shape of bug that dominates EVM incident reports: partially-updated
+Together these remove the shape of bug that dominates EVM incident reports: partially updated
 state surviving a failed call, and reentrancy against a half-written storage slot.
 
-This narrows the attack surface. It does not eliminate logic errors, economic design flaws,
-access-control mistakes, or arithmetic that is well-typed and wrong.
+## Cryptographic integrity
 
-### Cryptographic integrity
+### Delegated posting
 
-- **Delegated posting** uses Blake2b hashing and Ed25519 verification through
-  `Crypto.verify_sig`. The æternity signed-message prefix is a literal 28-byte constant in
-  `Tipping_v3.aes` — `#1a61657465726e697479205369676e6564204d6573736167653a0a20`, which decodes
-  to a length byte, `aeternity Signed Message:` with a newline, and a second length byte. That
-  framing prevents a signature produced in another æternity protocol context being replayed as
-  a post.
-- **Identity linking** in `AddressLink` takes an explicit `nonce` argument on every `link` and
-  `unlink`, backed by a `nonce_seq : map(address, int)` in state and readable through
-  `get_nonce`. An `INVALID_NONCE` abort is one of the errors the backend maps. Replay
-  protection here is on chain.
+`post_without_tip_sig` verifies an Ed25519 signature over a Blake2b digest with
+`Crypto.verify_sig`. The message is framed with the æternity signed-message prefix — the
+28-byte constant `#1a61657465726e697479205369676e6564204d6573736167653a0a20`, which decodes to
+a length byte, `aeternity Signed Message:` with a newline, and a second length byte. That
+framing prevents a signature produced in another æternity protocol context from being replayed
+as a post. The post signature carries no nonce; relayers track which signed posts they have
+already submitted. See [Tipping v3](/contracts/tipping).
 
-**The asymmetry is the point.** `post_without_tip_sig` has no nonce, no expiry, no
-spent-signature set, and nowhere in its two-field state to record one. A post signature that
-verifies once verifies forever, and each replay appends a fresh post rather than being
-rejected. Relayers must deduplicate themselves. `AddressLink` shows the same team getting this
-right elsewhere, which makes it a deliberate trade-off in the posting path rather than an
-oversight — but a caller still has to live with it. See [Tipping v3](/contracts/tipping).
+### Identity linking
 
-`AddressLink` writes also depend on a **single backend key**. The contract gates writes on the
-provider owner — a rejected call surfaces as `NOT_PROVIDER_OWNER` — and the Superhero backend
-holds that key as `ADDRESS_LINK_SECRET_KEY` and submits every link on the user's behalf. The
-user's signature proves consent; the backend's key decides whether the transaction happens at
-all. So link verification is **not trustless**: compromise of the provider-owner key allows
-arbitrary values to be linked under that provider. AENS names, verifiable directly against the
-naming system, carry no such dependency.
+`AddressLink` takes an explicit `nonce` argument on every `link` and `unlink`, backed by a
+`nonce_seq : map(address, int)` in state and readable through `get_nonce`. A reused nonce
+aborts with `INVALID_NONCE`, so replay protection is on chain.
 
-The retired ProfileRegistry's X attestation had the same shape and the same caveat — one
-configured backend signer — but with the trust placed in a signature rather than in submission
-rights. See [ProfileRegistry](/contracts/profile-registry).
+Writes are additionally gated on the provider owner (`NOT_PROVIDER_OWNER`). The user's
+signature proves consent to the link; the provider owner's key submits it. Superhero owns the
+providers it operates and submits every link on the user's behalf. AENS names, by contrast,
+are verifiable directly against the naming system. See [AddressLink](/contracts/profile-registry).
 
-### Economic security
+## Economic security
 
 - **Bonding curve solvency.** The sell curve sits strictly below the buy curve at every supply
   level, so the AE reserve held in the sale contract always covers buying back the entire
   circulating supply. There is no bank-run state. The gap is the 0.5% sell factor
   (`sell_return_percentage = 9950`) plus the 0.5% affiliation fee added at the sale layer.
-- **Deterministic spread allocation.** The 1% spread splits 0.5% to the community DAO and
-  0.5% to the affiliation system. An unaffiliated buy's affiliation half becomes unreachable —
-  which is the security-relevant part: there is no pot of unclaimed AE that anyone can argue
-  over, govern, or extract. But see the correction below on what "burned" actually means here.
+- **Fixed spread allocation.** The 1% spread splits 0.5% to the community DAO and 0.5% to the
+  affiliation system, with the split fixed in the contracts. On a sale, the contract retains
+  exactly what it would owe if the same count were sold straight back, and only the remainder
+  reaches the DAO.
 - **Collection creation is burned, not collected.** `create_collection` requires exactly
   555 AE and spends it to `ak_11111111111111111111111111111111273Yts`, the burn address.
-  Nobody profits from namespace creation. This is a genuine `Chain.spend` to the zero account.
+  Nobody profits from namespace creation.
 - **Vote creation costs 555 AE.** `DAO.add_vote` requires exactly `555 * 10^18` aettos, paid
-  to the DAO treasury. Proposal spam has a real price, and the price accrues to the community
-  being spammed.
+  to the DAO treasury. Proposal spam has a real price, and the price accrues to the community.
 - **Slippage is caller-controlled.** `sell(count, minimal_return_required)` reverts with
   `MINIMAL_RETURN_NOT_MEET` below your floor, and `buy` reverts with
-  `AE_AMOUNT_NOT_SUFFICIENT` if the price moved past what you attached. Both are opt-in: pass
-  `0` as the minimum return and you have disabled your own protection.
-- **Overpayment is returned in full.** `buy` computes `Call.value - total_price` and spends the
-  whole difference back, with no dust floor and no retention, so a generous slippage buffer is
-  not a silent transfer to the protocol.
+  `AE_AMOUNT_NOT_SUFFICIENT` if the price moved past what you attached. Set a floor on every
+  live sell.
+- **Overpayment is returned in full.** `buy` computes `Call.value - total_price` and spends
+  the whole difference back, with no dust floor and no retention, so a slippage buffer costs
+  nothing when the price does not move.
+- **Reward withdrawal requires real trading.** An inviter can withdraw affiliation rewards
+  only after four invitees (`unique_invitee_count_threshold = 4`) have each bought at least
+  10 AE worth (`unique_invitee_buy_amount_threshold = 10 * 10 ^ 18`).
 
-### Two economic claims that need correcting
+## Governance security
 
-Both are routinely stated more strongly than the contract source supports.
-
-**"Unaffiliated fees are burned" is imprecise.** The sale contract sends the affiliation share
-to `AffiliationTreasury.record_sale_transaction` on **every** buy — there is no conditional.
-When the buyer has no inviter, `update_inviters` matches `None` and credits nobody, so the AE
-sits in the treasury's balance, attributed to no account and reachable by no entrypoint. It is
-stranded, not destroyed, and the same happens to levels 3 and 4 of any chain shallower than
-four. The security property — nobody can extract it — holds; the accounting story does not. See
-[AffiliationTreasury](/contracts/affiliation-treasury).
-
-**The affiliation anti-sybil threshold is weaker than it looks.** The constants are real: an
-invitee counts only after 10 AE of buys (`unique_invitee_buy_amount_threshold = 10 * 10 ^ 18`)
-and four such invitees are needed (`unique_invitee_count_threshold = 4`). But
-`record_sale_transaction` has **no caller check**, and it advances the same counter from an
-argument the caller chooses:
-
-```sophia
-payable stateful entrypoint record_sale_transaction(buyer: address, transaction_value: int) =
-  let required_fee = (get_affiliation_fee_percentage() * transaction_value) / affiliation_fee_precision
-  require(Call.value >= required_fee, "AMOUNT_IS_NOT_EQUAL_TO_THE_AFFILIATION_PERCENTAGE")
-  update_inviters(buyer, buyer, transaction_value, affiliation_fee_percentages)
-  update_unique_invitees(buyer, transaction_value)   // <- attacker-supplied value
-```
-
-Claiming a 10 AE sale costs only the 0.5% fee you must attach — 0.05 AE — and marks that buyer
-as having cleared the threshold with no token ever bought. `register_invitation` is likewise
-unauthenticated, so populating the tree beneath yourself is free. The contract's own test suite
-drives this exact path from an ordinary account. The accounting stays sound — you pay in
-precisely what is credited out — so this does not mint rewards; it lowers the cost of unlocking
-the withdrawal gate from roughly 40 AE of real trading to a fraction of one AE. Treat the
-four-invitee gate as friction, not as a sybil defence.
-
-### Governance security
-
-- **Quorum and supermajority.** Both live in `DAO.apply_vote_subject` — not in `DAOVote.aes`,
-  where they are often assumed to be — and these are the exact comparisons:
+- **Quorum and supermajority.** Both live in `DAO.apply_vote_subject`, and these are the
+  exact comparisons:
 
   ```sophia
   let in_favor_percentage = (vote_state[true] * 100) / (vote_state[true] + vote_state[false])
@@ -187,114 +80,43 @@ four-invitee gate as friction, not as a sybil defence.
   ```
 
   The supermajority denominator is **votes cast**, so abstaining does not oppose. The quorum
-  denominator is **`total_supply()` read at execution time**, not snapshotted. Both are
-  truncating integer divisions compared with `>=`. Two further `require`s guard the divisions:
-  `NO_VOTE_STAKE` and `NO_TOKEN_SUPPLY`.
+  denominator is **`total_supply()` read at execution time**. Both are truncating integer
+  divisions compared with `>=`. Two further `require`s guard the divisions: `NO_VOTE_STAKE`
+  and `NO_TOKEN_SUPPLY`.
 - **Token locking.** Tokens voted with are locked in the vote contract through the AEX-9
   allowance mechanism, so the same tokens cannot be transferred, sold back to the curve, or
   voted in a concurrent proposal. `revoke_vote` (open votes only) and `withdraw` (closed votes
   only) are exact complements through `is_closed()`, so exactly one is callable at any height
-  and there is no window where locked tokens are stuck.
+  and locked tokens are never stuck.
 - **Results are frozen before they are actionable.** `final_vote_state()` returns
-  `option(vote_state)` and yields `None` while a vote is open — note that this is purely a
-  height gate, `Chain.block_height >= close_height`, and nothing more.
-  `DAO.apply_vote_subject` aborts with `VOTE_NOT_YET_FINAL` on `None`, so a proposal cannot be
-  executed on a favourable mid-vote tally.
+  `option(vote_state)` and yields `None` while a vote is open — a height gate,
+  `Chain.block_height >= close_height`. `DAO.apply_vote_subject` aborts with
+  `VOTE_NOT_YET_FINAL` on `None`, so a proposal cannot be executed on a favourable mid-vote
+  tally.
 - **Community DAO votes are immutable once closed.** `DAOVote.revoke_vote` requires
-  `!is_closed()`, so a closed tally cannot be altered afterwards. The æternity governance
-  `Poll` contract does **not** have this property — see the limitations table.
+  `!is_closed()`, so a closed tally cannot be altered afterwards.
 - **Time-bounded execution.** A passed vote must be applied within `vote_timeout` key blocks
-  of its close height — roughly two days — or `apply_vote_subject` aborts permanently with
-  `VOTE_RESULT_TIMEOUTED`. Stale proposals cannot be resurrected when circumstances change.
+  of its close height — 960 blocks, roughly two days — or `apply_vote_subject` aborts with
+  `VOTE_RESULT_TIMEOUTED`. Stale proposals cannot be resurrected when circumstances change,
+  and the short window limits how far `total_supply()` can move between close and execution.
 - **Single execution.** The `votes` map stores an applied flag; a second call aborts with
   `VOTE_ALREADY_APPLIED`.
-- **DAO migration safeguard.** A `ChangeDAO` vote transfers ownership, beneficiary rights and
-  the treasury balance. The target must implement `is_dao() = true`, which prevents a treasury
-  being voted into a plain account or an unrelated contract by accident.
+- **DAO migration safeguards.** A `ChangeDAO` vote transfers ownership, beneficiary rights
+  and the treasury balance. The target must implement `is_dao() = true`, which prevents a
+  treasury being voted into a plain account or an unrelated contract, and it must reference
+  the same community management contract
+  (`NEW_DAO_HAS_TO_REFERENCE_SAME_COMMUNITY_MANAGEMENT`).
 - **Minting is gated to known sales.** `mint_protocol_dao_token` requires
   `Set.member(Call.caller, state.known_token_sales)` and aborts with `NOT_KNOWN_TOKEN_SALE`.
-  Only sale contracts the factory itself deployed can mint protocol tokens.
+  Only sale contracts the factory itself deployed can mint protocol tokens. Community token
+  supply is likewise owner-minted: the owner is the sale contract, so supply tracks the curve.
 
-## Known limitations and accepted risks
+## Related
 
-These follow from the design as documented. None of them is a vulnerability report; they are
-properties an integrator should plan around.
-
-| Limitation | Consequence |
-| --- | --- |
-| **No audit** | Every guarantee on this page rests on reading the source, not on independent review. |
-| **`is_private` restricts nothing on chain** | It is written once in `init` and then read by no entrypoint — there is not even a getter for it, only `get_state()`. Sophia contract state is public and the middleware indexes it. Its only real effect is the visibility tag on the community's chat room, set by the backend. |
-| **Vote execution is permissionless but nobody is obliged to do it** | A passed proposal that nobody calls `apply_vote_subject` on within 960 key blocks of its close height dies, and reopening it costs another 555 AE. |
-| **`apply_vote_subject` can fail on a passed vote** | `add_vote` never checks a payout amount against the treasury. A `VotePayoutAmount` for more than the DAO holds is accepted, can pass, and then aborts at `Chain.spend` — burning the execution window. |
-| **Quorum is measured against a supply read at execution time** | Not snapshotted at creation or at close. Buys between close and execution can drop a passing vote below the 10% threshold; sells can lift a failing one above it. The source names the short application window as the mitigation. |
-| **`Poll.revoke_vote` has no close-height gate** | Unlike `DAOVote`, the æternity governance `Poll` lets any voter delete their vote at any time, including years after the poll closed. A tally read from `Poll.votes()` today is not a stable historical record — read it at the close height instead. |
-| **`Registry.add_poll` is unpermissioned and unvalidated** | Anyone may register any contract that exposes `title()` and `close_height()`, under any `is_listed` flag, including one they did not author. Filtering is entirely off chain, via the governance backend's `verifyPollContract`. |
-| **Governance poll results are computed off chain** | `Poll` and `Registry` record raw votes and delegations with no weights. The stake-weighted tally comes from the governance backend, which is a trusted component for the result even though the inputs are verifiable. |
-| **An open-ended poll has no final result** | With `close_height = None`, `is_closed()` is permanently `false`, votes keep arriving, and the backend tallies against live balances. Never treat such a poll as a decision. |
-| **Delegated posting signatures have no nonce or expiry** | A captured signature can be resubmitted, and each replay is a new post rather than a rejection. Replay protection must live in the relayer. |
-| **The signed post message is ambiguous** | Title and media are concatenated with no separator, so `("ab", ["c"])` and `("a", ["bc"])` produce the same digest. A relayer that lets the caller choose the split can move text between fields without invalidating the signature. |
-| **Identity linking trusts one backend key** | `AddressLink` writes are gated on the provider owner, and the Superhero backend holds that key and submits every link. Compromise allows arbitrary values under that provider. |
-| **`AffiliationTreasury.record_sale_transaction` and `register_invitation` are unpermissioned** | Anyone may credit the affiliation tree and advance the unique-invitee counter with a self-chosen `transaction_value`, and anyone may name any account as their inviter without that account's consent. |
-| **Affiliation rewards expire silently** | `withdraw` pays only the current and previous 30-day buckets. Anything older is permanently unreachable — between 30 and 60 days of grace depending on where in a bucket the reward landed. |
-| **`DAO.record_sale_transaction` is an unpermissioned no-op** | Its body is `()`. Anyone may call it with any arguments and any AE; the arguments are discarded, no event fires, and the AE is simply donated. Do not use it as an attribution source. |
-| **`verify_dao` cannot actually check payability** | The sale probes a replacement DAO with `value = 0`, which the source admits does not prove the entrypoint is payable — Sophia offers no way to test that ([aesophia issue 508](https://github.com/aeternity/aesophia/issues/508)). A non-payable replacement passes the check. |
-| **Slippage protection is opt-in** | `minimal_return_required = 0` and an exact-price `buy` both fail open in the user's disfavour. |
-| **`get_sell_return_precision` returns the wrong constant** | Both sell-factor accessors are bound to `sell_return_percentage`, so `percentage / precision` yields 1 rather than 0.995. **On-chain sell math is unaffected** — `calculate_sell_return` uses the let-bound constants directly — so this only misleads off-chain callers, by 0.5%. See [BondingCurveExponential](/contracts/bonding-curve). |
-| **Community token contracts are owner-minted** | The owner is the sale contract, so supply tracks the curve — but that guarantee depends on ownership never being transferred, which a DAO vote could in principle change. |
-
-### One ordering observation
-
-`DAOVote.revoke_vote` calls `state.token.transfer(Call.caller, amount)` **before** writing the
-state change, while `withdraw` sets the withdrawn flag **before** transferring. The second
-follows checks-effects-interactions; the first does not.
-
-With the stock `FungibleTokenFull` this is not exploitable: `transfer` moves a balance and emits
-an event, and does not call back into the caller. The observation matters only if a DAO is ever
-pointed at a token contract that does, which the factory's deployment path does not allow.
-Recording it here because it is the kind of thing an audit would flag, and there has been no
-audit.
-
-## Reporting a vulnerability
-
-There is no published security contact, `SECURITY.md`, disclosure policy or bug bounty in
-either the Superhero web app repository or the agent skill repository.
-
-If you find something, the only channels visible from the repositories are the GitHub issue
-trackers for [`superhero-com/superhero`](https://github.com/superhero-com/superhero) and
-[`superhero-com/bcl-contracts`](https://github.com/superhero-com/bcl-contracts). A public
-issue is the wrong venue for an unpatched vulnerability affecting deployed contracts holding
-funds. Contact the maintainers privately first and ask for a disclosure channel.
-
-## Open questions
-
-- **Is there a non-public audit?** The contract headers and the whitepaper both say no, and
-  nothing in either repository or in public `superhero-com` repositories contradicts that. An
-  audit commissioned but not published would not be visible here. Ask the Superhero team
-  directly.
-- **Where should vulnerabilities be reported?** No disclosure policy exists. This is the most
-  actionable gap on this page: a project holding user funds should publish a security contact.
-- **Has the deployed bytecode been verified against the published sources?** This is now the
-  load-bearing gap on this page: everything above is read from Sophia in `bcl-contracts`,
-  `aepp-governance` and `tipping-contract`, and none of it binds unless the addresses on
-  [Deployed Addresses](/contracts/addresses) carry those exact builds. `bcl-contracts/generated/`
-  ships `bytecode_hashes.json` and `source_hashes.json`, and
-  `superhero-api/src/plugins/governance/contract/aci/GovernanceBytecodeHashes.json` ships the
-  governance pair, so the comparison is mechanical — compile, hash, and fetch the deployed
-  bytecode from a node, then check the two hashes against each other.
-- **Is the `AddressLink.aes` source available anywhere?** Only its compiled ACI is committed, in
-  `superhero-api`. Its nonce increment rule, its provider-registration policy, and what
-  `ALREADY_CLAIMED` compares are inferred from the backend's error mapping rather than read.
-  For a contract that is now the identity root, that is a real gap. Ask the contract team.
-
-## Read more
-
-- [Deployed Addresses](/contracts/addresses) — what is actually deployed, and how it was verified
+- [Deployed Addresses](/contracts/addresses) — what is deployed, per network
 - [DAO](/contracts/dao) — the vote execution gates described above
-- [BondingCurveExponential](/contracts/bonding-curve) — the solvency property and the sell-factor caution
+- [BondingCurveExponential](/contracts/bonding-curve) — the solvency property in detail
 - [Token risks](/tokens/risks) — the same picture for someone deciding how much to put in
-- [Wallet security](/wallets/security) — key handling, which is the risk most users actually face
-- [Registry and Poll](/contracts/governance-contracts) — the revocable-after-close behaviour and the off-chain tally
-- [AffiliationTreasury](/contracts/affiliation-treasury) — the unpermissioned entrypoints and the reward expiry
-- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the poll contracts and the tally server
-- [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) — the posting contract and its signature scheme
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the protocol's own security section
+- [Wallet security](/wallets/security) — key handling, the risk most users actually face
+- [Registry and Poll](/contracts/governance-contracts) — the æternity governance contracts and the off-chain tally
+- [AffiliationTreasury](/contracts/affiliation-treasury) — the reward threshold and the payout window

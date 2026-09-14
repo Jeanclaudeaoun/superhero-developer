@@ -1,74 +1,20 @@
 ---
-title: "ProfileRegistry"
-description: "The retired identity contract, and the AddressLink contract that replaced it."
+title: "AddressLink"
+description: "The identity contract: provider-keyed links from an address to an X handle, AENS name, nostr key or website, and the signed-message flow that writes them."
 ---
 
-# ProfileRegistry
+# AddressLink
 
-`ProfileRegistry.aes` is described in the Superhero whitepaper as the platform's decentralized
-identity layer: an on-chain registry of user profiles and public names, written in Sophia
-(compiler version 6 or later).
+`AddressLink` is Superhero's identity contract. It maps an address to a `map(provider, value)`
+— one value per provider, such as an X handle, a nostr public key or a preferred AENS name —
+with a reverse index for resolving a value back to an address and a per-address nonce
+sequence for signed writes.
 
-**Read this first.** Every other page in this section is generated from a vendored ACI file
-and is machine-checkable against it. This one is not. The ProfileRegistry ACI is not in
-`superhero-agent-skill/contracts/`, the contract has no address in `superhero/src/config.ts`,
-and the `ProfileRegistry.aes` source is not in any public `superhero-com` GitHub repository
-that code search can reach. Everything below comes from the whitepaper prose in
-`superhero/src/views/Whitepaper.tsx` and is **unverified against the contract**.
+A link can be owned by a bare account, by an AENS name (a *principal*), or by a DID with a
+controlling address. Each family has its own entrypoints, its own nonce space and its own
+resolver.
 
-It is also no longer the live identity path. It has been replaced by a contract called
-`AddressLink`, whose ACI *is* available and which the second half of this page documents
-properly. If you are integrating identity today, skip to
-[AddressLink, the successor](#addresslink-the-successor).
-
-## Current status
-
-The Superhero backend used to run a ProfileRegistry indexer. It does not any more. Two source
-comments in `superhero-com/superhero-api` say so directly:
-
-> `profile_cache` used to be populated by the ProfileRegistry indexer (ProfileIndexerService /
-> ProfileLiveSyncService). Those services were removed when profile linkage moved to the
-> AddressLink contract.
-
-and
-
-> the old ProfileRegistry indexer that used to write this table was removed with the
-> AddressLink migration.
-
-So profile linkage — AENS names, X handles, nostr keys — now flows through a separate
-`AddressLink` contract. **`AddressLink` has replaced `ProfileRegistry`, and it is the contract
-to integrate against.** See [AddressLink, the successor](#addresslink-the-successor) below; the
-rest of this page is a description of a retired design, not an integration guide.
-
-Two further signals that the replacement is complete rather than partial:
-
-- **Nothing in `superhero-api` subscribes to ProfileRegistry any more.** A repository-wide
-  search for `ProfileRegistry` returns four hits, all of them comments explaining that the
-  indexer was removed.
-- **The fields only ProfileRegistry ever wrote have no writer left.** `ProfileReadService`
-  merges live `accounts.links` data from `AddressLink` over a `profile_cache` row whose
-  `fullname`, `avatarurl` and `username` columns are, in its own words, frozen: "the cached copy
-  has had no writer since the ProfileRegistry indexer was removed". `ProfileCacheService` was
-  written specifically to re-establish a writer for the searchable columns, and it explicitly
-  preserves rather than overwrites those "registry-only legacy fields, no longer sourced by any
-  contract".
-
-What is *not* determined is whether `ProfileRegistry.aes` is still deployed and holding state.
-Nothing reads it; nothing in Superhero's stack writes it.
-
-## AddressLink, the successor
-
-`AddressLink` is a generic provider-keyed link registry: it maps an address to a
-`map(provider, value)`, plus a reverse index, plus a per-address nonce sequence. It knows
-nothing about names, display preferences or auto-renaming — the whole conflict-resolution design
-described below simply does not exist in it.
-
-Its ACI is committed at
-`superhero-api/src/plugins/address-links/aci/AddressLink.aci.json`, so the shapes below are
-verified. Its address is supplied at deploy time through `ADDRESS_LINK_CONTRACT_ADDRESS` and is
-not in any repository.
-
-### State
+## State
 
 ```sophia
 record state =
@@ -78,7 +24,7 @@ record state =
   , nonce_seq : map(address, int) }
 ```
 
-### Entrypoints
+## Entrypoints
 
 | Entrypoint | Signature |
 | --- | --- |
@@ -99,50 +45,14 @@ record state =
 | `resolve_signer` | `(principal: string) => option(address)` |
 | `resolve_did_controller` | `(did: string) => option(address)` |
 
-Each of `link` / `unlink` has a `principal` variant, for a link owned by an AENS name rather
-than a bare account, and a `did` variant keyed by a DID string with a controlling address. All
-three families have their own nonce space and their own resolver.
+## Providers
 
-### The signed message
+A provider id is a namespace owned by an account. `register_provider(provider)` claims it,
+and only the owner may write links under it — any other caller aborts with
+`NOT_PROVIDER_OWNER`. Provider ids are at most ten lowercase `a-z` characters
+(`/^[a-z]{1,10}$/`), which is why the AENS provider is spelled `prefaens`.
 
-Unlike delegated posting, this contract takes an explicit nonce, and the message is plain text
-rather than a hash of concatenated fields. The backend builds it in
-`address-links/contract.service.ts`:
-
-```javascript
-buildLinkMessage(address, provider, value, nonce) {
-  return `link:${address}:${provider}:${value}:${nonce}`;
-}
-
-buildUnlinkMessage(address, provider, nonce) {
-  return `unlink:${address}:${provider}:${nonce}`;
-}
-```
-
-Colon-separated, prefixed with the verb, nonce last. The principal variants substitute the AENS
-name for the address in the same layout. Signatures are submitted as a 128-character hex string
-and rejected client-side if they are not exactly 64 bytes.
-
-### Why the flow is a two-step relay
-
-The user signs, the **backend submits**. Every write goes out `onAccount` a server key held as
-`ADDRESS_LINK_SECRET_KEY`, because the contract gates writes on the provider owner — a rejected
-call surfaces as `NOT_PROVIDER_OWNER`, described by the backend as "the backend wallet is not
-the registered owner for this provider on the contract". So a provider id is a namespace that
-someone owns, and only its owner may write links under it.
-
-That makes the REST surface a two-call dance per provider, one pair for linking and one for
-unlinking:
-
-| Step | Endpoint | What it does |
-| --- | --- | --- |
-| 1 | `POST /address-links/{provider}/claim` | verifies you control the external account, reads `get_nonce`, and returns the exact message to sign |
-| 2 | `POST /address-links/{provider}/submit` | takes `value`, `nonce` and `signature`, and relays the `link` call |
-| 1 | `POST /address-links/{provider}/unclaim` | returns the unlink message and nonce |
-| 2 | `POST /address-links/{provider}/unclaim/submit` | relays the `unlink` call |
-
-The five providers wired up in the backend, each with its own controller and its own external
-verifier:
+The providers Superhero operates:
 
 | Provider id | Links |
 | --- | --- |
@@ -152,176 +62,84 @@ verifier:
 | `bio` | a bio |
 | `prefaens` | a preferred AENS name |
 
-Provider ids are constrained to at most ten lowercase `a-z` characters — the sync service
-validates them with `/^[a-z]{1,10}$/`, which is why the AENS one is spelled `prefaens`.
+## The signed message
 
-The contract's own aborts, as the backend maps them: `INVALID_SIGNATURE`, `INVALID_NONCE`,
-`ALREADY_CLAIMED` ("this provider is already linked to a different value for this address"),
-`NOT_LINKED`, `NO_LINKS`, `NOT_PROVIDER_OWNER`, `PRINCIPAL_NOT_FOUND`, `PRINCIPAL_MISMATCH`
-("only the name owner can link or unlink") and `INVALID_PRINCIPAL`.
-
-### What carried over, and what did not
-
-| ProfileRegistry concept | In AddressLink |
-| --- | --- |
-| Linking an X handle, AENS name or other external identity | yes — as a provider-keyed link |
-| Replay protection by nonce | yes — an explicit `nonce` argument and a `nonce_seq` map |
-| Reverse resolution, name to address | yes — `resolve(provider, value)` |
-| Backend attestation as the trust root | yes, and stronger: the backend owns the provider namespace and submits every write |
-| Custom / chain / X name *types* with a precedence order | no |
-| Auto-renaming a displaced custom name | no |
-| A `display_source` preference | no |
-| Profile fields — fullname, bio, avatar | only `bio`, and only as an opaque link value |
-
-The net effect is a narrower, simpler contract. Name precedence, which ProfileRegistry resolved
-on chain with "chain beats X beats custom", now lives in the backend's `resolvePublicName`
-(`superhero-api/src/profile/services/profile-read.service.ts`) and resolves differently:
+Every write carries an explicit nonce and a signature from the address being linked. Read the
+current nonce with `get_nonce(addr)` (or `get_nonce_principal` / `get_nonce_did`), then sign a
+plain-text, colon-separated message with the verb first and the nonce last:
 
 ```text
-prefaens link  ->  middleware-derived chain_name  ->  legacy username  ->  the raw address
+link:<address>:<provider>:<value>:<nonce>
+unlink:<address>:<provider>:<nonce>
 ```
 
-The X handle is no longer in the precedence chain at all — it is returned as a separate
-`x_username` field for display, not as a public name.
+The principal variants substitute the AENS name for the address in the same layout. The
+signature is 64 bytes, submitted as a 128-character hex string. A stale or reused nonce aborts
+with `INVALID_NONCE`; a signature that does not verify aborts with `INVALID_SIGNATURE`.
 
-## Data model (from the whitepaper, unverified)
+## Linking through the Superhero API
 
-Each profile is a `profile` record combining user-facing metadata with several identity
-sources:
+Because Superhero owns the providers it operates, the user signs and the backend submits. The
+REST surface is two calls per operation:
 
-| Field | Whitepaper description |
+| Step | Endpoint | What it does |
+| --- | --- | --- |
+| 1 | `POST /address-links/{provider}/claim` | verifies you control the external account, reads `get_nonce`, and returns the exact message to sign |
+| 2 | `POST /address-links/{provider}/submit` | takes `value`, `nonce` and `signature`, and relays the `link` call |
+| 1 | `POST /address-links/{provider}/unclaim` | returns the unlink message and nonce |
+| 2 | `POST /address-links/{provider}/unclaim/submit` | relays the `unlink` call |
+
+See [Profile API](/api-reference/profile) for the request and response shapes.
+
+## Resolving links
+
+| Read | Returns |
 | --- | --- |
-| `nostr` | A nostr public key or identifier used for chat and messaging |
-| `x_username` | An optional X handle, verified through backend attestation |
-| `chain_name` | An optional AENS name, with an associated expiration timestamp |
+| `get_links(addr)` | every link for an address, as `provider -> value` |
+| `get_link(addr, provider)` | one value, or `None` |
+| `resolve(provider, value)` | the address that owns `value` under `provider`, or `None` |
+| `resolve_signer(principal)` | the account that signs for an AENS name |
+| `resolve_did_controller(did)` | the controlling address of a DID |
+| `get_provider_owner(provider)` | the account that owns a provider namespace |
 
-The whitepaper also refers to fullname, bio and avatar URL as things a `ProfileUpdated` event
-fires for, which implies those fields exist on the record too. The exact field names and types
-are not documented.
+The Superhero API resolves an account's public name in the order: `prefaens` link, AENS name
+from the middleware, legacy username, raw address. The X handle is returned separately as
+`x_username`.
 
-## Name types (from the whitepaper, unverified)
+## Abort strings
 
-Three categories of public name, with different trust levels and registration paths:
+| Abort | Meaning |
+| --- | --- |
+| `INVALID_SIGNATURE` | the signature does not verify against the message and address |
+| `INVALID_NONCE` | the nonce does not match `get_nonce` |
+| `ALREADY_CLAIMED` | this provider is already linked to a different value for this address |
+| `NOT_LINKED` | no link exists for this provider |
+| `NO_LINKS` | the address has no links at all |
+| `NOT_PROVIDER_OWNER` | the caller does not own the provider namespace |
+| `PRINCIPAL_NOT_FOUND` | the AENS name does not resolve |
+| `PRINCIPAL_MISMATCH` | only the name owner can link or unlink |
+| `INVALID_PRINCIPAL` | the principal string is malformed |
 
-| Type | Entrypoint | Trust | Conflict behaviour |
-| --- | --- | --- | --- |
-| Custom | `set_custom_name` | Self-declared, lowest | Can be displaced by a verified name |
-| Chain (AENS) | `set_chain_name` | Verified on chain | Displaces a conflicting custom name |
-| X | `set_x_name_with_attestation` | Verified by backend attestation | Displaces a conflicting custom name |
+## Events
 
-Each type has a matching clear entrypoint — `clear_custom_name`, `clear_chain_name`,
-`clear_x_name` — which releases the name for someone else to register.
-
-`resolve_public_name` resolves a name string to an address, with a fixed precedence: **chain
-names beat X names beat custom names**. The ordering mirrors the trust level of each source.
-
-### Conflict resolution
-
-When a verified name is registered whose normalized key collides with an existing custom name
-owned by someone else, the contract renames the custom name rather than rejecting the
-registration:
-
-- the displaced user's custom name gets a random four-digit suffix — `alice` becomes
-  `alice_4827`;
-- a `CustomNameAutoRenamed` event fires carrying both the old and the new name, so frontends
-  can tell the affected user;
-- if the generated suffix also collides, the contract retries with different entropy until a
-  candidate is unique.
-
-### The X attestation flow
-
-`set_x_name_with_attestation` verifies a signature from a backend signer configured at
-deployment:
-
-```text
-1. The backend signer builds an attestation message containing the caller's address,
-   the normalized X username, an expiry timestamp, and a unique nonce.
-2. The message is hashed with Blake2b.
-3. The hash is prepended with the aeternity signed-message prefix -
-   "aeternity Signed Message:\n" with a fixed 28-byte header - producing a
-   60-byte payload.
-4. The digest is verified against the backend signer's signature with Crypto.verify_sig.
-5. Nonces are recorded on chain (`nonce_used`) so an attestation cannot be replayed.
+```sophia
+datatype event =
+    ProviderRegistered(address, string)   // provider owner, provider id
+  | Link(address, string)
+  | Unlink(address, string)
+  | PrincipalLink(address, string)
+  | PrincipalUnlink(address, string)
 ```
 
-This is the same prefix-and-verify construction that `Tipping.aes` uses for delegated posting,
-with a nonce and an expiry added — which is exactly what delegated posting lacks.
+Every event carries an `address` topic and a `string` in `data`. On the link events the
+`data` string is `provider:value`, colon-joined. Topic hashes are in the
+[event catalogue](/contracts/events).
 
-The design implication is worth stating plainly: X verification is **not trustless**. The
-contract verifies a signature from a single configured backend signer. If that key is
-compromised, arbitrary X handles can be attested to arbitrary addresses. Chain names, verified
-against AENS, do not have that dependency.
-
-## Display source
-
-`set_display_source` stores a per-user preference of `Custom`, `Chain` or `X`, signalling to
-frontends and indexers which name to render as the primary public identity. It does not change
-resolution precedence — only presentation.
-
-## Entrypoints named in the whitepaper
-
-| Entrypoint | Purpose |
-| --- | --- |
-| `set_custom_name` | Claim an available unverified name |
-| `clear_custom_name` | Release it |
-| `set_chain_name` | Link an AENS name with its expiration |
-| `clear_chain_name` | Release it |
-| `set_x_name_with_attestation` | Link an X handle via a signed backend attestation |
-| `clear_x_name` | Release it |
-| `set_display_source` | Choose `Custom`, `Chain` or `X` |
-| `resolve_public_name` | Resolve a name string to an address |
-| `get_state` | Full state: profiles, name maps, used nonces, version (`"v1"`) |
-
-Argument names, argument types and return types are **not** documented anywhere available.
-Nor are the profile-update entrypoints for fullname, bio and avatar, even though
-`ProfileUpdated` implies they exist.
-
-## Events (from the whitepaper)
-
-| Event | Fires when |
-| --- | --- |
-| `ProfileUpdated(address, string)` | fullname, bio or avatar URL changes |
-| `CustomNameUpdated(address, string)` | a custom name is set or cleared |
-| `ChainNameUpdated(address, string)` | a chain name is set or cleared |
-| `XNameUpdated(address, string)` | an X name is set or cleared |
-| `DisplaySourceUpdated(address, string)` | the display preference changes |
-| `CustomNameAutoRenamed(address, string)` | a custom name is force-renamed by a verified name |
-
-These six are the only Superhero events in this documentation whose signatures come from prose
-rather than from a `datatype event` declaration. Their middleware topic hashes are still
-computable from the names — see [Events](/contracts/events) — but the argument types are
-unconfirmed.
-
-## Open questions
-
-- **Where is the `AddressLink` contract deployed?** Not in any repository. The backend reads it
-  from `ADDRESS_LINK_CONTRACT_ADDRESS` at boot and logs `AddressLink contract configured at`
-  followed by the address on startup, so the fastest route is a running `superhero-api`
-  deployment's environment or its first log line. There is no fallback default in
-  `address-links.constants.ts` — an unset variable disables the whole plugin with a warning.
-- **Where is the `AddressLink.aes` source?** Only the compiled ACI is committed. Everything on
-  this page about its behaviour that is not in that ACI — the nonce increment rule, whether
-  `register_provider` is first-come or gated, what `ALREADY_CLAIMED` compares — is inferred
-  from the backend's error mapping rather than read from Sophia. Ask the Superhero contract
-  team for the source.
-- **Is `ProfileRegistry.aes` still deployed, and at what address?** No address appears in
-  `superhero/src/config.ts`, in the web app, or in the agent skill, and nothing in
-  `superhero-api` reads or writes it. It may still hold state that nobody consults. Settling
-  this needs the contract team, or a middleware search for a contract emitting
-  `CustomNameAutoRenamed`.
-- **Where is the `ProfileRegistry.aes` source?** A GitHub code search for
-  `set_x_name_with_attestation` and `CustomNameAutoRenamed` across all public repositories
-  returns exactly one hit each — the whitepaper string in
-  `superhero-com/superhero/src/views/Whitepaper.tsx`. Either the repository is private or the
-  contract was never published. Given that it has been superseded, this is now of historical
-  interest only.
-
-## Read more
+## Related
 
 - [Superhero ID](/identity/superhero-id) — the identity system from a user's point of view
 - [Chain names](/identity/chain-names) — AENS names, which are verifiable without this contract
 - [X verification](/identity/x-verification) — the attestation flow in the app
-- [Profile registry](/identity/profile-registry) — the identity-section view of the same contract
-- [Events](/contracts/events) — the verified `AddressLink` topic hashes, and where these event names sit in the cross-contract catalogue
-- [Tipping v3](/contracts/tipping) — the signed-message construction `AddressLink` improves on by adding a nonce
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the source for the ProfileRegistry design described above
+- [Profile registry](/identity/profile-registry) — the identity-section view of linking
+- [Profile API](/api-reference/profile) — the endpoints in the table above
+- [Events](/contracts/events) — the `AddressLink` topic hashes in the cross-contract catalogue

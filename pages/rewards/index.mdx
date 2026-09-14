@@ -1,47 +1,34 @@
 ---
 title: "Rewards & Affiliation"
-description: "Bring people in, get paid for it. Two ways Superhero pays out AE — one for talking about it, one for the trading your invites generate."
+description: "Two ways Superhero pays out AE — one for posting about it on X, one for the trading your invites generate."
 ---
 
 # Rewards & Affiliation
 
-Growth here is not a marketing budget — it is a protocol rule. Bring someone in and you keep
-earning from their trading for as long as they trade, paid straight from the curve.
-
-There are two ways to get paid, and they work completely differently. One rewards you for
-talking about Superhero; the other pays you a share of every buy made by people you invited,
-four levels deep. They share a page in the app (`/trends/invite`), so it is worth knowing which
-is which.
+There are two ways to get paid on Superhero, and they work differently. One rewards you for
+posting about Superhero on X; the other pays you a share of every buy made by people you
+invited, four levels deep. They share a page in the app (`/trends/invite`).
 
 ## Two programs, one page
 
 | | Superhero Rewards Program | Trading Affiliate Program |
 | --- | --- | --- |
 | What you do | Link your X account, post about Superhero | Create funded invite links, get people trading |
-| Who pays | Superhero's backend, off-chain scan of your X posts | The bonding curve — 0.5% of every buy in your downline |
-| Where the money comes from | A discretionary program budget | Protocol fees, split on-chain |
+| Who pays | Superhero's backend, from a scan of your X posts | The bonding curve — 0.5% of every buy in your downline |
+| Where the money comes from | A program budget | Protocol fees, split on-chain |
 | Payout | Sent automatically to your connected wallet | You call `withdraw()` on the AffiliationTreasury contract |
 | Gate | X account with at least 100 followers | 4 direct invitees who have each spent at least 10 AE |
-| Ceiling | The FAQ quotes "up to 200 AE", but no cap exists in the backend — one rewarded post per UTC day is the real limit | Uncapped per period, but see the deadline below |
-| Deadline | None | **Rewards expire.** Only the current 30-day payout period and the previous one are withdrawable |
-| Can be switched off | Yes, at any time without notice | No, it is contract logic |
+| Rate | One rewarded post per UTC day, at your follower tier's rate | Uncapped per period |
+| Claim window | None | The current 30-day payout period and the previous one |
+| Can be switched off | Yes, at any time | No, it is contract logic |
 
-The **Superhero Rewards Program** is a growth campaign. It is off-chain, discretionary,
-geo-restricted, and explicitly not guaranteed.
+The **Superhero Rewards Program** is an off-chain growth campaign, run at Superhero's
+discretion.
 
 The **Trading Affiliate Program** is protocol mechanics. Every community-token buy carries a
-1% spread; half of it goes to the community DAO and half to affiliation. That affiliation
-half is split across up to four levels of referrers above the buyer, and any level with no
-referrer is credited to nobody — the AE stays in the treasury contract permanently, which is
-what the whitepaper means by "burned".
-
-Two things about it surprise people, both settled from
-`bcl-contracts/contracts/AffiliationTreasury.aes`:
-
-- **A partial chain strands the rest, not just an unaffiliated buy.** A buyer two levels deep
-  pays the full 0.5% but only 0.425% of it reaches anyone.
-- **Accrued rewards expire after 30 to 60 days.** `withdraw()` reaches the current 30-day
-  payout period and the one before it, and nothing else. Withdraw monthly.
+1% spread; half goes to the community DAO and half to affiliation. That affiliation half is
+split across up to four levels of inviters above the buyer. Rewards accumulate in 30-day
+periods, and `withdraw()` pays the current and previous period — so withdraw monthly.
 
 ## The affiliation split at a glance
 
@@ -54,39 +41,31 @@ Buyer pays AE for a community token
                 ├── 0.125% → level 2
                 ├── 0.050% → level 3
                 └── 0.025% → level 4
-                (any level with no recipient: stranded in the treasury forever)
+                (a level with no inviter is not credited)
 ```
 
 The 0.5% is added on top of the curve price rather than carved out of it, so a buy whose
-curve price is 1,000 AE costs the buyer 1,005 AE. Source:
-`bcl-contracts/contracts/AffiliationTreasury.aes` and
-`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`, which is where these figures
-are `let`-bound constants — the whitepaper's "Affiliation Bonding Curve Token Sale" and
-"Token Economics Summary" sections describe the same split in prose.
+curve price is 1,000 AE costs the buyer 1,005 AE.
 
 ## In this section
 
 - [Superhero Rewards Program](/rewards/rewards-program) — the two X milestones, the follower
-  tiers, the streak bonus, and the eligibility disclaimer you must read before participating.
+  tiers and the streak bonus.
 - [Claiming Rewards](/rewards/claiming) — which rewards arrive automatically, which need a
-  transaction you sign, and what the failure modes look like.
-- [The Affiliation System](/rewards/affiliation) — the deep page. Exact percentages, the
-  `AffiliationTreasury` contract surface, the 30-day payout periods and the claim deadline
-  they create, and what really happens to fees nobody is credited.
+  transaction you sign, and what the errors mean.
+- [The Affiliation System](/rewards/affiliation) — exact percentages, the
+  `AffiliationTreasury` contract surface, and the 30-day payout periods.
 - [Invite Links](/rewards/invite-links) — creating, funding, sharing, revoking and tracking
-  invite links. Read the secrecy warning on that page before you generate one.
+  invite links. Read the secrecy warning before you generate one.
 - [Leaderboards](/rewards/leaderboards) — the trading leaderboard, its four metrics, and the
   endpoint behind it.
 
 ## Read more
 
 - [Bonding curve fees and slippage](/tokens/fees-and-slippage) — where the 1% spread that
-  funds affiliation actually comes from.
-- [Value flow](/concepts/value-flow) — the full picture of how AE moves through the protocol.
+  funds affiliation comes from.
+- [Value flow](/concepts/value-flow) — how AE moves through the protocol.
 - [AffiliationTreasury contract](/contracts/affiliation-treasury) — the contract reference.
 - [X verification](/identity/x-verification) — linking your X account to your SuperheroID,
-  which is the precondition for the rewards program.
-- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — both programs live
-  on this one page in the app.
-- [Superhero FAQ](https://superhero.com/faq) — the canonical short answers on rewards,
-  milestones, eligibility and invitations.
+  the precondition for the rewards program.
+- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — both programs in the app.
