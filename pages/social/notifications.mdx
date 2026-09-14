@@ -42,8 +42,8 @@ The socket connects to the API origin's `/notifications` namespace and emits two
 treated as optimistic and deduplicated by id.
 
 On every socket connect and reconnect the client re-fetches the first feed page and the unread
-count, and publishes the server's values over whatever the live layer accumulated. If the
-socket never recovers, the bell degrades to refresh-driven rather than stopping.
+count and overwrites whatever the live layer accumulated. Without the socket, the bell is
+refresh-driven.
 
 The in-memory list is capped at 200 items.
 
@@ -90,25 +90,18 @@ mobile app:
 | `room-messages` | `/trends/tokens/` plus `data.saleAddress` | — |
 | `announcement` | None — the row renders as non-navigable | — |
 
-Two deliberate choices:
-
-- **A reply opens the comment, not the parent.** A comment is itself a post, so
-  `/post/<commentId>` renders the comment with its ancestor chain above it and scrolls it into
-  view.
-- **The `_v3` suffix is stripped.** Post ids are stored as `<id>_v3` and every in-app post link
-  drops the suffix, with the resolver re-adding it. The bell, the service worker and the legacy
-  comment redirect share one helper.
-
-The backend ships routing *hints* — a type plus ids — rather than a URL, because the mobile app
-has different routes. Each client owns its own mapping.
+A reply opens the **comment**, not the parent: `/post/<commentId>` renders the comment with
+its ancestor chain above it. Post ids are stored as `<id>_v3` and every in-app post link drops
+the suffix, with the resolver re-adding it. The backend ships routing *hints* — a type plus
+ids — rather than a URL, because the mobile app has different routes.
 
 ### What suppresses a notification
 
 Every send passes three gates before a channel sees it; `post-comment` shows all three:
 
 1. **Self-action.** You are never notified about your own reply.
-2. **Preference.** The recipient's opt-out is checked *before* the rate cap, so an opted-out
-   author does not spend their budget silently and land capped on re-enabling.
+2. **Preference.** The recipient's opt-out is checked before the rate cap, so an opted-out
+   author does not spend their budget silently.
 3. **Per-recipient rate cap.** A fixed Redis window allows `NOTIF_POST_COMMENT_RATE_CAP`
    comment notifications per `NOTIF_POST_COMMENT_RATE_WINDOW_SEC` — **20 per hour** by default.
    Past that, further comments are dropped until the window resets. If Redis is unreachable the
@@ -139,26 +132,23 @@ The client reports one of five states:
 | `subscribed` | Registered |
 
 One push endpoint belongs to one address. If a second account in the same browser enables push,
-the server's upsert re-points the endpoint at it, so the client records who owns the endpoint
-locally and re-registers on start when it should.
+the server re-points the endpoint at it; the client records the owner locally and re-registers
+on start when needed.
 
 ### The service worker
 
 Push is handled by a dedicated worker at `/notifications-sw.js`, registered on demand with an
-origin-wide scope so it can receive pushes for the whole site.
-
-It handles exactly three events — `push`, `notificationclick` and `pushsubscriptionchange` —
-and registers no `fetch` handler, so it cannot intercept requests on the origin it shares with
-the inline wallet.
+origin-wide scope. It handles exactly three events — `push`, `notificationclick` and
+`pushsubscriptionchange` — and registers no `fetch` handler, so it cannot intercept requests
+on the origin it shares with the inline wallet.
 
 On `push` it reads a JSON payload of `title`, `body` and `data`, accepting the type from either
 the top level or inside `data`, and shows a notification with the 192px PNG app icon as both
-icon and badge (several platforms, Android Chrome in particular, drop SVG notification icons).
-A `tag` in the payload coalesces repeats of the same logical notification.
+icon and badge (Android Chrome drops SVG notification icons). A `tag` in the payload coalesces
+repeats of the same notification.
 
 On `notificationclick` it resolves the same routes as the in-app bell. A `data.url` in the
-payload wins over the mapping, but only after an origin check, so a payload cannot turn a
-notification click into an open redirect.
+payload wins over the mapping after an origin check.
 
 ## Preferences and devices
 
@@ -191,11 +181,10 @@ rejected against the catalog. The model is opt-out — a type with no stored row
 
 ### Devices are the mobile half
 
-`/notifications/devices` registers an **Expo push token**, for the native apps. The web-push
-endpoints register a **VAPID browser subscription**. They are different transports for
-different clients: a type declared expo-only reaches a registered device, and reaches nothing
-if the account has none. Both registration paths are behind their own signed challenge, and
-deregistration binds the signature to both the address and the token.
+`/notifications/devices` registers an **Expo push token**, for the native apps; the web-push
+endpoints register a **VAPID browser subscription**. An expo-only type reaches a registered
+device, and nothing if the account has none. Both registration paths are behind their own
+signed challenge, and deregistration binds the signature to both the address and the token.
 
 The per-room mute control lives with chat: it writes `muted` and a tri-state account-wide
 `mute_all` through `POST /api/rooms/{saleAddress}/mute` behind its own signed challenge. The

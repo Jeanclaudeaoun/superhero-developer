@@ -22,22 +22,19 @@ you personally kept.
 
 ## Back up a seed phrase
 
-1. **Write it down by hand.** Screenshots go into photo backups and cloud sync; a text file goes
-   into whatever indexes your disk. Neither is a place for a seed phrase.
+1. **Write it down by hand.** Screenshots and text files end up in cloud sync and disk indexes.
 2. **Copy it exactly** — all 12 or 24 words, in order, lowercase. BIP39 phrases carry a checksum,
-   so a wrong or transposed word is usually caught on import rather than silently producing a
-   different, empty wallet.
+   so a wrong or transposed word is usually caught on import.
 3. **Verify it.** Superhero's built-in wallet makes you re-enter the words before a vault is
-   created. In the standalone Superhero Wallet the equivalent step is **optional and comes
-   later** — see below. A backup you have never read back is not yet a backup.
-4. **Store two copies in different physical places.** Fire and flood are as likely as theft.
+   created. In the standalone Superhero Wallet the step is **optional and comes later** — see
+   below.
+4. **Store two copies in different physical places.**
 5. **Never type it into anything but the wallet.** No support agent, no "validator", no airdrop
    checker will ever need it. See [Security Best Practices](/wallets/security).
 
 The phrase is a standard BIP39 phrase on the standard æternity derivation path
 (`m/44'/457'/<index>'/0'/0'`, SLIP-0010 ed25519). The same phrase produces byte-identical
-addresses in the Superhero Wallet extension, the native app, and Superhero's built-in wallet. You
-are not locked into any one of them.
+addresses in the Superhero Wallet extension, the native app, and Superhero's built-in wallet.
 
 ## Superhero Wallet: reveal, verify, export
 
@@ -54,12 +51,9 @@ marked backed up.
 | Extension or web with a password set | Re-enter the password |
 | Mobile with biometrics off, or password protection turned off | Confirm a "make sure no one is watching your screen" dialog |
 
-**Verification is a word-ordering exercise, and it is skippable.** *Verify seed phrase* shows your
-own words shuffled into a grid for you to tap back into the correct order; getting it right marks
-the seed backed up and removes the nag. *I have verified seed phrase before* just sets the flag.
-Nothing re-checks later.
-
-So on the standalone wallet, **write the phrase down on your first day**.
+**Verification is skippable.** *Verify seed phrase* shows your own words shuffled for you to tap
+back into the correct order; *I have verified seed phrase before* just sets the flag. Nothing
+re-checks later, so **write the phrase down on your first day**.
 
 ### Export one account's private key
 
@@ -91,19 +85,17 @@ The built-in wallet has three unlock factors and they are **not interchangeable 
 | Passkey on a **phrase-created** wallet | Yes | **No** |
 | The written recovery phrase | — | **Yes, anywhere** |
 
-The passphrase and the recovery code each unwrap a key that lives inside this device's encrypted
-vault record. No record, nothing to unwrap. Only two things reconstruct a seed from scratch: the
-written phrase, and — for a wallet created by the passkey path — the passkey itself, because that
-seed is *derived* from the passkey's PRF output at a fixed public salt rather than stored next to
-it.
+The passphrase and the recovery code each unwrap a key inside this device's encrypted vault
+record. No record, nothing to unwrap. Only two things reconstruct a seed from scratch: the written
+phrase, and — for a wallet created by the passkey path — the passkey itself, because that seed is
+*derived* from the passkey's PRF output at a fixed public salt.
 
 - **Phrase-created built-in wallet** — the 12 words are your only portable backup. The recovery
   code is a same-device fallback for a forgotten passphrase or a broken passkey. Keep both.
 - **Passkey-created built-in wallet** — the passkey *is* the backup, but only if it syncs. Confirm
   it landed in iCloud Keychain or Google Password Manager. There is no phrase reveal or export
-  screen in the app, so a device-bound credential like Windows Hello leaves **no other copy of the
-  seed at all**. Still enroll the recovery code: it is the only factor that survives a passkey
-  rekey.
+  screen, so a device-bound credential like Windows Hello leaves **no other copy of the seed**.
+  Still enroll the recovery code: it is the only factor that survives a passkey rekey.
 
 ## Recover on a new device
 
@@ -175,20 +167,17 @@ addresses from index 0 upward.
 
 ## Changing the built-in wallet's passphrase
 
-There is no passphrase-change flow in the built-in wallet, and no way to remove a factor. The
-practical consequences:
+There is no passphrase-change flow in the built-in wallet, and no way to remove a factor.
 
 - **To change your passphrase, recreate the wallet.** Unlock with any enrolled factor, write down
   the recovery phrase, erase the wallet, and create a new one with the same phrase and a new
-  passphrase. You get new factor ids and a new recovery code; the account and its address are
-  unchanged, because they come from the seed.
-- **A compromised factor cannot be revoked.** Any one factor opens the vault, so a passphrase you
-  believe someone has seen stays valid until the vault is recreated. Treat "someone saw my
-  passphrase" as "recreate the wallet today".
+  passphrase. You get a new recovery code; the account and its address are unchanged, because they
+  come from the seed.
+- **A compromised factor cannot be revoked.** Any one factor opens the vault, so a passphrase
+  someone has seen stays valid until the wallet is recreated. Recreate it the same day.
 
-The standalone Superhero Wallet has a change-password form and a switch to turn password
-protection off, described above. If rotating your unlock secret matters to you, prefer the
-standalone wallet.
+If rotating your unlock secret matters to you, prefer the standalone Superhero Wallet, which has a
+change-password form.
 
 ## Related
 

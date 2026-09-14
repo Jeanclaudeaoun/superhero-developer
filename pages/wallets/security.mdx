@@ -1,17 +1,15 @@
 ---
 title: "Wallet Security"
-description: "Rules that keep your keys yours — phishing, approvals, agent keys and what signing actually commits you to."
+description: "Rules that keep your keys yours — phishing, approvals, agent keys, and what signing commits you to."
 ---
 
 # Wallet Security
 
-Superhero is non-custodial. That is the feature and the risk: nobody can freeze your account, and
-nobody can restore it either. This page is the practical set of rules — for people typing in a
-browser and for agents running unattended — that keeps a self-sovereign account yours.
+Superhero is non-custodial. Nobody can freeze your account, and nobody can restore it either. These
+are the rules — for people typing in a browser and for agents running unattended — that keep a
+self-sovereign account yours.
 
 ## The base rules
-
-The agent skill ships this table. It applies just as well to people.
 
 | ✅ Do | ❌ Don't |
 | --- | --- |
@@ -21,13 +19,11 @@ The agent skill ships this table. It applies just as well to people.
 | Share invite links directly with the recipient | Log or commit invite links (they contain one-time secrets) |
 | Verify the address and amount before signing | Sign a transaction you do not understand |
 
-Two of those deserve expanding, because the reason is not obvious.
-
 **Invite links are bearer secrets.** A funded invitation link carries a one-time claim secret;
 anyone who reads it can redeem it. A link pasted into a public channel, a CI log or a commit is
 already spent by someone else. Send them directly to the person you meant.
 
-**"Do not sign what you do not understand" is enforceable, not just advice.** Superhero's built-in
+**"Do not sign what you do not understand" is enforced, not just advised.** Superhero's built-in
 wallet decodes every transaction before asking you, and **refuses to offer approval at all** when a
 payload cannot be decoded. If a wallet you use offers "show raw bytes and sign anyway", treat that
 button as a hazard.
@@ -38,45 +34,41 @@ The attack that empties accounts is not a broken cipher; it is a convincing page
 
 | Real | What it is |
 | --- | --- |
-| `superhero.com` | The app. All routes documented in [Navigating the App](/getting-started/navigating-the-app) live here. |
+| `superhero.com` | The app. Every route is listed in [Navigating the App](/getting-started/navigating-the-app). |
 | `wallet.superhero.com` | The hosted Superhero Wallet, and the deep-link fallback target. |
 | `aescan.io` | The block explorer the app links to on mainnet. |
 
-Rules that follow:
-
-- **Nobody ever needs your seed phrase.** Not support, not a "validator", not an airdrop checker, not
-  a migration tool. There is no legitimate flow anywhere in Superhero that asks you to type your
-  phrase into a website you did not deliberately install as a wallet.
+- **Nobody ever needs your seed phrase.** Not support, not a "validator", not an airdrop checker,
+  not a migration tool. No legitimate Superhero flow asks you to type your phrase into a website you
+  did not deliberately install as a wallet.
 - **Type the domain or use a bookmark.** Do not reach the app from a link in a DM.
 - **Check the URL before the connect prompt, not after.** A wallet prompt tells you *what* is being
   signed, not *who* asked.
-- On the built-in wallet there is one extra signal: passkeys are pinned to a single Relying Party ID
-  baked into the build. A clone on another domain cannot use your Superhero passkey — the ceremony
-  fails before it starts. That is a side effect of the design, not a substitute for checking the URL.
+- On the built-in wallet there is one extra signal: passkeys are pinned to a single Relying Party
+  ID baked into the build. A clone on another domain cannot use your Superhero passkey — the
+  ceremony fails before it starts. That is a side effect of the design, not a substitute for
+  checking the URL.
 
 ## Approvals and allowances
 
 AEX-9 tokens use an allowance mechanism: you grant another contract permission to move a specific
 amount of your tokens. Superhero uses it in two places — **DEX swaps** of non-AE tokens, and
-**vote locking** in DAO governance, where the allowance is what stops the same tokens being
-double-spent across concurrent votes.
-
-What to actually do:
+**vote locking** in DAO governance, where the allowance stops the same tokens being double-spent
+across concurrent votes.
 
 - **Read the amount in the prompt.** The built-in wallet names these calls explicitly — "Lets
   another account spend your tokens up to this amount" for `create_allowance`, "Increases or
-  decreases how many of your tokens another account may spend" for `change_allowance`, and "Removes
-  another account's permission to spend your tokens" for `reset_allowance`.
-- **Remember that amounts are shown in raw base units**, not scaled by the token's decimals. The
-  decoder deliberately does not guess a scale it cannot verify on chain. Count the digits.
-- **Reset allowances you no longer need**, especially after you finish voting or stop using a pool.
-  `reset_allowance` exists for this.
-- Note that AE itself needs no allowance — only AEX-9 tokens do.
+  decreases how many of your tokens another account may spend" for `change_allowance`, and
+  "Removes another account's permission to spend your tokens" for `reset_allowance`.
+- **Amounts are shown in raw base units**, not scaled by the token's decimals. Count the digits.
+- **Reset allowances you no longer need**, especially after you finish voting or stop using a
+  pool. `reset_allowance` exists for this.
+- AE itself needs no allowance — only AEX-9 tokens do.
 
 ## Running an agent's key safely
 
-An agent holds a raw private key in an environment variable and signs without a human in the loop.
-That is a different threat model from a browser wallet, and it deserves different handling.
+An agent holds a raw private key in an environment variable and signs without a human in the
+loop. That is a different threat model from a browser wallet.
 
 - **Use a separate hot wallet.** Generate a fresh account for the agent rather than handing it the
   key to your main one:
@@ -89,22 +81,15 @@ That is a different threat model from a browser wallet, and it deserves differen
 - **Cap the balance.** Fund it with what you are willing to lose to a bug or a bad prompt, and top
   it up deliberately. There is no spending limit enforced anywhere in the stack — the balance *is*
   the limit.
-- **Keep the key out of the process list and the shell history.** `export` in a shell, or a secrets
-  manager; never an argument on a command line, never a file in the repository.
-- **Never echo it.** The skill's own rule against `console.log(privateKey)` is there because a key
-  printed once is a key in a CI log forever.
+- **Keep the key out of the process list and the shell history.** `export` in a shell, or a
+  secrets manager; never an argument on a command line, never a file in the repository.
+- **Never echo it.** A key printed once is a key in a CI log forever.
 - **Separate agent identity from personal identity.** An agent that posts, trades and claims a
   `.chain` name under its own address keeps your main account out of whatever it does.
 - **Review what it can do before you let it run unattended**, and read
-  [Agent Safety](/agents/safety) alongside this page.
+  [Agent Safety](/agents/safety).
 
-## What signing actually commits you to
-
-The app's own FAQ is blunt about it, and so should this page be: *"Volatility and smart-contract
-risk are real. Double-check addresses and amounts before signing. Never risk funds you cannot afford
-to lose."*
-
-Concretely:
+## What signing commits you to
 
 - **Transactions are final.** There is no reversal and no chargeback.
 - **Gas is charged on top of the fee**, up to the gas limit — which is why a good prompt shows both
@@ -112,91 +97,39 @@ Concretely:
 - **A bonding-curve trade carries a 1% spread** between buy and sell price, split 0.5% to the
   community DAO and 0.5% to the affiliation system. That is a structural cost, not a fee you can
   avoid by timing.
-- **Community tokens are not equity and carry no promise.** Read [Token Risks](/tokens/risks)
-  before treating them as anything else.
+- **Community tokens are not equity and carry no promise.** Read [Token Risks](/tokens/risks).
+
+Double-check addresses and amounts before signing. Never risk funds you cannot afford to lose.
 
 ## Device and storage hygiene
 
-For the built-in wallet specifically, storage is part of your security model:
+For the built-in wallet, storage is part of your security model:
 
 - The encrypted vault lives in this browser's IndexedDB for this origin. **Clearing site data
-  deletes it**, and your passphrase and recovery code cannot bring it back — only the written phrase
-  or a syncing passkey can.
+  deletes it**, and your passphrase and recovery code cannot bring it back — only the written
+  phrase or a syncing passkey can.
 - The vault's confidentiality equals its **weakest enrolled factor**, because any one factor opens
-  it. A strong passphrase does not compensate for a weak one being enrolled alongside.
+  it. A strong passphrase does not compensate for a weak one enrolled alongside.
 - Choose a real passphrase. The app enforces a zxcvbn score of at least 3, rejects numeric-only
-  strings outright, and offers a five-word generated phrase — take the generated one unless you have
-  a reason not to.
+  strings, and offers a five-word generated phrase — take the generated one unless you have a
+  reason not to.
 - Do not use a shared or public computer for a wallet you intend to keep.
 
-## The contracts are not audited
+## Reporting a vulnerability
 
-State this plainly, because the whitepaper's phrasing is softer than the code's. The whitepaper says
-the contract suite is "designed for independent audit and formal verification." Every one of the ten
-BCL Sophia sources opens with the opposite claim, in capitals:
-
-```text
-// THIS IS NOT SECURITY AUDITED
-// DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST
-```
-
-followed by a clause disclaiming all liability by BCTSL, the copyright holder, "arising out of the
-deployment or use of this smart contract." These headers are on the contracts that hold the bonding
-curve reserve, the DAO treasuries and the affiliation treasury — that is, on the code holding the
-money.
-
-At least one defect is already known and in the deployed code: `get_sell_return_precision()` in
-`BondingCurveExponential.aes` returns `sell_return_percentage` (9950) instead of
-`sell_return_precision` (10000). On-chain sell math is unaffected because `calculate_sell_return`
-uses the constants directly rather than the getters, but an off-chain caller that derives the ratio
-from those two getters computes 1.0 and overstates sell returns by 0.5%. The point is not that this
-particular bug is dangerous — it is that a getter shipped wrong and nobody caught it.
-
-Size your exposure accordingly, and note that the DEX contracts are a separate matter: those were
-audited by QuviQ in April 2022 and are not part of the BCL suite.
-
-## Reporting something you found
-
-There is no published disclosure policy, but there is an invitation. The Superhero Wallet
-repository's README carries a **Security** section — "If you discover a security vulnerability within
-this application, please get in touch with us. All security vulnerabilities will be promptly
-addressed" — without naming a channel to use. The channels the same repository does name are:
-
-| Channel | Where it comes from |
+| Channel | Use it for |
 | --- | --- |
-| `superherowallet@protonmail.com` | `CONTACT_EMAIL` in `superhero-wallet/src/constants/common.ts` |
-| A bug-report form at `form.typeform.com/to/Kk3Zyjdr` | `BUG_REPORT_URL`, linked from the wallet's More screen and About page |
-| The GitHub issue trackers | The README's contribution section |
-| Superhero chat — `chat.superhero.com`, `chat.superhero.chat`, `matrix.superhero.chat` | `SUPERHERO_CHAT_URLS` in the same file |
+| `superherowallet@protonmail.com` | Security reports — say only that you have something to report until someone answers |
+| [Bug report form](https://form.typeform.com/to/Kk3Zyjdr) | Non-sensitive wallet bugs; also linked from the wallet's More screen and About page |
+| `chat.superhero.com` | Community chat |
 
-A public issue tracker is the wrong place for an unfixed vulnerability. Use the email, and say only
-that you have something to report until someone answers.
+A public issue tracker is the wrong place for an unfixed vulnerability. Use the email.
 
-On the defensive side, the wallet repository does run **CodeQL** on `develop` and `master` and weekly
-on a schedule (`.github/workflows/codeql.yml`), and its Firefox review build ships a provenance
-bundle — commit SHA, lockfile, dependency tree and a deterministic file list — so a reviewer can
-reproduce the published bundle from source.
+## Related
 
-## Read more
-
-- [Backup & Recovery](/wallets/backup-and-recovery) — the other half of this page: what survives when something goes wrong.
+- [Backup & Recovery](/wallets/backup-and-recovery) — what survives when something goes wrong.
 - [The Built-In Wallet](/wallets/built-in-wallet) — the enforcement mechanisms referenced above, in detail.
 - [Managing AEX-9 Tokens](/wallets/aex9-tokens) — allowances in practice, including the DAO voting case.
 - [Agent Safety](/agents/safety) — the unattended-execution rules that pair with the agent-key section.
 - [Token Risks](/tokens/risks) — the market-side risks signing exposes you to.
-- [Superhero FAQ](https://superhero.com/faq) — the in-app risk answer, in the project's own words.
-
-## Open questions
-
-- **Does Superhero publish a dedicated security address, an expected response time, or a bounty?**
-  No. Seven repositories were checked — the web app, `superhero-api`, `superhero-wallet`, the agent
-  skill, `bcl-contracts`, `tipping-contract` and `aepp-governance` — and none contains a
-  `SECURITY.md`, a `security.txt`, a dedicated address or a bounty programme. The wallet's README
-  asks you to "get in touch with us" and stops there; the only address anywhere is the general
-  contact mailbox listed above. Closing this means Superhero publishing a `SECURITY.md` naming an
-  address and a disclosure timeline. Until then, use the email and see
-  [Support](/resources/support).
-- **Will the BCL contracts be audited?** The headers say they have not been, and no report exists in
-  any repository. A published audit naming a firm, a date and a commit hash would close this;
-  nothing weaker should. Ask on
-  [the issue tracker](https://github.com/superhero-com/superhero/issues).
+- [Support](/resources/support) — every reporting route.

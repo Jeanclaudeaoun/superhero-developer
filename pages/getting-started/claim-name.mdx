@@ -135,20 +135,20 @@ characters or fewer goes to auction, and a bid must beat the standing one by a r
 Tick **Auto extend** on a name and Superhero Wallet renews it for you: on every new block it checks
 your names and sends a `NameUpdateTx` for any that is auto-extending, unexpired, and within
 **17,000 blocks** of its expiry height. The same window drives an **Expiring** badge in the names
-list, so the wallet warns you even without auto-extend.
+list.
 
-Two caveats: the wallet has to be running for the check to happen — it is a client-side timer, not
-a service — and each extension costs a transaction fee. superhero.com itself does not renew names or
-warn you about expiry.
+The wallet has to be running for the check to happen — it is a client-side timer, not a service —
+and each extension costs a transaction fee. superhero.com itself does not renew names or warn you
+about expiry.
 
 ## After you have one
 
 **Point it where you want.** Registration sets the `account_pubkey` pointer to your address. Repoint
-it later with `update`, which preserves existing pointers rather than replacing them. Superhero
-Wallet's *Set pointer* control does the same thing with a form.
+it later with `update`, which preserves existing pointers, or with Superhero Wallet's *Set pointer*
+control.
 
-**Use it as your display name.** A `.chain` name can be your profile's display source, so it appears
-instead of your address across the app. You must own one before you can select that option.
+**Use it as your display name.** A `.chain` name you own can be your profile's display source, so
+it appears instead of your address across the app.
 
 **Keep it alive.** AENS names have a time to live measured in blocks and expire if not extended. Use
 `extend` before the expiry height, which `available` reports as `expires_at_height` — or hold the

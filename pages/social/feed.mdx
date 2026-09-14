@@ -90,11 +90,8 @@ does not outrank a younger dead one.
 Eight of the ten are reader-scalable. Each accepts `low`, `med` or `high`, which multiply that
 weight by **0.6, 1.0 and 1.5** respectively. `med` is the default and the client omits it, so a
 request carries only the signals you changed. In the app these are the **Customize** controls
-next to the sort selector, with a reset that clears every override.
-
-The multipliers scale the weights rather than replacing them, so `high` on every signal is the
-same ranking with every term multiplied by 1.5 — the order does not change. Scaling is only
-meaningful when you move signals relative to each other.
+next to the sort selector. Because the multipliers scale the weights, `high` on every signal
+leaves the order unchanged; scaling only matters relative to other signals.
 
 ### Where each input comes from
 
@@ -125,10 +122,9 @@ capped twice:
   the read counts.
 - **At scoring time**, the counted volume is clamped to
   `100 × (1 + comments + tipsCount + uniqueTippers)` before the logarithm, so passive traffic
-  alone cannot outvote real engagement indefinitely.
+  alone cannot outvote real engagement.
 
-Reads are stored per `(post_id, date)`. Nothing beyond an IP and a User-Agent is collected;
-there is no per-account read history.
+Reads are stored per `(post_id, date)`; there is no per-account read history.
 
 ### Content quality
 
@@ -144,12 +140,9 @@ quality      = 0.6 * lengthScore + 0.2 * alnumRatio + 0.2 * (1 - emojiRatio)
 if len < 10 and emojiRatio > 0.5:  quality = quality * 0.25
 ```
 
-The term rewards enough text, a healthy letter-and-digit ratio and low emoji saturation, and
-gives a short emoji-only post a 75% cut. Length is counted in code points rather than UTF-16
-units because emoji are surrogate pairs; the alphanumeric class covers every script, so a
-wholly Chinese, Arabic or Cyrillic post is not penalised against an equivalent Latin one.
-
-Its weight, 0.3, is the smallest in the table: it is an anti-spam tiebreaker, not a quality
+Length is counted in code points so emoji (surrogate pairs) are not double-counted, and the
+alphanumeric class covers every script, so a wholly Chinese, Arabic or Cyrillic post is not
+penalised against a Latin one. At weight 0.3 the term is an anti-spam tiebreaker, not a quality
 ranking.
 
 ### Freshness, staleness and the two shuffles
@@ -166,17 +159,15 @@ After scoring, each page is **reranked for author diversity**: candidates are ov
 there are not enough unique authors to fill the page.
 
 The app then applies a second, client-side Fisher-Yates shuffle to each popular page, seeded
-per session, so the order is stable while you scroll but different on your next visit. Between
-that and the server's daily jitter, two readers — or two visits — will not see the same
-sequence.
+per session, so the order is stable while you scroll but different on your next visit.
 
 ### Caching
 
 The default (unpersonalized) ranking lives in the Redis sorted set `popular:all`, refreshed by
-a cron every 10 minutes behind a `SET NX` lock so multiple app instances do not recompute in
-parallel, with a 1,800-second TTL. A cold key triggers a lazy recompute, and the request in
-flight falls back to recent posts meanwhile. **Any** weight override bypasses the cache and
-scores the candidate pool live, which is why a customized feed is slower than the default one.
+a cron every 10 minutes behind a `SET NX` lock, with a 1,800-second TTL. A cold key triggers a
+lazy recompute while the request in flight falls back to recent posts. **Any** weight override
+bypasses the cache and scores the candidate pool live, so a customized feed is slower than the
+default one.
 
 If ranking fails outright, the endpoint returns recent posts with `meta.fallback: true` and a
 `meta.error` string rather than a `500`.
@@ -221,23 +212,20 @@ and `created_at`, plus a `slug` used for SEO links.
 ## What else is in the feed
 
 In latest mode the app runs a second infinite query over `GET /api/tokens` ordered by
-`created_at` and maps each new token sale into a feed item, then merges the two lists. Trade
-activity items appear the same way, so a brand-new community token shows up in the feed without
-anyone posting about it.
+`created_at`, maps each new token sale and trade into a feed item, and merges the two lists —
+so a brand-new community token shows up in the feed without anyone posting about it.
 
 The API's token socket emits two channels, `token-updated` and `token-history` — see
 [WebSocket API](/api-reference/websocket). Posts are not pushed over a socket: the feed
-refetches on window focus and treats data as fresh for 10 seconds, so a new post from someone
-else appears on the next refetch. Your own new post is the exception: the composer
-optimistically inserts it at the top of the latest-feed cache before the indexer has seen it —
-see [Posting](/social/posting).
+refetches on window focus and treats data as fresh for 10 seconds. Your own new post is the
+exception — the composer inserts it optimistically before the indexer has seen it; see
+[Posting](/social/posting).
 
 ## When popular runs out
 
 The popular feed ranks at most 10,000 candidates. When it is exhausted, or when the first page
-comes back with fewer than 10 items, the app appends latest posts below, de-duplicating against
-what popular already returned. A reader scrolling long enough crosses from ranked content into
-chronological content without a visible seam.
+comes back with fewer than 10 items, the app appends latest posts below, de-duplicated against
+what popular already returned.
 
 ## Topic feeds
 

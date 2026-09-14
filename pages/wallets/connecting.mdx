@@ -45,11 +45,10 @@ Detection is time-boxed, and the window depends on the surface:
 | Mobile or Safari, not framed in a wallet | 100 ms |
 | Silent reconnect after a page reload | 15 seconds |
 
-The mobile window is short on purpose: extensions do not exist there, so the app fails fast to the
+The mobile window is short because extensions do not exist there, so the app fails fast to the
 deep-link path. The reconnect window is long because the extension's content script can be
-injected several seconds after the app has booted, and re-announces itself periodically.
-
-Concurrent scans are de-duplicated — a second connect attempt joins the scan already in flight.
+injected several seconds after the app has booted; the extension re-announces itself to every
+connected page every **three seconds**, so it only has to be there within the window, not at boot.
 
 ## The deep-link path
 
@@ -85,12 +84,11 @@ whose only job is to accept the wallet's result and hand it to whichever tab ask
 | `status` | `completed` marks the queue entry done; completed with neither result present is recorded as cancelled |
 | `returnUrl` | Where to send the user afterwards — **same-origin only**; anything else falls back to `/` |
 
-The route writes the result into the shared transaction queue and to local storage, then tries to
-hand off over a broadcast channel to the originating tab. If that tab acknowledges within 1.5
-seconds, this window closes (or navigates to the return path). If nothing acknowledges — Android
-Chrome sometimes opens the callback in a temporary tab while the original is still alive — the
-queue page completes the request itself for message-signing flows, then invalidates the account
-and profile caches so the result shows up without a manual refresh.
+The route writes the result into the shared transaction queue, then hands off over a broadcast
+channel to the originating tab. If that tab acknowledges within 1.5 seconds, this window closes
+(or navigates to the return path). If nothing acknowledges — Android Chrome sometimes opens the
+callback in a temporary tab — the queue page completes message-signing requests itself and
+refreshes the account and profile caches.
 
 Message-signing requests are the ones that travel this way: profile updates, `.chain` name claims,
 and the identity-link proofs for X, bio, website and preferred AENS name. Each is verified against
@@ -169,13 +167,6 @@ Two more guards:
 
 **An æpp cannot make Superhero Wallet switch networks.** A network mismatch is only fixable by
 you, in the wallet.
-
-### Why reconnecting often just works
-
-In the extension, the wallet re-announces itself to every connected page every **three seconds**,
-and the iframe transport does the same on the same interval. That is what makes superhero.com's
-15-second silent reconnect window land: the wallet does not need to be there at boot, only within
-the window.
 
 ## Switching accounts
 

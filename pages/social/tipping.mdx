@@ -63,29 +63,24 @@ Two things follow:
 
 ## Tip from the app
 
-The tip button sits on every post in the feed and on the post page. It shows the post's current
-total in AE when there is one, and the word Tip when there is not.
+The tip button sits on every post in the feed and on the post page, showing the post's current
+total in AE.
 
 1. Click Tip on a post. The modal opens with the recipient resolved to the author's display
    name.
 2. Enter an amount, or use a quick amount: 1, 10, 100 or 500 AE.
-3. Confirm in your wallet. The modal closes before the wallet opens so the two do not stack.
+3. Confirm in your wallet.
 
-The button then shows Sending, and Tipped once the transaction returns. Your balance is checked
-client-side before the send, so an amount above your balance disables the button.
+The button shows Sending, then Tipped once the transaction returns. An amount above your
+balance disables the button.
 
 ### Why the total takes a moment
 
 The displayed total comes from the indexer, which has to see the transaction confirm. The app
-bridges the gap:
-
-- It optimistically adds your amount to the cached total immediately.
-- It then polls `GET /api/tips/posts/{postId}/summary` — 5 seconds after the send, then every
-  3 seconds for up to 18 more attempts, roughly a minute in total.
-- It stops as soon as the backend total reaches or exceeds the expected value.
-
-If the minute elapses without the backend catching up, the app does a final refetch and leaves
-the real value in place. The optimistic bump is display only.
+adds your amount to the cached total immediately, then polls
+`GET /api/tips/posts/{postId}/summary` — 5 seconds after the send, then every 3 seconds for up
+to 18 more attempts, roughly a minute — until the backend total reaches the expected value. If
+the minute elapses, the app does a final refetch and leaves the real value in place.
 
 ## Read tip totals
 
@@ -110,9 +105,9 @@ See [The Feed](/social/feed).
 
 ## Tipping an address that has never used Superhero
 
-There is nothing to claim. The recipient is an æternity address, and an address exists whether
-or not anyone has ever opened it in a wallet. A tip simply increases that address's balance;
-if the key is lost, so is the AE. There is no pending-tip pool and no reclaim path.
+The recipient is an æternity address, which exists whether or not anyone has opened it in a
+wallet. A tip increases that address's balance; if the key is lost, so is the AE. There is no
+pending-tip pool and no reclaim path.
 
 ## Tips and notifications
 

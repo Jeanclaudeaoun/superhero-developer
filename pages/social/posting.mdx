@@ -71,8 +71,7 @@ a human-readable slug the API generates for SEO. The resolver at `/post/:slug` t
 2. If the key is numeric or already ends in `_v3`, retry with `_v3` appended.
 3. Fall back to `GET /api/posts?search=…&limit=1&page=1` and fetch by the returned `id`.
 
-Write the suffix when you call the API and drop it when you build a URL, and the round trip
-works from either direction.
+Write the suffix when you call the API and drop it when you build a URL.
 
 The slug is derived once, at index time, from the post's own text:
 
@@ -85,9 +84,8 @@ base = content.toLowerCase()
 slug = (base ? base + '-' : '') + <the numeric part of the id>
 ```
 
-So `"Hello, æternity!"` as post `3903_v3` becomes `hello-æternity-3903`. Letters and digits in
-any script survive, and the id suffix makes the slug unique even when two posts normalise
-identically.
+So `"Hello, æternity!"` as post `3903_v3` becomes `hello-æternity-3903`. The id suffix keeps
+the slug unique even when two posts normalise identically.
 
 ## Content encoding
 
@@ -101,11 +99,9 @@ renderer agree on; the contract does not enforce any of it.
 | Token display envelope | `#SYMBOL{mode=advanced}` | An optional suffix asking for a richer rendering. The symbol is never modified. |
 | Comment marker | `comment:<parent post id>` | First entry in `media`, marking the post as a reply. |
 
-The account-mention macro is a pure client convention: the API does not index raw `ak_`
-mentions, and a bare address in the text renders as a plain link. The token-tag envelope is
-permissive to write and strict to read — an unparseable payload falls back to the plain tag
-rather than rendering as text. See [Hashtags & Topics](/social/hashtags-and-topics) for the
-envelope's option grammar.
+The API does not index raw `ak_` mentions; a bare address in the text renders as a plain link.
+An unparseable envelope payload falls back to the plain tag. See
+[Hashtags & Topics](/social/hashtags-and-topics) for the envelope's option grammar.
 
 ## Limits
 
@@ -122,16 +118,11 @@ Limits are enforced at three layers:
 | Editing | Not possible | The contract has no update entrypoint |
 | Deletion | Not possible | The contract has no delete entrypoint |
 
-The 280-character limit is a client-side constant. A post written through the SDK or the CLI is
-not bound by it, but the copy the API serves is normalised on the way in:
-
-- trimmed;
-- CRLF converted to LF;
-- three or more consecutive newlines collapsed to two;
-- truncated to 5,000 characters.
-
-A 6,000-character post is on chain in full and truncated everywhere a reader will see it. Read
-it back from the contract if you need the original.
+The 280-character limit is a client-side constant; a post written through the SDK or the CLI is
+not bound by it. The copy the API serves is normalised on the way in — trimmed, CRLF converted
+to LF, three or more consecutive newlines collapsed to two, truncated to 5,000 characters. A
+6,000-character post is on chain in full and truncated everywhere a reader sees it; read it
+back from the contract if you need the original.
 
 ### What counts as a media entry
 
@@ -141,13 +132,10 @@ an `http:` or `https:` scheme, and must either end in `.jpg`, `.jpeg`, `.png`, `
 `vimeo.com` (or a subdomain of one). Everything else is dropped from the indexed `media` array,
 and only the first five survivors are kept.
 
-A comment's `comment:3903_v3` marker is therefore never in the API's `media` field even though
-it is the first entry on chain: it is not a URL. The `tx_args` field still carries the raw
-list, which is where the client's parser looks.
-
-If any raw media entry contains the substring `hidden`, the indexer sets `is_hidden = true` on
-the post, which removes it from the feeds and from popular ranking. It is a flag an author
-applies to their own post — see [Moderation](/social/moderation).
+A comment's `comment:3903_v3` marker is therefore never in the API's `media` field; `tx_args`
+still carries the raw list. If any raw media entry contains the substring `hidden`, the indexer
+sets `is_hidden = true` on the post, removing it from the feeds and from popular ranking — see
+[Moderation](/social/moderation).
 
 ## Posting from the app
 
@@ -162,8 +150,7 @@ the composer requires that token's hashtag before the Post button enables. On su
 5. Suffixes the returned id with `_v3`, optimistically inserts the post into the feed cache,
    and reconciles against `GET /api/posts/` once the backend has indexed it.
 
-The optimistic insert is why a new post appears instantly. If the backend returns `404` on the
-first fetch, the app keeps its optimistic copy and retries.
+If the backend returns `404` on the first fetch, the app keeps its optimistic copy and retries.
 
 ## Posting from the command line
 
@@ -221,9 +208,9 @@ The ACI ships with the agent skill at `contracts/Tipping_v3.aci.json`.
 
 ## Cost
 
-A post costs roughly **0.00001 AE** in gas. It is a single stateful contract call with no
-payable amount, so the cost is gas only. Treat the figure as an order of magnitude: gas price
-and the size of the stored string both move it.
+A post costs roughly **0.00001 AE** in gas — a single stateful contract call with no payable
+amount. Treat the figure as an order of magnitude: gas price and the size of the stored string
+both move it.
 
 ## Permanence
 

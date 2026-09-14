@@ -82,53 +82,52 @@ over AEX-2 instead; see [Connecting a Wallet](/wallets/connecting).
 
 ## Pick by who you are
 
-### Trying Superhero for the first time, on a phone
+### First time, on a phone
 
-Use the **Superhero app's built-in wallet**, or install the **Superhero Wallet mobile app**. The
-built-in wallet is the shortest path: tap "Continue with passkey", approve with Face ID or a
+Use the **Superhero app's built-in wallet**: tap "Continue with passkey", approve with Face ID or a
 fingerprint, and you have an account. Make sure your passkey syncs — on a passkey-created wallet
-the passkey *is* your backup, and there is no phrase export screen.
+the passkey *is* your backup, and there is no phrase export screen. Or install the **Superhero
+Wallet mobile app**.
 
-### Trying Superhero for the first time, on a desktop
+### First time, on a desktop
 
-Install the **browser extension**. Desktop web signing needs it; a desktop browser tab does not
-install the in-page signer. The extension also gives you the multi-chain wallet, an address book
-and `.chain` name management in one place.
+Install the **browser extension**. A desktop browser tab does not install the in-page signer, so
+desktop signing needs it. The extension also gives you the multi-chain wallet, an address book and
+`.chain` name management in one place.
 
 ### Trading actively and holding real value
 
 Use the **extension** (desktop) or the **mobile app**, with a written seed phrase stored offline in
-two places. You want a wallet whose backup is portable and whose storage a browser cannot evict.
+two places. You want a portable backup and storage a browser cannot evict.
 
-### Trying the app without installing anything
+### Nothing to install
 
 Use the **built-in wallet** created from a passkey, or the **web wallet** at
-`wallet.superhero.com`. Both work with zero install; read [The Built-In Wallet](/wallets/built-in-wallet)
-and [Web Wallet](/wallets/web-wallet) first.
+`wallet.superhero.com`. Read [The Built-In Wallet](/wallets/built-in-wallet) and
+[Web Wallet](/wallets/web-wallet) first.
 
-### Keeping the key on a hardware device
+### A hardware device
 
 Use the **extension on a Chromium browser** or the **hosted web wallet**, and import your Ledger's
-æternity accounts. If your offline device is an AirGap Vault, any of the three Superhero Wallet
-surfaces pairs with it. Neither option exists in the built-in wallet.
+æternity accounts. An AirGap Vault pairs with any of the three Superhero Wallet surfaces. Neither
+option exists in the built-in wallet.
 
-### Building or running an agent
+### An agent
 
 Use a **raw key in an environment variable**, in a dedicated account funded with a capped amount.
-Every other option requires a human to approve each signature. Generate one with:
+Every other option requires a human to approve each signature.
 
 ```bash
 node scripts/superhero-wallet.mjs generate
 export AE_PRIVATE_KEY=<the_key_it_printed>
 ```
 
-Then read [Agent Safety](/agents/safety) and [Wallet Security](/wallets/security) before funding it.
+Read [Agent Safety](/agents/safety) and [Wallet Security](/wallets/security) before funding it.
 
 ### You already have an æternity account
 
 Connect it. Any of the three Superhero Wallet surfaces imports your existing seed phrase, and
-superhero.com connects to it. In a browser tab, the built-in wallet does not offer phrase import —
-Connect is the path when the key already lives somewhere.
+superhero.com connects to it. In a browser tab the built-in wallet does not offer phrase import.
 
 ## What actually differs: recovery
 

@@ -231,10 +231,9 @@ total_amount_ae                   sum of amount as inviter, in AE
 total_received_invitation_count   registered as invitee
 ```
 
-An **invitee node carries only `total_received_invitation_count`**; its other five counters are
-0, even when that address is itself an inviter elsewhere. To walk a chain more than one level
-deep, look the invitee's address up as a `sender_address` in the same `items` array — the
-structure is a flat list of one-level fans, not a nested tree.
+An **invitee node carries only `total_received_invitation_count`**; its other counters are 0
+even when that address is itself an inviter. To walk deeper, look the invitee's address up as a
+`sender_address` in the same `items` array — the structure is a flat list of one-level fans.
 
 `meta` carries `unique_inviters`, `unique_invitees`, `total_registered`, `total_redeemed`,
 `total_revoked` and `total_amount_ae`.

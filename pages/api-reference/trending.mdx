@@ -58,11 +58,10 @@ normalises the path parameter the same way ingest does, so `/superHero` finds `S
 
 ### `score` and `source`
 
-Tag scores are supplied by the provider that posts them; the API applies no normalisation, cap or
-rescaling, and there is no documented range. Because each ingest replaces the whole table, every
-score in a response comes from one provider on one scale — so `score` is a ranking key within a
-response, not a quantity to compare across time or attach units to. `source` is the `provider`
-string as sent.
+Tag scores are supplied by the provider that posts them, with no normalisation, cap or rescaling
+and no documented range. Each ingest replaces the whole table, so every score in a response comes
+from one provider on one scale: treat `score` as a ranking key within a response, not a quantity
+to compare across time. `source` is the `provider` string as sent.
 
 ### Normalisation
 
@@ -77,8 +76,8 @@ collapse runs of "-" and trim leading/trailing "-"
 
 So `CamelCase` becomes `CAMEL-CASE`, `dog` plus an emoji becomes `DOG`, `привет` becomes
 `ПРИВЕТ`, and `!!!` becomes the empty string, which ingest skips with an error entry. Non-Latin
-scripts survive so that a tag comes out equal to a token name in the CHINESE, ARABIC or RUSSIAN
-collections. See [Collections and naming](/tokens/collections-and-naming).
+scripts survive so a tag matches token names in the CHINESE, ARABIC and RUSSIAN collections
+(see [Collections and naming](/tokens/collections-and-naming)).
 
 ### `POST /api/trending-tags`
 
@@ -104,17 +103,15 @@ table**. The response is a summary, not the stored rows:
 
 ## From a tag to a token
 
-Three routes, in order of cost:
-
-1. **Read the nested `token` off the tag row.** The list endpoint joins it on
-   `token.name = trending_tag.tag`. Free, but only on the list.
+1. **Read the nested `token` off the tag row** — the list endpoint joins it on
+   `token.name = trending_tag.tag`.
 2. **Look the name up directly.** `GET /api/tokens/{name}` resolves a token by name and 404s
    when none exists.
 3. **Search.** `GET /api/tokens?search={tag}` matches on name, for partial cases.
 
-Posts go the other way for free: every `PostDto` carries `trend_mentions`, which resolves each
-`#hashtag` in the body to a `sale_address`, its `collection_info` and a `performance` summary.
-See [Posts](/api-reference/posts).
+Posts go the other way for free: every `PostDto` carries `trend_mentions`, resolving each
+`#hashtag` to a `sale_address`, `collection_info` and `performance` summary. See
+[Posts](/api-reference/posts).
 
 ## The trending-score formula
 
@@ -152,13 +149,13 @@ trending_score = round(pre_decay * freshness, 6)
 
 Every weight set sums to 1 and every `normalized(...)` term lies in `[0, 1]`, so `pre_decay`
 lies in `[0, 1]`; `freshness` is at most 1 at zero age and falls monotonically.
-**`trending_score` is a decimal in `[0, 1]`, rounded to six places.** A score of 0 means no
-activity in the window.
+**`trending_score` is a decimal in `[0, 1]`, rounded to six places.** 0 means no activity in
+the window.
 
-**It is comparable across tokens.** The caps, weights and decay constants are shared by every
-token, and nothing in the calculation depends on what other tokens are doing. It is *not*
-comparable across time without care: the same activity scores lower an hour later, because
-`age_hours` is measured from the most recent qualifying event.
+The caps, weights and decay constants are shared by every token and nothing depends on other
+tokens, so the score is **comparable across tokens**. It is not comparable across time: the same
+activity scores lower an hour later, because `age_hours` runs from the most recent qualifying
+event.
 
 ### Inputs
 
@@ -177,11 +174,9 @@ The window is the **last 24 hours**.
 | `tips_amount_ae` | 250 | 0.03 | Sum of those tips, in AE |
 | `reads` | 200 | 0.06 | Daily read counts for those posts |
 
-Trading is worth 0.35 of the total and social 0.65.
-
-Attribution is by direct `#SYMBOL` mention: a top-level post that mentions the symbol becomes
-the root of a token thread, and every non-hidden comment, tip and read anywhere in that thread
-counts for the token, whether or not it repeats the hashtag.
+Trading is worth 0.35 of the total and social 0.65. Attribution is by direct `#SYMBOL` mention:
+a top-level post mentioning the symbol roots a token thread, and every non-hidden comment, tip
+and read in that thread counts for the token whether or not it repeats the hashtag.
 
 ### When it is recomputed
 

@@ -34,14 +34,13 @@ The social profile is live at `https://superhero.com/users/` followed by an `ak_
 The account aggregate from `GET /api/accounts/{address}` carries `address`, `bio`,
 `chain_name`, `chain_name_updated_at`, an embedded `profile`, `public_name`, `holdings_count`,
 and a `links` object keyed by the `AddressLink` provider ids — `x`, `nostr`, `bio`, `site` and
-`prefaens`. The `links` object is authoritative: the client reads it first and treats the flat
-fields as fallbacks for older records.
+`prefaens`. The `links` object is authoritative; the flat fields are fallbacks for older
+records.
 
-The endpoint also keeps the chain name fresh. If `chain_name_updated_at` is older than the
-staleness window, or has never been set, it re-reads the name from the middleware, returns the
-fresh value, and writes it back asynchronously. An hourly sweep covers accounts nobody is
-viewing, so a lapsed or transferred `.chain` name disappears from a profile within about an
-hour.
+If `chain_name_updated_at` is older than the staleness window, or has never been set, the
+endpoint re-reads the name from the middleware, returns the fresh value, and writes it back
+asynchronously. An hourly sweep covers accounts nobody is viewing, so a lapsed or transferred
+`.chain` name disappears from a profile within about an hour.
 
 ## The tabs
 
@@ -70,10 +69,8 @@ All four datasets are prefetched when the page loads. The feed tab merges posts 
 | Posts and comments | `Tipping` v3 contract, indexed by the API |
 | Balances, portfolio history, leaderboard stats | Computed by the API from chain data |
 
-Every field a user controls is written behind a wallet signature they produced. The
-transaction carrying that signature is submitted by Superhero's provider wallet, the only
-account permitted to write those provider namespaces. See
-[AddressLink](/identity/profile-registry).
+Every field a user controls is written behind their wallet signature; the transaction is
+submitted by Superhero's provider wallet. See [AddressLink](/identity/profile-registry).
 
 ## Editing your own profile
 
@@ -89,12 +86,11 @@ operations:
 | Nostr key | The same pair under `/api/address-links/nostr/`, with a signed kind-22242 event as the extra proof |
 
 Each link has a matching unlink: `/unclaim` returns a message and nonce, you sign it, and
-`/unclaim/submit` relays the removal. Because the operations are independent, the editor
-reloads its state after saving rather than assuming the form is authoritative.
+`/unclaim/submit` relays the removal. The editor reloads its state after each operation.
 
 Every claim reads the contract's own `get_nonce(address)`, and the nonce advances on each link
-or unlink. If two devices claim at once, the second submit fails with a nonce mismatch and has
-to restart from claim.
+or unlink. If two devices claim at once, the second submit fails with a nonce mismatch and
+restarts from claim.
 
 Fullname, avatar and the legacy username are read-only.
 

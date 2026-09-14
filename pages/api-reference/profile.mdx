@@ -127,12 +127,11 @@ curl -s -X POST "https://api.superhero.com/api/address-links/bio/claim" \
 | `value` | string | The normalised value the server will record |
 | `verification_token` | string | Server-side proof that this claim was issued. **X only** |
 
-`nonce` is a number: it is the contract's `get_nonce` counter for the address, and it advances
-after a successful submit. Sending it as a string (`"42"`) is a 400. It is different in kind
-from the string `nonce` in the chain-name and X-reward challenge flows, which is a server-issued
-random challenge.
+`nonce` is the `AddressLink` contract's `get_nonce` counter for the address; it advances after
+a successful submit, and sending it as a string (`"42"`) is a 400. The chain-name and X-reward
+flows use a different, server-issued string `nonce`.
 
-The message the wallet signs is a short deterministic string:
+The message the wallet signs is deterministic:
 
 ```text
 link:<address>:<provider>:<value>:<nonce>
@@ -177,9 +176,9 @@ The X value comes from an OAuth round trip rather than being typed. Two accepted
 ```
 
 The second is the PKCE form: redirect the user to X, receive the code at your redirect URI, and
-post the code, the PKCE verifier and the redirect URI. The backend exchanges the code for a
-token itself. From there the flow is identical — claim returns `message` plus
-`verification_token`, the wallet signs `message`, `submit` returns a `txHash`.
+post the code, verifier and redirect URI; the backend exchanges the code itself. From there the
+flow is identical — claim returns `message` plus `verification_token`, the wallet signs it,
+`submit` returns a `txHash`.
 
 ```text
 POST /api/address-links/x/claim            { address, x_access_token }  or  { address, x_code, x_code_verifier, x_redirect_uri }
@@ -247,16 +246,12 @@ curl -s "https://api.superhero.com/api/profile/ak_YOUR_ADDRESS/x-posting-reward"
 The status payload carries `onboarding_status` (`not_started`, `pending`, `paid` or `failed`),
 `qualified_posts_count`, `tx_hash`, `next_check_allowed_at`, `x_username`,
 `per_post_total_paid_count`, `current_streak_days`, `tier_amount_ae`, `follower_count`,
-`referral_link`, and an `error` string explaining why a reward was not sent on an otherwise
-successful 200 — below the follower minimum, the X identity already rewarded, or the payout
-failed.
+`referral_link`, and an `error` string explaining why a reward was not sent on a 200 — below the
+follower minimum, the X identity already rewarded, or the payout failed.
 
 The recheck and referral-link endpoints take the same signed proof body: `challenge_nonce`,
-`challenge_expires_at`, `signature_hex`.
-
-**The recheck is capped at once per 24 hours.** Exceeding it returns `429` with a body carrying
-`nextAllowedAt`, and the scan is skipped rather than queued. It is not a transient failure to
-retry.
+`challenge_expires_at`, `signature_hex`. **The recheck is capped at once per 24 hours**;
+exceeding it returns `429` with `nextAllowedAt` in the body, and the scan is skipped, not queued.
 
 ## Deprecated: the legacy profile update
 

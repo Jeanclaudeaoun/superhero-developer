@@ -44,16 +44,15 @@ curl -s "https://api.superhero.com/api/transactions?token_address=ct_YOUR_SALE_A
 
 Response is the standard `items` plus `meta` envelope.
 
-Results are ordered by `created_at` descending, and that is the only order available: there is
-no `order_by`, `order_direction`, `from_date` or `to_date` on this endpoint (unlike
-`GET /api/dex/transactions`). Unrecognised query keys are ignored. To bound a date range, page
-from the top and stop when `created_at` passes your cutoff, or use
+Results are ordered by `created_at` descending, and that is the only order: there is no
+`order_by`, `order_direction`, `from_date` or `to_date` (unrecognised keys are ignored). To bound
+a date range, page from the top and stop when `created_at` passes your cutoff, or use
 `GET /api/tokens/{address}/transactions`, which takes `start_date` and `end_date`.
 
-With no `token_address`, the list is restricted to tokens from the **current** community
-factory. A `token_address` that cannot be resolved returns an empty page rather than a 404.
-`account_address` also adds `token.name`, `token.symbol`, `token.address`, `token.sale_address`
-and `token.collection` to each row even without `includes=token`.
+Without `token_address` the list is restricted to tokens from the **current** community factory.
+An unresolvable `token_address` returns an empty page, not a 404. `account_address` also adds
+`token.name`, `token.symbol`, `token.address`, `token.sale_address` and `token.collection` to
+each row even without `includes=token`.
 
 ## Trade row
 
@@ -98,13 +97,13 @@ Nothing on a trade row needs dividing by 1e18, even though the field names repea
 | `sell` | A sale back into the curve |
 | `create_community` | Token creation. Carries the creator's initial purchase, so it has a non-zero `volume` and `amount` and counts as a buy |
 
-Anything else — a DEX swap, an AE transfer, a governance vote — is never indexed into this
-table. Reverted transactions are skipped, so every row is a trade that succeeded.
+Nothing else — a DEX swap, an AE transfer, a governance vote — is indexed here, and reverted
+transactions are skipped, so every row is a trade that succeeded.
 
 **Treat `create_community` as a buy.** PnL, volume and trending all use
 `tx_type IN ('buy', 'create_community')` on the acquisition side and `tx_type = 'sell'` on the
-disposal side. A holdings calculation that only counts `buy` understates every creator's
-position by their founding purchase.
+disposal side; counting only `buy` understates every creator's position by their founding
+purchase.
 
 For the DEX's separate `tx_type` vocabulary, see [DEX API](/api-reference/dex#tx_type).
 
@@ -116,13 +115,10 @@ Takes the hash as a **query parameter**, not a path segment:
 curl -s "https://api.superhero.com/api/transactions/by-hash?tx_hash=th_YOUR_TX_HASH"
 ```
 
-Returns a single row, or 404 if that hash is not a Superhero trade. A malformed hash is a 400.
-
-On a miss, the handler fetches the transaction from the middleware and indexes it on the spot,
-returning the newly created row — so a trade the indexer has not caught up to yet can be pulled
-in by asking for it. Only if that also fails do you get the 404.
-
-The DEX equivalent takes the hash as a path segment: `GET /api/dex/transactions/{txHash}`.
+Returns a single row; a malformed hash is a 400. On a miss, the handler fetches the transaction
+from the middleware and indexes it on the spot, so a trade the indexer has not caught up to can
+be pulled in by asking for it; only if that also fails is it a 404. The DEX equivalent takes the
+hash as a path segment: `GET /api/dex/transactions/{txHash}`.
 
 ## `GET /api/tokens/{address}/transactions`
 

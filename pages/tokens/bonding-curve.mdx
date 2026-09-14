@@ -14,7 +14,7 @@ Superhero uses an **exponential** curve, implemented by the `BondingCurveExponen
 contract evaluates `e^x` as a bounded Taylor series in integer arithmetic — at most 100 terms, and
 stopping as soon as a term floors to zero — which is what `curve_type()` means when it returns
 `"TAYLOR_EXPONENTIAL_V1"`. The series agrees with the closed form below to within `4e-19 AE` at
-every supply on this page. The integer the contract returns is the price you are charged;
+every supply in the examples below. The integer the contract returns is the price you are charged;
 [Curve Parameters & Units](/tokens/curve-parameters) has a reference implementation that reproduces
 it exactly.
 
