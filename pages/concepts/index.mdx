@@ -1,18 +1,26 @@
 ---
 title: "Core Concepts"
-description: "The mental model behind Superhero: attention markets, on-chain social, community tokens and DAOs."
+description: "Attention is the most valuable thing on the internet, and the people who create it have never owned it. Here is how Superhero changes that."
 ---
 
 # Core Concepts
 
-Superhero is a social network whose posts live in a smart contract and whose topics are tradable
-markets. That is an unusual combination, and most of the confusion people have with the product
-comes from applying a mental model borrowed from either a social app or an exchange, when neither
-fits on its own. These pages build the model you need before the how-to guides make sense.
+You have been early before. A song, a meme, a project, a community — you saw it before it broke
+out, you told people, you helped it happen. Then the platform sold ads against the attention you
+created, and you got a badge.
 
-Read them in order if you are new. If you already know what a bonding curve is, start with
-[Where the Money Goes](/concepts/value-flow) — it is the page that answers the question people
-actually ask first.
+**Superhero is built on the idea that being early should be worth something.**
+
+So a post here belongs to the person who wrote it, not to a database someone else controls. A
+trending topic is not just a hashtag — it is a market you can back while it is still small, priced
+by nothing but how many people have arrived before you. And the fees that trading generates flow
+into a treasury the community votes on, instead of out to an advertiser.
+
+Attention, priced in the open, owned by the people who make it. That is the whole idea.
+
+These pages explain how it actually works underneath — including the sharp edges, because there
+are some. If you already know what a bonding curve is, skip ahead to
+[Where the Money Goes](/concepts/value-flow); it answers the question everyone asks first.
 
 ## In this section
 
@@ -26,9 +34,10 @@ actually ask first.
 | [Glossary](/concepts/glossary) | Every term used across this site, defined once, linked to the page that goes deeper. |
 | [FAQ](/concepts/faq) | The canonical user answers from superhero.com/faq, plus developer and agent questions. |
 
-## The short version
+## Three mechanisms, and you understand the whole thing
 
-Three mechanisms account for almost everything Superhero does.
+Strip away the interface and Superhero runs on three ideas. Almost every question about the
+product is really a question about one of them.
 
 **Posts are contract calls.** A post is a `post_without_tip` call on the `Tipping.aes` v3 contract.
 The author's address, the text and a list of media URLs are written into contract state and indexed

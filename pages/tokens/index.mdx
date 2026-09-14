@@ -5,12 +5,17 @@ description: "Community tokens, the exponential bonding curve that prices them, 
 
 # Tokens & Bonding Curves
 
-Every Superhero community token is an AEX-9 token minted and burned against an **exponential bonding
-curve**. There is no order book and no counterparty: you always trade against the curve, price is a
-pure function of supply, and the contract always holds enough reserve to buy the entire supply back.
+Anyone can turn a topic into a market. Type a name, and a few seconds later that idea has a token,
+a price, a chart and a treasury — no listing, no approval, no market maker.
 
-This section is written so that by the end of it you can launch a token, price a trade by hand, and
-explain where every fraction of the fee goes.
+The price comes from a curve rather than an order book. Every buy mints new tokens and nudges the
+price up; every sell burns them and moves it back down. So there is always a price, always
+liquidity, and no counterparty to find: you are trading with the contract itself, which holds
+enough reserve to buy the entire supply back. **Getting in early is not a metaphor here — it is
+arithmetic.**
+
+By the end of this section you will be able to launch a token, price a trade by hand, and say
+exactly where every fraction of the fee goes.
 
 ## The numbers to remember
 
