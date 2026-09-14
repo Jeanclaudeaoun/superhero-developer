@@ -45,6 +45,14 @@ The two Superhero codebases point at different mainnet nodes:
 | --- | --- | --- |
 | Web app (`src/config.ts`) | `https://mdw.wordcraft.fun` | `https://mdw.wordcraft.fun/mdw` |
 | Agent skill (`scripts/*.mjs`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw/v3` |
+| **Backend indexer** (`superhero-api/src/configs/network.ts`) | `https://mainnet.aeternity.io` | `https://mainnet.aeternity.io/mdw`, plus `wss://mainnet.aeternity.io/mdw/v2/websocket` |
+
+That third row is the one people get wrong. **`api.superhero.com` does not index through
+`mdw.wordcraft.fun`** — the string does not appear anywhere in the backend's source. The indexer
+reads the Foundation's public middleware, including its WebSocket feed for live transactions and key
+blocks, while your browser reads chain state through Superhero's own host. Both serve `ae_mainnet`,
+so they agree on what happened, but they are independent dependencies that can lag or fail
+independently.
 
 **They are the same API, on two different hosts.** Both expose the æternity node HTTP API at
 `/v3/...` and the middleware at `/mdw/v3/...`, which you can read off the call sites directly:
@@ -74,8 +82,10 @@ through one is visible through the other. What differs is who you depend on for 
 
 - **The web app depends on Superhero's own node**, so a Foundation outage does not take the app
   down, and Superhero can size the node for its own traffic.
-- **The agent skill depends on the Foundation's public node**, which needs no coordination with
-  Superhero ops but is a shared resource.
+- **The agent skill and the backend indexer depend on the Foundation's public node**, which needs no
+  coordination with Superhero ops but is a shared resource. A Foundation outage therefore does not
+  stop the browser reading the chain, but it does stop `api.superhero.com` ingesting new blocks —
+  which is why the app can show you a fresh on-chain balance while a feed or a chart goes stale.
 
 Two practical consequences:
 
