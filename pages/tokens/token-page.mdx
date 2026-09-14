@@ -1,33 +1,29 @@
 ---
 title: "Reading a Token Page"
-description: "Market cap, charts, holders and transactions — what each panel actually tells you, and what it does not."
+description: "Market cap, charts, holders and transactions — what each panel on a token page tells you, and how to read market cap on a bonding curve."
 ---
 
 # Reading a Token Page
 
-A token page at `/trends/tokens/NAME` puts five panels in front of you, and only two of them tell you
-anything about whether the token is worth buying. This page walks through each one, defines market
-cap precisely for a bonding-curve token — it is not what it looks like — and gives heuristics for
-reading the holders and transactions tabs.
-
-Open one at [superhero.com/trends/tokens](https://superhero.com/trends/tokens) and follow along.
+A token page at `/trends/tokens/NAME` puts five panels in front of you. Open one at
+[superhero.com/trends/tokens](https://superhero.com/trends/tokens) and follow along.
 
 ## The tabs
 
 | Tab | What it shows |
 | --- | --- |
-| Posts / Feed | The community's feed and chat room. Where the token's actual community lives, if it has one |
+| Posts / Feed | The community's feed and chat room. Where the token's community lives, if it has one |
 | Trade | The buy/sell card, the candlestick chart, and your position |
 | Info | Token summary: price, market cap, DAO balance, supply, creation date, every contract address |
 | Transactions | Recent buys and sells with timestamps and transaction hashes |
 | Holders | Top addresses and their balances |
 
-Trade, Transactions and Holders are disabled for a name that does not exist yet — the page doubles as
-the "this token has not been created" screen, with a Create Token call to action.
+Trade, Transactions and Holders are disabled for a name that does not exist yet — the page doubles
+as the "this token has not been created" screen, with a Create Token call to action.
 
 ## The Info tab
 
-The token summary is the one panel where every field is a hard fact rather than an interpretation:
+Every field in the token summary is a hard fact rather than an interpretation:
 
 | Field | Meaning |
 | --- | --- |
@@ -40,19 +36,16 @@ The token summary is the one panel where every field is a hard fact rather than 
 | Sale address | The bonding-curve sale contract — the handle for all trading |
 | Created by | The account that called `create_community` |
 
-The API record behind it carries more than the panel shows, and these are the fields worth reading if
-you are querying it yourself: `sell_price` (the spot sell price, 0.5% under `price`),
-`circulating_supply`, `rank`, `holders_count`, `tx_count`, `trending_score`,
+The API record behind it carries more than the panel shows: `sell_price` (the spot sell price, 0.5%
+under `price`), `circulating_supply`, `rank`, `holders_count`, `tx_count`, `trending_score`,
 `trending_score_update_at`, `unlisted`, and a `performance` object with `past_24h`, `past_7d`,
 `past_30d` and `all_time` sub-objects. See [Tokens API](/api-reference/tokens).
 
-`rank` is not computed live. It is a stored market-cap rank over listed tokens, refreshed by a cron
-every 5 minutes, and a token that has never been ranked sorts last rather than first — so a
-brand-new token does not briefly outrank everything.
+`rank` is a stored market-cap rank over listed tokens, refreshed every 5 minutes. A token that has
+never been ranked sorts last, so a brand-new token does not briefly outrank everything.
 
-`tx_count` is a plain `COUNT(*)` of indexed transaction rows for that sale address — **all-time, and
-including the `create_community` row**. It is recomputed and written back every time a new
-transaction for the token is persisted, so it tracks the feed closely rather than on a schedule. It
+`tx_count` is a count of indexed transaction rows for that sale address — **all-time, including the
+`create_community` row** — recomputed every time a new transaction for the token is persisted. It
 counts trades, not traders: compare it against `holders_count` to see whether a busy token is busy
 with many people or with one.
 
@@ -65,36 +58,33 @@ They come from different places and can legitimately disagree:
 | `total_supply` | `total_supply()` on the AEX-9 contract, read directly |
 | `circulating_supply` | æternity middleware's AEX-9 `event_supply`, tracked from the token's `Mint` / `Burn` / `Transfer` event log |
 
-`circulating_supply` is nullable because it is only present once the middleware has indexed the
-token's events; on a new token, or when the middleware is behind, it is `null`. The two should
-converge, and a persistent gap between them means the middleware's event log and the contract's own
-state have diverged — which is a middleware indexing problem, not a property of the token. Use
-`total_supply` for anything that has to be right, including the 10% DAO participation quorum.
+`circulating_supply` is `null` until the middleware has indexed the token's events — on a new
+token, or when the middleware is behind. The two converge; use `total_supply` for anything that has
+to be right, including the 10% DAO participation quorum.
 
-**DAO balance is the most under-read number on the page.** It is cumulative spread, so it is a direct
-measure of how much value has actually traded through this token since launch — much harder to fake
-than a price, and not resettable by a single large buy.
+**DAO balance is the most under-read number on the page.** It is cumulative spread, so it measures
+how much value has actually traded through the token since launch — much harder to fake than a
+price, and not resettable by a single large buy.
 
 ## Market cap, precisely
 
 Market cap for a bonding-curve token is **not** the amount of money in the token, and it is **not**
-what holders would receive if they all sold. The Superhero backend computes it as
+what holders would receive if they all sold. The backend computes it as
 
 ```text
 market_cap = total_supply × price
 ```
 
-in `superhero-api/src/tokens/tokens.service.ts`, where `price` is the sale contract's quote for one
-whole token and `total_supply` is read from the AEX-9 contract. The same product is stored on every
-transaction row, there taken from the `PriceChange` event's `next_price` — the unit price the trade
-left behind.
+where `price` is the sale contract's quote for one whole token and `total_supply` is read from the
+AEX-9 contract. The same product is stored on every transaction row, there taken from the
+`PriceChange` event's `next_price` — the unit price the trade left behind.
 
-Two wrinkles in that definition, neither of which changes the argument below:
+Two details of that definition:
 
 - **The unit price includes the 0.5% affiliation fee.** `TokenSale.price(count)` is the curve integral plus the fee, so `market_cap` is 0.5% above a pure curve valuation.
 - **It is a marginal price, priced for one token.** It is the cost of the *next* token, applied to every token already minted.
 
-So it is a rectangle, while the AE actually in the reserve is the area under the curve:
+So it is a rectangle, while the AE in the reserve is the area under the curve:
 
 ```text
 market cap    =  buy(S) × S                     ← a rectangle: today's price, every token
@@ -102,21 +92,20 @@ reserve paid  =  ∫ from 0 to S of buy(x) dx     ← the area under the curve
 redeemable    =  0.995 × that same integral     ← what selling everything would return
 ```
 
-On a rising convex curve the rectangle is always bigger than the area. Concretely:
+On a rising convex curve the rectangle is always bigger than the area:
 
 | Total supply | Market cap (AE) | AE ever paid in (AE) | Redeemable if everyone sold (AE) | Market cap overstates by |
 | --- | --- | --- | --- | --- |
 | 10,000,000 | 1,052.71 | 518.09 | 515.50 | 2.04× |
 | 100,000,000 | 171,838.20 | 71,838.18 | 71,478.99 | 2.40× |
 
-So a token showing a 1,000 AE market cap is backed by roughly 500 AE of real reserve, and the gap
-widens as the curve steepens. This is not a flaw or a trick — it is what "market cap" means for any
-asset whose price is marginal rather than average. It is just far more visible here, because the
-reserve is a number you can actually check on-chain rather than a matter of speculation.
+A token showing a 1,000 AE market cap is backed by roughly 500 AE of reserve, and the gap widens as
+the curve steepens. That is what "market cap" means for any asset whose price is marginal rather
+than average; it is just more visible here, because the reserve is a number you can check on-chain.
 
-Practical consequence: **market cap is a ranking signal, not a valuation.** The trending list defaults
-to sorting by it so that larger communities surface first, and for that job it is fine. Do not read it
-as money that exists.
+**Market cap is a ranking signal, not a valuation.** The trending list defaults to sorting by it so
+that larger communities surface first, and for that job it is fine. Do not read it as money that
+exists.
 
 ## The chart
 
@@ -132,15 +121,13 @@ The interval is passed to the API in **seconds** (300 for 5m, 86400 for D). The 
 to live transaction events, so the rightmost candle updates as trades land rather than waiting for a
 refetch.
 
-A caution specific to this market: on a thin token, a 5-minute candle chart is mostly noise. Two buys
-an hour apart produce a chart that looks like a trend. Widen the interval to D or W before drawing
-conclusions from shape.
+On a thin token, a 5-minute candle chart is mostly noise: two buys an hour apart produce a chart
+that looks like a trend. Widen the interval to D or W before drawing conclusions from shape.
 
 ### The `performance` object
 
-`past_24h`, `past_7d` and `past_30d` are computed by a materialised view
-(`token_performance_view`) refreshed every 5 minutes. Each is built from **trades inside a rolling
-window ending now** — not from a calendar boundary and not from a synthetic price:
+`past_24h`, `past_7d` and `past_30d` are refreshed every 5 minutes. Each is built from **trades
+inside a rolling window ending now** — not from a calendar boundary and not from a synthetic price:
 
 | Key | What it is |
 | --- | --- |
@@ -151,7 +138,7 @@ window ending now** — not from a calendar boundary and not from a synthetic pr
 | `trend` | `up`, `down` or flat, from the same comparison |
 | `high` / `low` and their dates | Highest and lowest `buy_price` in the window |
 
-Three consequences worth internalising before you read a change badge:
+Three consequences:
 
 - **The baseline is a trade, not a timestamp.** A "7-day change" on a token whose only two trades in the last week were four days ago spans four days, not seven. It is the change between the first and last trades *within* the window.
 - **A token that has not traded in the window has no object at all** — the fields are `null`, not zero.
@@ -162,7 +149,7 @@ Three consequences worth internalising before you read a change badge:
 Holders shows the top addresses and their balances. What to look for:
 
 - **Concentration.** If the top one or two addresses hold most of the supply, the price you see is set by whoever is smallest, and their exit would walk the curve down past everyone below them. Compare the top holder's balance against `total_supply`.
-- **The creator's share.** Pre-buys at creation happen at the very bottom of the curve — the first 437,000 tokens cost 1 AE. A creator holding a large share got them far cheaper than anyone buying now, and that asymmetry is the whole reason the curve is steep at the start.
+- **The creator's share.** Pre-buys at creation happen at the very bottom of the curve — the first 437,000 tokens cost 1 AE. A creator holding a large share got them far cheaper than anyone buying now; that asymmetry is why the curve is steep at the start.
 - **Holder count versus supply.** A high `holders_count` with a small supply is a community. A low holder count with a large supply is one person's position with a price attached.
 
 ## Reading the Transactions tab
@@ -171,11 +158,8 @@ Transactions lists recent buys and sells with amounts, unit prices, timestamps a
 hashes. Every hash links out to [aeScan](https://aescan.io), where you can verify it independently
 of Superhero's indexer.
 
-The heuristic the agent guides use, and it is a good one:
-
-> Many small buyers suggests organic momentum. One large buyer suggests a pump with higher exit risk.
-
-Two refinements worth adding:
+Many small buyers suggests organic momentum; one large buyer suggests a pump with higher exit risk.
+Two refinements:
 
 - **Look at the ratio of distinct accounts to transactions.** Twenty trades from three addresses is not twenty people.
 - **Look at what follows a spike.** A large buy with no follow-through is a position, not a trend; the curve holds its new price until someone sells, so an elevated price proves nothing about demand.
@@ -194,13 +178,11 @@ Before buying, in the order the page makes them available:
 5. **Your own slippage** — how big is your trade relative to `total_supply`? Check it against the table on [Fees & Slippage](/tokens/fees-and-slippage).
 6. **Price and market cap** — last, and with the caveat above firmly in mind.
 
-## Read more
+## Related
 
 - [Bonding Curves](/tokens/bonding-curve) — why the price on this page rises the way it does
 - [Transaction History](/tokens/transactions) — querying the same trade data outside the UI
 - [The Trending Score](/tokens/trending-score) — the other ranking signal on the trending list
 - [Portfolio & PnL](/tokens/portfolio) — the same numbers from your own side of the trade
 - [Tokens API](/api-reference/tokens) — the full record behind every field on this page
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list these pages hang off
-- [Trading leaderboard](https://superhero.com/trends/leaderboard) — who is actually making money, by realised PnL
-- [aeScan](https://aescan.io) — verify any address or transaction hash on this page independently
+- [aeScan](https://aescan.io) — verify any address or transaction hash independently

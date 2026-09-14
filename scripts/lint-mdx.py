@@ -32,7 +32,14 @@ FENCE = re.compile(r"^\s*```")
 INLINE_CODE = re.compile(r"`[^`\n]*`")
 JSX_OPEN = re.compile(r"<[A-Za-z/!]")
 LINK = re.compile(r"\]\((/[^)#\s]*)")
-IMPORT = re.compile(r"^\s*(import|export)\s")
+# Match real ESM statements only, so a prose line that happens to start with
+# "import accounts from a hardware wallet" or "export your seed phrase" passes.
+IMPORT = re.compile(
+    r"^\s*(?:"
+    r"import\s+(?:[\w*{].*?\bfrom\s+['\"]|['\"])"          # import x from '...' / import '...'
+    r"|export\s+(?:default|const|let|var|function|class|async|\{|\*)\b"
+    r")"
+)
 
 
 def mdx_files():

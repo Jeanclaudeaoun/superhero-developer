@@ -172,7 +172,7 @@ require(stake_percentage >= 10, "GREATER_10_PERCENT_STAKE_REQUIRED")
   yes votes give `(110 * 100) / 200 = 55` and pass; 109 give `54` and fail.
 - **Both comparisons are `>=`.** Exactly 55% and exactly 10% pass.
 
-The full precondition set for execution, in source order:
+The full precondition set for execution, in the order the contract checks them:
 
 | Gate | Abort string | Meaning |
 | --- | --- | --- |

@@ -1,14 +1,13 @@
 ---
 title: "Transaction History"
-description: "Query trades — yours, a token's, an account's, or the whole market — and verify any of them on-chain."
+description: "Query trades — yours, a token's, an account's, or the whole market — with the exact response fields, and verify any of them on-chain."
 ---
 
 # Transaction History
 
 Every buy and sell against a bonding curve is an on-chain contract call, indexed by Superhero and
-served through one endpoint with two filters. That makes trade history useful for three different
-jobs: checking your own fills, researching a token before you buy it, and watching a specific account.
-This page covers the CLI, the API and how to verify anything you find against the chain itself.
+served through one endpoint with two filters. Use it to check your own fills, research a token
+before you buy it, or watch a specific account.
 
 ## From the command line
 
@@ -29,8 +28,7 @@ node scripts/superhero-transactions.mjs activity ct_<sale_address> ak_<address> 
 | `activity` | token **and** account | Checking whether a specific whale is accumulating a specific token |
 
 Default `limit` is 20 and default `page` is 1 everywhere. `mine` needs `AE_PRIVATE_KEY` set, because
-it derives your address from the key; the other four take an address as an argument and need no key
-at all.
+it derives your address from the key; the other four take an address as an argument and need no key.
 
 ## The API
 
@@ -56,12 +54,7 @@ GET /api/transactions/by-hash?tx_hash=th_...
 
 ## Fields
 
-**The rows are serialised from the backend's `Transaction` entity, not from `TransactionDto`.** The
-list endpoint returns `paginate<Transaction>(...)` directly, so the entity's column names are what
-arrives on the wire. `TransactionDto` is a Swagger annotation used to describe the response shape,
-and it does not match it — where the two disagree, the entity wins.
-
-The columns, from `superhero-api/src/transactions/entities/transaction.entity.ts`:
+Each row carries these fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -77,19 +70,21 @@ The columns, from `superhero-api/src/transactions/entities/transaction.entity.ts
 | `unit_price` | price object | `amount / volume` — the average price you actually got |
 | `previous_buy_price` | price object | Unit price before this trade |
 | `buy_price` | price object | Unit price after this trade |
-| `sell_price` | price object | Legacy, marked for removal in the source |
+| `sell_price` | price object | Legacy field; do not rely on it |
 | `total_supply` | numeric string | Token supply after this trade, in whole tokens |
 | `market_cap` | price object | `buy_price × total_supply` at the time of the trade |
 | `created_at` | timestamp | Block time |
 
-Every "price object" is a `PriceDto` with `ae`, `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp` and
-`xau` keys, so you can read a trade in any of them without doing your own conversion. Read
-`amount.ae`, not `amount`.
+Every "price object" has `ae`, `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp` and `xau` keys, so you
+can read a trade in any of them without doing your own conversion. Read `amount.ae`, not `amount`.
+
+`token.*` fields are present only when the request carries `includes=token` or an `account_address`
+filter; otherwise they are absent.
 
 ### `volume` is a token count
 
-This is the field most often misread. `volume` is the **number of tokens**; `amount` is the AE. The
-indexer decodes them from different events:
+`volume` is the **number of tokens**; `amount` is the AE. The indexer decodes them from different
+events:
 
 | Row field | Decoded from | Units |
 | --- | --- | --- |
@@ -100,27 +95,24 @@ indexer decodes them from different events:
 | `protocol_reward` | the ProtocolDAO token's `Mint` event amount | whole tokens |
 | `total_supply` | the `Buy`/`Sell` event's supply argument, adjusted by `volume` | whole tokens |
 
-Two things follow. First, `amount` on a buy is the **fee-inclusive** total — `Buy`'s first argument
-is `total_price`, which already contains the 0.5% affiliation fee. That is why it is the right basis
-for a PnL cost figure. Second, the event's own `total_supply` is the supply *before* the trade, so
-the indexer adds `volume` on a buy and subtracts it on a sell to store the supply *after*.
+`amount` on a buy is the **fee-inclusive** total — `Buy`'s first argument is `total_price`, which
+already contains the 0.5% affiliation fee — which is why it is the right basis for a PnL cost
+figure. The event's own `total_supply` is the supply *before* the trade, so the indexer adds
+`volume` on a buy and subtracts it on a sell to store the supply *after*.
 
 ### `create_community` rows are buys
 
 A token creation with an initial buy is stored as one row with `tx_type: 'create_community'`, priced
-exactly like a buy. Anything counting purchases must include it — the backend's own PnL queries all
-write `tx_type IN ('buy', 'create_community')`. A creation with no initial buy emits no
+exactly like a buy. Anything counting purchases must include it — the backend's own PnL queries
+count `tx_type IN ('buy', 'create_community')`. A creation with no initial buy emits no
 `PriceChange` event and is stored with zeroes.
 
-Note also that the unfiltered feed is scoped to the **current factory**: with no `token_address`, the
-query joins tokens and filters on `token.factory_address`, so tokens from a superseded factory
-deployment do not appear.
+The unfiltered feed is scoped to the **current factory**: with no `token_address`, tokens from a
+superseded factory deployment do not appear.
 
-### What the CLI reads
+### What the CLI prints
 
-The agent skill's script reads `address`, `amount.ae`, `unit_price.ae`, `buy_price.ae`,
-`sell_price.ae`, `sale_address`, `token.name`, `token.symbol` and `block_height` — all of which are
-real entity fields:
+The transactions script reduces each row to:
 
 ```js
 function formatTx(tx) {
@@ -141,29 +133,18 @@ function formatTx(tx) {
 }
 ```
 
-So the CLI is reading the real shape and the Swagger DTO is not: there is no `account`, `id`,
-`spent_amount` or `price` column on a transaction row. Ignore those four. `token.*` is present only
-when the request carries `includes=token` or an `account_address` filter — otherwise the join is
-made but not selected, and the token fields come back `undefined`.
-
-The agent skill's own reference table uses a third set of names again (`type`, `ae_amount`,
-`amount`); those are the guide's labels for the concepts rather than literal response keys.
-
 ## Pre-trade research
-
-The pattern the agent guides recommend, and the reasoning behind it:
 
 ```bash
 node scripts/superhero-transactions.mjs token ct_<sale_address> 30
 ```
 
-> Many small buyers suggests organic momentum. One large buyer suggests a pump with higher exit risk.
-
-On a bonding curve this distinction is sharper than it would be on an order book. A single large buy
-does not merely print a high last trade — it *permanently* moves the price for everyone, because the
-supply genuinely increased. The elevated price will sit there until someone sells, whether or not
-anyone else ever wanted the token at that level. So a chart that has gapped up on one transaction is
-telling you about one person's position, not about demand.
+Many small buyers suggests organic momentum; one large buyer suggests a pump with higher exit risk.
+On a bonding curve this distinction is sharper than on an order book: a single large buy
+*permanently* moves the price for everyone, because the supply genuinely increased. The elevated
+price sits there until someone sells, whether or not anyone else wanted the token at that level. A
+chart that has gapped up on one transaction is telling you about one person's position, not about
+demand.
 
 Three things to count in the output:
 
@@ -177,8 +158,7 @@ Cross-check whatever you conclude against the holders tab — see
 ## Verifying a transaction on-chain
 
 Every row carries a `tx_hash`. Superhero's indexer is convenient but it is not the chain; to verify a
-trade independently, open the hash in [aeScan](https://aescan.io), the explorer the app itself links
-to. What to check:
+trade independently, open the hash in [aeScan](https://aescan.io). What to check:
 
 - The **contract called** is the sale address you expected.
 - The **caller** is the account the indexer attributed it to.
@@ -190,9 +170,8 @@ deployed code and call its read-only entrypoints directly.
 
 ## Diagnosing a failed trade
 
-The backend exposes `GET /api/debug/failed-transactions`, which the web app never calls — it is a
-diagnostic endpoint with no UI behind it. It takes no parameters, is not scoped to an account, and
-returns at most **500 rows, newest first**, each being:
+`GET /api/debug/failed-transactions` is a diagnostic endpoint with no UI behind it. It takes no
+parameters, is not scoped to an account, and returns at most **500 rows, newest first**:
 
 | Field | Meaning |
 | --- | --- |
@@ -202,13 +181,12 @@ returns at most **500 rows, newest first**, each being:
 | `error_trace` | The stack trace |
 | `created_at` | When it first failed |
 
-Read it as an indexer health surface, not a trading one. **These are transactions the indexer failed
-to ingest, not transactions that failed on-chain** — a reverted buy never reaches it. A retry job
-runs every 30 minutes and drops a row once it succeeds or once `retries` passes 10, so the table is
-a rolling backlog rather than a history. If your trade is on aeScan but missing from
-`/api/transactions`, this is where to look for it.
+**These are transactions the indexer failed to ingest, not transactions that failed on-chain** — a
+reverted buy never reaches it. A retry job runs every 30 minutes and drops a row once it succeeds or
+once `retries` passes 10, so the table is a rolling backlog rather than a history. If your trade is
+on aeScan but missing from `/api/transactions`, this is where to look for it.
 
-More reliable first steps when a trade did not go through:
+First steps when a trade did not go through:
 
 | Symptom | Abort reason to look for | Likely cause |
 | --- | --- | --- |
@@ -222,16 +200,11 @@ More reliable first steps when a trade did not go through:
 See [Buying & Selling](/tokens/buying-and-selling) for the allowance and slippage mechanics behind
 the first two rows.
 
-## Read more
+## Related
 
 - [Reading a Token Page](/tokens/token-page) — the holders and chart panels to weigh this data against
-- [Buying & Selling](/tokens/buying-and-selling) — what each of these transactions actually did on-chain
+- [Buying & Selling](/tokens/buying-and-selling) — what each of these transactions did on-chain
 - [Portfolio & PnL](/tokens/portfolio) — your positions, which these fills add up to
 - [The Trending Score](/tokens/trending-score) — the momentum signal that trade flow either confirms or contradicts
 - [Transactions API](/api-reference/transactions) — the endpoint reference
-- [aeScan](https://aescan.io) — the æternity explorer for verifying any hash or address on this page
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the Transactions tab on any token page shows the same feed
-
-## Open questions
-
-- **What `verified` actually asserts.** It is a boolean column on every row, defaulting to `false`, and the indexer sets it — but the condition under which a row is promoted to `verified` is not stated anywhere the column is defined. Do not treat `verified: false` as "this trade did not happen" without establishing what the flag means; the `_should_revalidate` path in `superhero-api/src/plugins/bcl/services/transactions.service.ts` is the place to start.
+- [aeScan](https://aescan.io) — the æternity explorer for verifying any hash or address

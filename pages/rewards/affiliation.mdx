@@ -144,7 +144,7 @@ let unique_invitee_count_threshold      = 4
 The gate is **4 unique invitees, each having bought at least 10 AE worth**. The Collect
 Rewards card renders the set as completed entries and the map as per-invitee progress bars
 toward 10 AE. Calling `withdraw()` early reverts with `MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED`;
-the app's own copy uses the phrase `MINIMUM_OF_4_ACCOUNTS_SHALL_BUY`.
+the app also renders this as `MINIMUM_OF_4_ACCOUNTS_SHALL_BUY`.
 
 - **Only direct invitees count.** A buy deep in your downline accrues rewards to you at levels
   2–4, but only your own level-1 invitees can qualify you.

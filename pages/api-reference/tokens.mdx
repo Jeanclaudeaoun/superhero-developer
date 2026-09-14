@@ -85,14 +85,11 @@ List rows may also carry `collection_rank`, the token's position within its coll
 
 ### `address` versus `sale_address`
 
-Both are on every token and they are different contracts:
-
-- **`sale_address`** is the token *sale* contract — the bonding curve you buy from and sell back
-  into. It is the identifier the rest of the API keys on: `token_address` on `/api/transactions`,
-  the WebSocket `token-updated` channel, the portfolio PnL map and the DAO routes all mean the
-  sale address.
-- **`address`** is the AEX-9 fungible token contract that holds balances. It is what a wallet
-  needs to display the token and what the middleware's `/v3/aex9/{address}` endpoint takes.
+- **`sale_address`** is the bonding-curve sale contract you buy from and sell into. The rest of
+  the API keys on it: `token_address` on `/api/transactions`, the WebSocket channels, the
+  portfolio PnL map and the DAO routes all mean the sale address.
+- **`address`** is the AEX-9 token contract that holds balances — what a wallet displays and
+  what the middleware's `/v3/aex9/{address}` endpoint takes.
 
 When in doubt, use `sale_address`.
 
@@ -105,10 +102,9 @@ Wherever a value has a price, the API returns all nine currencies at once:
   "brl": 0.0071, "cad": 0.0018, "chf": 0.001, "gbp": 0.00097, "xau": 0.0000004 }
 ```
 
-**Every key is on the same scale as `ae`.** `usd` is `ae * rate.usd`, and likewise for the
-other seven. On `market_cap_data` the `ae` key is in aettos, so every other key is too, and
-`market_cap_data.usd / 1e18` is the USD market cap. Rates refresh every ten minutes; when they
-are unavailable every key except `ae` is `null`.
+**Every key is on the same scale as `ae`** — `usd` is `ae * rate.usd`, and likewise for the
+rest. On `market_cap_data` every key is in aettos, so `market_cap_data.usd / 1e18` is the USD
+market cap. Rates refresh every ten minutes; when unavailable every key except `ae` is `null`.
 
 ### `CollectionInfoDto`
 
@@ -166,19 +162,15 @@ treasuries first".
 | `factory_address` | Tokens from a specific factory deployment |
 | `limit`, `page` | `limit` defaults to 100 and is capped at 100 — outside 1–100 it is a 400 |
 
-Three behaviours to know:
-
-- **An unknown `order_by` falls back to `market_cap`** and an unknown `order_direction` to
-  `DESC`, without an error.
-- **`order_by=market_cap` sorts on `rank` with the direction reversed.** `rank` is a persisted
-  column refreshed every five minutes. Rank 1 is the highest market cap; unranked tokens carry
-  `2147483647` and sort last.
-- **`order_by=trending_score` applies an eligibility gate.** Only tokens with at least 5 holders,
-  2 all-time posts mentioning the symbol and 3 all-time trades are returned. If no token clears
-  the gate the query is re-run without it. Zero-score tokens fall back to newest-first. Results
-  for this sort are cached for 15 minutes; every other sort for 60 seconds.
-
-Tokens with `unlisted = true` are excluded.
+- An unknown `order_by` falls back to `market_cap` and an unknown `order_direction` to `DESC`,
+  without an error.
+- `order_by=market_cap` sorts on `rank` (refreshed every five minutes) with the direction
+  reversed. Rank 1 is the highest market cap; unranked tokens carry `2147483647` and sort last.
+- `order_by=trending_score` returns only tokens with at least 5 holders, 2 all-time posts
+  mentioning the symbol and 3 all-time trades; if no token clears the gate the query is re-run
+  without it. Zero-score tokens fall back to newest-first. This sort is cached for 15 minutes,
+  every other sort for 60 seconds.
+- Tokens with `unlisted = true` are excluded.
 
 ```bash
 # The ten highest-scoring trending tokens
@@ -216,12 +208,9 @@ Paginated holder rows, ordered by `balance` descending, filtered to `balance > 0
 | `last_tx_hash` | string | `th_...` of the transfer that produced this balance |
 | `created_at` | string | ISO 8601, first seen holding |
 
-A holder's share of supply is `balance / total_supply` — both are in base units, so the scaling
-cancels. To value a holding, multiply `balance` by `price_data` and divide by 10 raised to
-`decimals`.
-
-Requesting holders for a token whose holder table is empty enqueues a background holder sync, so
-a second request a few seconds later often returns more.
+A holder's share of supply is `balance / total_supply` (both in base units, so the scaling
+cancels). Requesting holders for a token whose holder table is empty enqueues a background sync,
+so a second request a few seconds later often returns more.
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens/SUPERHERO/holders?limit=20&page=1"
@@ -249,14 +238,10 @@ Each window carries these eleven fields:
 | `last_updated` | string | ISO 8601, same instant as `current_date` |
 | `volume` | string or null | Window volume in **whole tokens** |
 
-Prices are trade buy prices in AE — the same scale as `TokenDto.price`. `volume` is already in
-whole tokens; do not divide it.
-
-The underlying view is rebuilt every five minutes, so a brand-new trade is not reflected
-immediately. A token with no indexed transactions returns 404.
-
-The same structure appears inlined on `TokenDto.performance`; prefer that copy when you already
-have the token.
+Prices are trade buy prices in AE, the same scale as `TokenDto.price`; `volume` is already in
+whole tokens. The data is rebuilt every five minutes, so a brand-new trade is not reflected
+immediately, and a token with no indexed transactions returns 404. The same structure is inlined
+on `TokenDto.performance`.
 
 ```bash
 curl -s "https://api.superhero.com/api/tokens/SUPERHERO/performance"
@@ -301,25 +286,19 @@ tokens**, and `market_cap` is in **AE** — not aettos and not base units. `open
 and `close` are buy prices in the `convertTo` currency. `open` is set to the previous candle's
 `close` so the series is continuous.
 
-`GET /api/tokens/{address}/transactions` covers the same ground with absolute `start_date` /
-`end_date` bounds instead of paging. Its defaults: `interval` 3600 seconds, `mode`
-`aggregated`, `start_date` two days ago — so an unparameterised call returns 48 hourly candles.
-`mode=normal` returns the underlying rows instead of buckets.
-
-`/history` responses are cached for 5 seconds and `/transactions` for 60 seconds.
+`GET /api/tokens/{address}/transactions` covers the same ground with `start_date` / `end_date`
+bounds instead of paging. Defaults are `interval=3600`, `mode=aggregated` and `start_date` two
+days ago, so an unparameterised call returns 48 hourly candles; `mode=normal` returns the
+underlying rows. `/history` is cached for 5 seconds, `/transactions` for 60.
 
 ## `GET /api/tokens/{address}/rankings`
 
-The tokens adjacent to this one in the global ranking. Items are full token rows with
-`performance` and a resolved `collection_info`; the envelope is `items` plus `meta`.
+The tokens adjacent to this one in the global ranking, as full token rows with `performance`
+and `collection_info` in an `items` plus `meta` envelope. `limit` defaults to **5**; the window
+is centred on the target token, and an edge-of-board token still returns `limit` rows.
 
-`limit` defaults to **5**. The window is centred on the target token, and whatever the short
-side cannot use is spent on the other side, so an edge-of-board token still returns `limit`
-rows.
-
-It returns an **empty page**, not a 404, when the token is unknown, still unranked, from a
-different factory than the current one, or `unlisted`. `meta.totalItems` is the number of
-neighbours returned and `totalPages` is always 1.
+An unknown, unranked, other-factory or `unlisted` token returns an **empty page**, not a 404.
+`meta.totalItems` is the number of neighbours returned and `totalPages` is always 1.
 
 ## `GET /api/tokens/preview/{address}`
 
@@ -365,9 +344,8 @@ token, and returns `{ metrics, token }`. Use it to inspect a score, not in a pol
 }
 ```
 
-The values are illustrative; `raw` counts come from the token's own 24-hour window. The `cap`
-values, weights and decay constants are shared by every token, which is what makes
-`trending_score` comparable across tokens. The full formula is on
+Values are illustrative. Caps, weights and decay constants are shared by every token, so
+`trending_score` is comparable across tokens. The full formula is on
 [Trending & Topics](/api-reference/trending#the-trending-score-formula).
 
 ## Related

@@ -5,10 +5,9 @@ description: "Track invite links, their claim status and referral analytics, and
 
 # Invitations & Affiliations API
 
-An invite link is a private key, and the AE behind it sits in the `AffiliationTreasury` contract
-until someone redeems it. This API is the indexed view of that: which invites an address has
-issued and which have been claimed. Creating or revoking an invite is a contract call, not a
-REST call.
+An invite link is a private key; the AE behind it sits in the `AffiliationTreasury` contract
+until someone redeems it. This API is the indexed view: which invites an address has issued and
+which have been claimed. Creating or revoking an invite is a contract call, not a REST call.
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
 
@@ -68,20 +67,17 @@ curl -s "https://api.superhero.com/api/invitations?inviter=ak_YOUR_ADDRESS&limit
 | `claimer_address` | string or null | Alias of `invitee_address` |
 | `claimed_at` | string or null | `status_updated_at` when claimed, else null |
 
-An invite link *is* a throwaway private key whose address is `receiver_address`. Whoever redeems
-the link moves the funds to their own wallet, which becomes `invitee_address`. A
-generated-but-unclaimed invite has a `receiver_address` and no `invitee_address`.
-
-Each item includes its claim status and the creation call's `tx_hash`, `block_height` and
-`amount`, so one call answers the whole picture of an inviter's invites without a per-invitee
-middleware lookup.
+`receiver_address` is the throwaway keypair in the link; `invitee_address` is the wallet that
+redeemed it. An unclaimed invite has a `receiver_address` and no `invitee_address`. Each item
+carries its claim status alongside the creation call's `tx_hash`, `block_height` and `amount`,
+so one call covers an inviter's invites without a per-invitee middleware lookup.
 
 ## `/api/affiliations/*` — the OAuth invite-code pool
 
-A separate mechanism from `/api/invitations`, unrelated to the on-chain `AffiliationTreasury`: a
-pool of pre-shared invite codes that a campaign hands out one per social account, gated by an
-OAuth login. An `Affiliation` holds a public `code` and belongs to an `account_address`; each of
-its codes holds one `private_code` and the `claimed_by` identity that took it.
+A separate mechanism from `/api/invitations`, unrelated to the on-chain treasury: a pool of
+pre-shared invite codes handed out one per social account, gated by an OAuth login. An
+`Affiliation` holds a public `code` and an `account_address`; each of its codes holds one
+`private_code` and the `claimed_by` identity that took it.
 
 ### `POST /api/affiliations`
 
@@ -158,8 +154,7 @@ Redemption gas is covered by a fixed `0.001 AE` per invite (`10n ** 15n` aettos)
 gift amount, so the total sent is `(amount + 0.001) * count` plus the call's own gas. Revoking
 takes the invite's **address**, not its secret key.
 
-The creation side can also be read from the middleware, where invite amounts live in the
-transaction arguments:
+The creation side can also be read from the middleware:
 
 ```text
 GET {middlewareUrl}/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ&caller_id=ak_...
@@ -167,9 +162,8 @@ GET {middlewareUrl}/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNx
 
 Filter to `tx.function === 'register_invitation_code'`, read the invitee addresses from argument
 0 and the per-invite amount from argument 2 (in **aettos** — divide by 1e18), and follow
-`response.next` to page. See [Node & Middleware](/api-reference/node-and-middleware).
-`GET /api/invitations?inviter=...` answers the same question in one call; fall back to the
-middleware only for an invite the indexer has not caught.
+`response.next` to page. Use it only for an invite the indexer has not caught;
+`GET /api/invitations?inviter=...` answers the same question in one call.
 
 ## Referral analytics
 

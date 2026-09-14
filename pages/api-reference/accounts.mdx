@@ -58,9 +58,8 @@ curl -s "https://api.superhero.com/api/accounts/ak_2ruXgsLy9jMwEqsgyQgEsxw8chYDf
 | `prefaens` (also `prefered_aens_name`) | Preferred `.chain` name |
 | `site` | Verified website |
 
-`links`, `profile` and the top-level fields are three generations of the same data. Read them in
-that order — `links.x`, then `profile.x_username`, then `x_username` — and strip a leading `@`
-from the X handle.
+`links`, `profile` and the top-level fields are three generations of the same data; read
+`links.x`, then `profile.x_username`, then `x_username`, and strip a leading `@`.
 
 ## `GET /api/accounts`
 
@@ -138,8 +137,7 @@ Each item is a holder row with a `token` object attached, carrying a freshly com
 ### `creator_address` and `owner_address` change the query
 
 Pass either and the endpoint lists **tokens the path address created or owns**, regardless of
-balance, attaching whatever balance exists (or the string `"0"`). Without them, it lists tokens
-the path address holds a positive balance in. The value you pass acts only as a flag — the
+balance, with whatever balance exists (or the string `"0"`). The value acts only as a flag — the
 filter is on the **path** address — so pass the same address as the path.
 
 ```bash
@@ -162,15 +160,11 @@ Returns a **bare JSON array** of snapshots.
 | `convertTo` | `ae` | One of the nine currency codes; anything else is a 400 |
 | `include` | — | Comma-separated. `pnl` adds aggregate `total_pnl`; `pnl-range` switches to daily-window PnL instead of cumulative |
 
-Each snapshot is reconstructed at request time: the range is walked in `interval`-second steps
+Snapshots are reconstructed at request time: the range is walked in `interval`-second steps
 (future timestamps dropped, at most 100,000 points), each timestamp is resolved to a block
-height, the account's AE balance is read at that height, and token holdings and PnL at that
-height are computed from the trade history. A 3600-second `interval` therefore gives real hourly
-reconstructions, and every extra point costs work — this is the slowest endpoint in the API.
-Bound it with `startDate` and `endDate` rather than asking for all history at a fine `interval`.
-
-History reaches back as far as the indexed chain data does — for community-token data, the
-factory's deployment height.
+height, and the AE balance, token holdings and PnL are computed at that height. Every point costs
+work, so this is the slowest endpoint in the API — bound it with `startDate` and `endDate`.
+History reaches back to the factory's deployment height.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -210,12 +204,10 @@ token; `create_community` counts as a buy alongside `buy`. `include` selects the
 | **Cumulative** (default, or `include=pnl`) | everything ever spent on the token | `proceeds_from_all_sells + current_value_of_holdings - total_spent` |
 | **Range** (`include=pnl-range`) | `average_cost_per_token * tokens_sold_in_the_window` | `proceeds_in_window - that_cost_basis` |
 
-Cumulative PnL includes unrealised gains on open positions; range PnL is **realised only**, so a
-daily calendar turns green or red only when a position is closed. The average cost used to price
-a range sale is the all-time average.
-
-`percentage` is `gain_ae / cost_basis_ae * 100`, and 0 when the cost basis is 0. Holdings at a
-block height count trades with `block_height` strictly less than the snapshot height.
+Cumulative PnL includes unrealised gains on open positions; range PnL is **realised only**. The
+average cost used to price a range sale is the all-time average. `percentage` is
+`gain_ae / cost_basis_ae * 100`, and 0 when the cost basis is 0. Holdings at a block height count
+trades with `block_height` strictly less than the snapshot height.
 
 ```bash
 curl -s "https://api.superhero.com/api/accounts/ak_YOUR_ADDRESS/portfolio/history?interval=86400&convertTo=ae&include=pnl"
@@ -244,13 +236,11 @@ height.
 
 ## `GET /api/accounts/leaderboard`
 
-Two modes:
-
 - **Precomputed window.** Pass `window` of `7d`, `30d` or `all`.
 - **Custom period.** Pass `startDate` **and** `endDate` together. Leaders are ranked by
-  selected-period performance among accounts that traded in that range, and the metrics and
-  buy/sell counts are scoped to it. Pass `tradingOnly=true` to base period PnL and ROI on
-  realized token-trading PnL only, excluding transfer-driven portfolio changes.
+  performance in that range among accounts that traded in it, with metrics and buy/sell counts
+  scoped to it. `tradingOnly=true` bases period PnL and ROI on realized token-trading PnL only,
+  excluding transfer-driven portfolio changes.
 
 | Parameter | Notes |
 | --- | --- |
@@ -268,15 +258,14 @@ Items carry `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
 `sell_count`, `volume_usd`, `created_tokens_count`, `owned_trends_count` and
 `portfolio_value_usd_sparkline` (an array of `[timestamp, value]` pairs).
 
-`mdd_pct` is **maximum drawdown as a positive percentage**: the largest `(peak - value) / peak`
-along the sparkline, times 100. 0 means the portfolio never fell from a peak; larger is worse.
-That is why `sortDir` defaults to `ASC` for this metric.
+`mdd_pct` is **maximum drawdown as a positive percentage** — the largest `(peak - value) / peak`
+along the sparkline, times 100. 0 means the portfolio never fell from a peak; larger is worse,
+which is why `sortDir` defaults to `ASC` for it.
 
-`meta` is **not** the standard envelope: it carries `page` (not `currentPage`), `limit`,
-`totalItems`, `totalPages`, `window`, `sortBy`, `sortDir` and a `timeFilter` of `value`,
-`unit`, `start` and `end`. Snapshot-backed windows are rebuilt every ten minutes. Responses are
-cached for up to 60 seconds, and `meta.timeFilter.start` / `end` reflect when the cache entry was
-filled.
+`meta` is **not** the standard envelope: `page` (not `currentPage`), `limit`, `totalItems`,
+`totalPages`, `window`, `sortBy`, `sortDir` and a `timeFilter` of `value`, `unit`, `start` and
+`end`. Snapshot windows are rebuilt every ten minutes; responses are cached for up to 60
+seconds, and `meta.timeFilter.start` / `end` reflect when the cache entry was filled.
 
 ## Related
 

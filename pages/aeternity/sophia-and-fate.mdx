@@ -1,16 +1,16 @@
 ---
 title: "Sophia & FATE"
-description: "The smart-contract language and the VM that runs it, oriented for developers arriving from Solidity."
+description: "æternity's smart-contract language and the VM that runs it, oriented for developers arriving from Solidity."
 ---
 
 # Sophia & FATE
 
-**Sophia** is æternity's smart-contract language: functional, strongly and statically typed,
-with no mutable global state. **FATE** — the Fast æternity Transaction Engine — is the virtual
-machine that executes it. If you are arriving from Ethereum, most of your instincts transfer;
-this page is about the ones that do not.
+**Sophia** is æternity's smart-contract language: functional, strongly and statically typed, with
+no mutable global state. **FATE** — the Fast æternity Transaction Engine — is the virtual machine
+that executes it. Every Superhero contract is written in Sophia and runs on FATE.
 
-Every Superhero contract is written in Sophia and runs on FATE.
+If you are arriving from Ethereum, most of your instincts transfer. The table covers the ones
+that do not.
 
 ## Coming from Solidity
 
@@ -38,17 +38,16 @@ Every Superhero contract is written in Sophia and runs on FATE.
 
 Three differences do real work:
 
-**No mutable global state.** A Sophia contract has exactly one `state` value. A stateful
-function reads it and calls `put` with a new one; there is no assignment to a storage slot
-anywhere. This is the property the Superhero whitepaper cites when it says the contract suite
-has a reduced surface area for reentrancy and state-corruption vulnerabilities.
+**No mutable global state.** A Sophia contract has exactly one `state` value. A stateful function
+reads it and calls `put` with a new one; there is no assignment to a storage slot anywhere. This
+is what reduces the surface for reentrancy and state-corruption bugs.
 
-**No floating point.** Sophia deliberately omits it. Every price, fee and curve value in
-Superhero is an integer in aettos or token-decimals — see [AE & Gas](/aeternity/ae-and-gas).
+**No floating point.** Sophia omits it. Every price, fee and curve value in Superhero is an
+integer in aettos or token-decimals — see [AE & Gas](/aeternity/ae-and-gas).
 
-**Types are checked, then checked again.** The compiler is strict, and FATE re-checks at
-runtime: each FATE operation is typed, and a type mismatch raises an exception that reverts the
-call. A malformed call does not corrupt state; it fails.
+**Types are checked, then checked again.** The compiler is strict, and FATE re-checks at runtime:
+each FATE operation is typed, and a type mismatch raises an exception that reverts the call. A
+malformed call does not corrupt state; it fails.
 
 ## Entrypoint annotations
 
@@ -65,11 +64,11 @@ otherwise, so a plain AE transfer to a `ct_` address fails by default.
 
 These map straight onto how you call a contract. A non-stateful entrypoint can be answered by a
 dry-run — no transaction, no gas, no wallet prompt, which is how Superhero prices a trade before
-you confirm it. A `stateful` entrypoint needs a signed contract-call transaction. A `payable`
-one additionally needs an `amount` option:
+you confirm it. A `stateful` entrypoint needs a signed contract-call transaction. A `payable` one
+additionally takes an `amount` option:
 
 ```js
-// Calling a payable, stateful entrypoint — superhero-token-create.mjs
+// Calling a payable, stateful entrypoint
 await factory.create_community(
   collectionId,
   tokenName,
@@ -82,14 +81,13 @@ await factory.create_community(
 
 ## ACI — the ABI equivalent
 
-**ACI** (æternity Contract Interface) is the JSON description of a contract's interface: its
-name, its type definitions, its event datatype, and every function with argument names, argument
-types, return type, and the `stateful` and `payable` flags. It is what a client needs to encode
-a call and decode a result — exactly the role Ethereum's ABI plays.
+**ACI** (æternity Contract Interface) is the JSON description of a contract's interface: its name,
+its type definitions, its event datatype, and every function with argument names, argument types,
+return type, and the `stateful` and `payable` flags. It is what a client needs to encode a call
+and decode a result — the role Ethereum's ABI plays.
 
-The interesting difference is that the ACI carries **named, typed arguments and the annotations**,
-so a client can tell a read from a write without being told. An excerpt from
-`superhero-agent-skill/contracts/Tipping_v3.aci.json`:
+The ACI carries **named, typed arguments and the annotations**, so a client can tell a read from
+a write without being told. From the Tipping v3 ACI:
 
 ```json
 {
@@ -110,22 +108,18 @@ You can read off that this is a write (`stateful: true`), that it takes no coins
 (`payable: false`), and that `sig` is a first-class `signature` type — which is how delegated
 posting passes an off-chain signature into the contract for `Crypto.verify_sig` to check.
 
-### Where ACI comes from
+### Generate an ACI
 
-ACI is generated from Sophia source by the compiler, not written by hand:
+ACI is generated from Sophia source by the compiler:
 
 ```bash
-# aesophia_cli
 aesophia_cli --create_json_aci Tipping.aes -o Tipping.aci.json
 ```
 
-The same generation is available over HTTP from a compiler service at its `/aci` endpoint.
-Superhero's web app points at a hosted one — `compilerUrl: 'https://v7.compiler.aepps.com'` for
-both networks in `src/config.ts` — and attaches it to the SDK as
-`onCompiler: new CompilerHttp(CURRENT_NETWORK.compilerUrl)` in `src/context/AeSdkProvider.tsx`.
-The agent skill never touches a compiler: calling an already-deployed contract needs only its
-ACI, so `superhero-agent-skill/contracts/` vendors the JSON files and the scripts read them off
-disk:
+The same generation is available over HTTP from a compiler service at its `/aci` endpoint;
+Superhero's web app uses the hosted compiler at `https://v7.compiler.aepps.com` for both
+networks. Calling an already-deployed contract needs only its ACI, not a compiler — the agent
+skill vendors the JSON files and reads them from disk:
 
 ```js
 const ACI = JSON.parse(fs.readFileSync('./contracts/FungibleTokenFull.aci.json', 'utf8'));
@@ -135,89 +129,26 @@ await Contract.initialize({ aci: ACI, address: tokenAddress, onAccount: aeSdk, o
 Keep a vendored ACI in step with the deployed contract. A stale ACI does not fail loudly — it
 encodes arguments against the wrong signature.
 
+The `@compiler >= N` pragma at the top of a `.aes` file is a minimum compiler version, not the
+version the contract was built with.
+
 ## FATE, briefly
 
-FATE runs directly on æternity's state tree rather than on a general byte-code machine bolted
-on top of one. Practical consequences:
+FATE runs directly on æternity's state tree rather than on a general byte-code machine bolted on
+top of one.
 
 - **Typed instructions.** Type errors raise an exception and revert, rather than reinterpreting
   bytes.
 - **A restricted memory model and high-level instructions.** Contracts are smaller and use less
   gas than equivalent EVM contracts.
-- **Native access to chain features.** AENS names and oracles are reachable from contract code
-  as protocol primitives, not through a precompile.
-
-## Compiler versions, and where the sources live
-
-The `@compiler` pragma at the top of each `.aes` file is a **minimum**, not the version a contract
-was built with. Both matter, and they are recorded in different places.
-
-| Contract suite | Source repository | Pragma |
-| --- | --- | --- |
-| BCL: factory, sale, curve, DAO, DAO vote, community management, affiliation treasury, and the three interfaces | [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) | `@compiler >= 7` on all ten files |
-| Tipping v3 | [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) | `>= 5` on `Tipping_v3.aes`, `>= 6` on `Tipping_v3_Getter.aes` |
-| Governance | [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) | `>= 5` on `Poll_Iris.aes`, `>= 6` on `Registry_Compiler_v6.aes` |
-
-For the actual build version there is a better record than a pragma, and three of these four
-suites ship one. Each keeps a `generated/` (or, for BCL, `aci/`) directory with a pair of
-provenance files:
-
-| File | Contents |
-| --- | --- |
-| `source_hashes.json` | A blake2b digest per `.aes` file — how you tell whether an ACI matches a given source tree |
-| `bytecode_hashes.json` | Keyed by compiler version, with the bytecode hash each version produces for each contract |
-
-Read the keys of `bytecode_hashes.json` and you have the answer:
-
-| Suite | File | Compiler versions recorded |
-| --- | --- | --- |
-| BCL | `superhero-api/src/plugins/bcl/contract/aci/bytecode_hashes.json` | One key: **8.0.0**, with the full `cb_…` bytecode for each of the seven deployed contracts |
-| Tipping | `tipping-contract/generated/bytecode_hashes.json` | One key: **7.4.1**, covering v1 through v4 including `Tipping_v3.aes` and `Tipping_v3_Getter.aes` |
-| Governance | `aepp-governance/governance-contracts/generated/bytecode_hashes.json` | **27 keys**, from 2.0.0 to 8.0.0 — a lookup table, not an assertion |
-
-So the deployed BCL contracts were built with **Sophia 8.0.0** and the tipping contracts with
-**7.4.1**, both comfortably above their pragmas.
-
-The governance file is a different kind of artefact and worth understanding, because it is the more
-useful pattern. `generate_hashes.js` enumerates every published `aeternity/aesophia_http` Docker
-tag, starts one compiler container per version, compiles all four contracts against each, and
-records the resulting bytecode hash. The result is a reverse index: take a deployed contract's
-bytecode, hash it, and look up which compiler produced it. It also bounds things by itself — the
-table has no hash for `Poll.aes` above 4.3.0 or for `Registry_Compiler_v6.aes` below 6.0.0, so a
-deployed `Registry_Compiler_v6` is necessarily Sophia 6.0.0 or later.
-
-Where no artefact exists, the repository's own build environment is the next-best signal: both
-`tipping-contract/docker-compose.yml` and `aepp-governance/governance-contracts/docker-compose.yml`
-default to `aeternity/aesophia_http:v7.6.1`, which is what a `make test` in either repository
-compiles with today. That is what the maintainers build against now, not necessarily what built
-the mainnet deployment years ago.
-
-The whitepaper's "compiler version ≥ 6" for ProfileRegistry and "≥ 5" for Tipping are pragmas
-quoted as versions — read them as floors.
+- **Native access to chain features.** AENS names and oracles are reachable from contract code as
+  protocol primitives, not through a precompile.
 
 ## Read more
 
 - [Smart Contracts](/contracts) — the Superhero contracts written in this language.
 - [Calling contracts](/contracts/calling-contracts) — using an ACI to make a real call.
 - [Contract security](/contracts/security) — where Sophia's guarantees stop and yours start.
-- [AEX Standards](/aeternity/aex-standards) — AEX-9 read directly from a Sophia ACI.
+- [AEX Standards](/aeternity/aex-standards) — AEX-9 read from a Sophia ACI.
 - [Sophia language features](https://docs.aeternity.com/aesophia/v6.1.0/sophia_features/) — the canonical reference for `stateful`, `payable`, state and events.
 - [FATE VM](https://docs.aeternity.com/aeternity-core-concepts/protocol/fast-aeternity-transaction-engine-fate-vm) — the official description of the VM.
-- [ACI encoder documentation](https://github.com/aeternity/aesophia/blob/master/docs/aeso_aci.md) — the JSON contract-interface format.
-- [aesophia_cli](https://github.com/aeternity/aesophia_cli) — generating ACI from source locally.
-
-## Open questions
-
-- **Which compiler built the deployed governance contracts?** Their repository publishes the
-  reverse index that answers this — a bytecode hash per contract for all 27 compiler versions — but
-  not the answer itself. Fetch the deployed `Poll_Iris` and `Registry_Compiler_v6` bytecode from
-  the node, hash it, and look the hash up in
-  `aepp-governance/governance-contracts/generated/bytecode_hashes.json`. That is one node call per
-  contract. BCL (8.0.0) and Tipping (7.4.1) are settled from their own single-key files.
-- **Which compiler built ProfileRegistry?** Nothing settles this, and the trail has gone cold:
-  no ProfileRegistry source repository has been located, and the current backend no
-  longer even carries its ACI — the only references left are two comments describing its indexer in
-  the past tense (`superhero-api/src/profile/services/profile-read.service.ts` and
-  `src/plugins/address-links/address-links-plugin-sync.service.ts`), which have been superseded by
-  the AddressLink plugin. Answering it needs both a source tree and the deployed bytecode.
-  Superhero would have to point at the repository.

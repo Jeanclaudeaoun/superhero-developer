@@ -1,30 +1,27 @@
 ---
 title: "AEX Standards"
-description: "The æternity token standards Superhero relies on, with AEX-9 in detail."
+description: "The æternity token standards Superhero relies on, with the AEX-9 fungible-token interface in detail."
 ---
 
 # AEX Standards
 
 AEX ("æternity expansion") proposals are æternity's application-layer standards, the equivalent
-of Ethereum's ERCs. Superhero depends on one of them heavily — **AEX-9**, the fungible token
+of Ethereum's ERCs. Superhero depends heavily on one of them — **AEX-9**, the fungible token
 standard — and touches a few others through its wallet stack.
 
 ## AEX-9 — fungible tokens
 
 Every Superhero community token and the ProtocolDAO token is an AEX-9 contract. That is why a
-token you mint on Superhero shows up in any æternity wallet and on
-[æScan](https://aescan.io/) without Superhero having to integrate with them.
+token you mint on Superhero shows up in any æternity wallet and on [æScan](https://aescan.io/)
+without Superhero having to integrate with them.
 
-AEX-9 was written in 2019 and is explicitly inspired by ERC-20, but it is deliberately smaller:
-the base interface is the read functions plus `transfer`, and everything else — allowances,
-minting, burning, swapping — is an optional extension. A contract advertises which extensions it
-implements at runtime through `aex9_extensions()`.
+AEX-9 is inspired by ERC-20 but deliberately smaller: the base interface is the read functions
+plus `transfer`, and everything else — allowances, minting, burning, swapping — is an optional
+extension. A contract advertises which extensions it implements through `aex9_extensions()`.
 
-### The interface, from a real deployed contract
+### The interface
 
-Read directly off `superhero-agent-skill/contracts/FungibleTokenFull.aci.json`, the ACI the
-agent skill uses to talk to Superhero's tokens. "Stateful" means it needs a signed transaction;
-everything else can be dry-run for free.
+Non-stateful entrypoints can be dry-run for free; stateful ones need a signed transaction.
 
 **Reads**
 
@@ -34,7 +31,7 @@ everything else can be dry-run for free.
 | `meta_info()` | record | `name`, `symbol`, `decimals` |
 | `total_supply()` | `int` | In token-decimals, not whole tokens |
 | `owner()` | `address` | The minting authority |
-| `balance(account)` | `option(int)` | **An option, not an int** — see below |
+| `balance(account)` | `option(int)` | An option, not an int — see below |
 | `balances()` | map | Every holder at once |
 | `allowance(accounts)` | `option(int)` | Keyed on a from/for pair |
 | `allowance_for_caller(from)` | `option(int)` | Convenience for the common case |
@@ -58,105 +55,76 @@ everything else can be dry-run for free.
 `init(name, decimals, symbol, initial_owner_balance)` is the deploy-time constructor;
 `initial_owner_balance` is an `option(int)`.
 
-### How AEX-9 differs from ERC-20 in practice
-
-Four things will bite you if you port ERC-20 assumptions directly:
+### Coming from ERC-20
 
 1. **`balance` returns an option.** An address that has never held the token returns `None`, not
-   `Some(0)`. Handle the empty case explicitly, or a new user's balance lookup breaks instead of
-   showing zero.
-2. **Allowances are three calls, not one.** ERC-20's `approve` is split into
-   `create_allowance` (for an allowance that does not exist yet), `change_allowance` (relative)
-   and `reset_allowance`. There is no single idempotent setter, so you must know whether an
-   allowance already exists before you write one.
+   `Some(0)`. Handle the empty case explicitly.
+2. **Allowances are three calls, not one.** ERC-20's `approve` is split into `create_allowance`
+   (for an allowance that does not exist yet), `change_allowance` (relative) and
+   `reset_allowance`. There is no single idempotent setter, so check whether an allowance exists
+   before you write one.
 3. **`transfer_allowance` is `transferFrom`.** Same withdraw pattern, different name.
 4. **Extensions are declared, not assumed.** Call `aex9_extensions()` before assuming `mint` or
-   `burn` exists. A minimal AEX-9 token has neither — the reference `fungible-token.aes` returns an
-   empty list. Superhero's own stack spans the range: a community token returns four extensions,
-   while the DEX's [WAE contract](/defi/wrapped-ae) and every
-   [liquidity-pool token](/defi/pools) return `["allowances"]` and nothing else, because their
-   supply changes only through deposit, withdraw, mint and burn paths that are not AEX-9
-   entrypoints.
+   `burn` exists. A minimal AEX-9 token has neither. A Superhero community token returns four
+   extensions; the DEX's [WAE contract](/defi/wrapped-ae) and every
+   [liquidity-pool token](/defi/pools) return `["allowances"]` only, because their supply changes
+   through deposit, withdraw, mint and burn paths that are not AEX-9 entrypoints.
 
-Also, as everywhere on æternity: amounts are integers scaled by the token's own `decimals` from
-`meta_info()`, which is not necessarily 18. See [AE & Gas](/aeternity/ae-and-gas).
+Amounts are integers scaled by the token's own `decimals` from `meta_info()`, which is not
+necessarily 18. See [AE & Gas](/aeternity/ae-and-gas).
 
-### Which extensions a Superhero community token needs
+### What a Superhero community token implements
 
-Every community token is created by the sale contract as a `FungibleTokenFull`
-(`Chain.create(name, decimals, symbol, None) : FungibleTokenFull` in
-`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`), and the ProtocolDAO token the same
-way in `CommunityFactory.init`. `FungibleTokenFull` is the reference implementation's "full"
-variant, pulled in from `aeternity/aeternity-fungible-token` at tag **v2.2.0**
-(`bcl-contracts/package.json`). At that tag, `contracts/fungible-token-full.aes` declares:
+Every community token is created by the sale contract as a `FungibleTokenFull`, the "full"
+variant of the reference implementation (`aeternity/aeternity-fungible-token` v2.2.0), and the
+ProtocolDAO token the same way. `aex9_extensions()` on any of them returns:
 
 ```sophia
-entrypoint aex9_extensions() : list(string) = ["allowances", "mintable", "burnable", "swappable"]
+["allowances", "mintable", "burnable", "swappable"]
 ```
 
-So `aex9_extensions()` on any Superhero community token returns those four strings, in that order.
-Superhero's own contracts exercise the first three:
-
-| Extension | Where the protocol depends on it |
+| Extension | Where Superhero depends on it |
 | --- | --- |
-| `mintable` | `buy` calls `token_contract.mint(Call.caller, count)` |
-| `burnable` | `sell` calls `token_contract.burn(count)` |
+| `mintable` | `buy` on the sale contract calls `mint(Call.caller, count)` |
+| `burnable` | `sell` calls `burn(count)` |
 | `allowances` | `sell` calls `transfer_allowance`; `DAOVote.vote` locks tokens the same way |
-| `swappable` | Nothing in the Superhero stack calls `swap` or `check_swap` — it comes with the variant |
+| `swappable` | Not used by Superhero; it comes with the reference variant |
 
-A Superhero community token therefore cannot be a minimal AEX-9: remove any of the first three and
-buying, selling or voting stops working. `swappable` is inherited baggage from the reference
-contract's token-migration support, and is worth knowing about only so that a fourth string in the
-list does not surprise you.
+`decimals` is **18** for every community token: the factory's `decimals()` returns 18 and the sale
+contract's `init` requires `decimals == bonding_curve.supported_decimals()`, which is also 18.
 
-`decimals` is fixed at **18** for every community token: `CommunityFactory.decimals()` returns 18
-and the sale contract's `init` enforces `decimals == bonding_curve.supported_decimals()`, which is
-also 18.
+### Read AEX-9 balances without a contract call
 
-### Reading AEX-9 balances without a contract call
-
-The middleware indexes AEX-9 holdings, so a wallet view does not need one contract call per
-token. The web app fetches them in a single paged request
-(`src/hooks/useAccountBalances.ts`):
+The middleware indexes AEX-9 holdings, so a wallet view needs one paged request rather than one
+contract call per token:
 
 ```text
 GET  <MIDDLEWARE_URL>/v2/aex9/account-balances/ak_...?limit=100
 ```
 
-Note the `v2` — the AEX-9 balance route the app uses is on middleware v2 while its transaction
-lookups use `v3`. See [Networks & Endpoints](/aeternity/networks).
+Note the `v2`: the AEX-9 balance route is on middleware v2, while transaction lookups use `v3`.
+See [Networks & Endpoints](/aeternity/networks).
 
 ## The other AEX standards
 
-Statuses are as recorded in the index table of the
-[AEXs repository](https://github.com/aeternity/AEXs) README at its current `master` head, which
-was last changed in November 2022. AEX-1 defines the terms: **Review** means past initial
-iteration and under wide review, **Active** means in constant flux with no unaddressed objections,
-**Final** means it sat in Last Call for two weeks with every technical change addressed.
-
 | Standard | Subject | Status | Superhero's relationship to it |
 | --- | --- | --- | --- |
-| AEX-2 | Wallet-to-æpp communication | Withdrawn, but still the js-sdk's reference implementation | Used. `useWalletConnect.ts` runs `walletDetector` over a `BrowserWindowMessageConnection` and calls `aeSdk.connectToWallet` — that is the AEX-2 RPC flow |
-| AEX-3 | Encrypted secret storage (keystore JSON) | Active | Not used directly in these repositories; relevant if you import a keystore file |
+| AEX-2 | Wallet-to-æpp communication | Withdrawn, but still the js-sdk's reference implementation | Used: connecting a wallet runs the AEX-2 RPC flow (`walletDetector` over a `BrowserWindowMessageConnection`, then `connectToWallet`) |
+| AEX-3 | Encrypted secret storage (keystore JSON) | Active | Relevant if you import a keystore file |
 | AEX-8 | Message signing | Draft | Relevant to any off-chain signature, including the tipping contract's signed messages |
 | AEX-9 | Fungible tokens | Review | Used everywhere |
-| AEX-10 | BIP32 derivation path for deterministic wallets | Final | Applies to any mnemonic-based æternity wallet used with Superhero — see [Accounts & Keys](/aeternity/accounts-and-keys) |
+| AEX-10 | BIP32 derivation path for deterministic wallets | Final | Applies to any mnemonic-based æternity wallet — see [Accounts & Keys](/aeternity/accounts-and-keys) |
 | AEX-130 | æpp meta-information format | Draft | Not used |
-| AEX-141 | Non-fungible tokens | Review | Not used. Superhero has no NFT feature |
+| AEX-141 | Non-fungible tokens | Review | Not used; Superhero has no NFT feature |
 
-**AEX-9 is still "Review", and nothing supersedes it.** The status has not moved since the
-standard was written in 2019 — `AEXS/aex-9.md` carries `Status: Review` in its own header, the
-README index agrees, and no AEX in the repository carries the `Superseded` status at all. Read
-"Review" here as "stable in practice but never formally finalised", not as "in flux": every
-æternity wallet, explorer and the middleware's AEX-9 indexing are all built against it as written.
+AEX-9's status is Review and nothing supersedes it. Every æternity wallet, explorer and the
+middleware's AEX-9 indexing are built against it as written.
 
 ## Read more
 
 - [AEX-9 contract reference](/contracts/aex9) — the Superhero-side view of the same contract.
 - [AEX-9 tokens in your wallet](/wallets/aex9-tokens) — what these balances look like to a user.
-- [Sophia & FATE](/aeternity/sophia-and-fate) — how to read the ACI the tables above came from.
+- [Sophia & FATE](/aeternity/sophia-and-fate) — how to read an ACI.
 - [Token sale contract](/contracts/token-sale) — what mints and burns these tokens.
 - [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the normative standard.
-- [AEXs repository](https://github.com/aeternity/AEXs) — every standard, with its status.
 - [Token standards overview](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — æternity's own summary.
-- [Reference fungible-token implementation](https://github.com/aeternity/aeternity-fungible-token) — the Sophia source these token contracts descend from, including `fungible-token-full.aes`.

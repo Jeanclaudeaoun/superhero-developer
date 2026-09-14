@@ -1,26 +1,23 @@
 ---
 title: "The Trending Score"
-description: "The momentum signal behind the trending list and every agent strategy — what is known about it, and what is not."
+description: "The momentum signal behind the trending list: the formula, its weights and caps, the eligibility gate, and how to read it as a trader."
 ---
 
 # The Trending Score
 
 Every community token carries a `trending_score`: a single number that orders the trending list and
-drives the entry and exit rules in every agent trading strategy. This page documents what it
-measures, how to read it as a trader, and the two ways it will mislead you if you do not.
+drives the entry and exit rules in agent trading strategies.
 
-Two things to settle before anything else, because both contradict widely repeated assumptions:
+Two things to know before reading it:
 
-1. **The score is bounded between 0 and 1.** It is a weighted average of normalised signals,
-   multiplied by a decay factor that is itself at most 1. A score of `0.42` is a high one. Any rule
-   phrased as "score above 50,000" can never fire.
+1. **The score is between 0 and 1.** It is a weighted average of normalised signals, multiplied by
+   a decay factor that is itself at most 1. A score of `0.42` is a high one. Pick thresholds in that
+   range.
 2. **It is mostly a social measure, not a trading one.** Community activity carries 65% of the
    weight and trading carries 35%. A token can lead the trending list on posts and tips alone.
 
-The score is computed in `superhero-api/src/tokens/tokens.service.ts`
-(`calculateTokenTrendingMetrics`) from the weights in `src/configs/constants.ts`
-(`TRENDING_SCORE_CONFIG`). A full derivation with the SQL behind each signal lives on
-[Trending API](/api-reference/trending); what follows is the trader's version.
+The full signal-by-signal derivation, with the SQL behind each signal, is on
+[Trending API](/api-reference/trending).
 
 ## The formula
 
@@ -35,7 +32,7 @@ Each component is a weighted sum of signals, and each signal is capped and then 
 normalized(raw, cap) = ln(1 + min(raw, cap)) / ln(1 + cap)
 ```
 
-Everything is measured over a rolling **24-hour window** (`WINDOW_HOURS: 24`).
+Everything is measured over a rolling **24-hour window**.
 
 | Group | Signal | Weight in group | Cap |
 | --- | --- | --- | --- |
@@ -68,12 +65,12 @@ by `0.05`. Silence is the single biggest term in the whole formula.
 - **Log normalisation front-loads the first few units.** On the buy-count signal, going from 0 to 5
   buys scores `0.48` while going from 20 to 40 adds only `0.18`. Small tokens can climb quickly;
   large ones saturate.
-- **Sells count exactly as much as buys.** `sellCount` and `buyCount` share the same weight and the
+- **Sells count exactly as much as buys.** Sell count and buy count share the same weight and the
   same cap. A token being dumped hard scores the same on that axis as one being accumulated. The
-  score measures *activity*, not direction, and reading it as buying pressure is a mistake.
+  score measures *activity*, not direction.
 - **Decay dominates a quiet token.** A token with an excellent pre-decay score and twelve hours of
-  silence keeps about 11% of it. Most of the movement you see in the trending list between refreshes
-  is the decay term, not new activity.
+  silence keeps about 11% of it. Most of the movement in the trending list between refreshes is the
+  decay term, not new activity.
 
 ### Refresh cadence
 
@@ -82,15 +79,13 @@ by `0.05`. Silence is the single biggest term in the whole formula.
 | Active refresh | every 2 hours (`0 */2 * * *`) | Tokens with trade, post, tip or read activity in the last 120 minutes, up to 250 per run |
 | Stale backfill | every 6 hours (`30 */6 * * *`) | Tokens whose score is older than 30 minutes, up to 150 per run, oldest first |
 
-So `trending_score` on a token record can be up to two hours behind reality, and on a quiet token
-considerably more. `trending_score_update_at` tells you exactly how stale your copy is — read it
-before acting on a score that looks surprising.
+So `trending_score` on a token record can be up to two hours behind, and on a quiet token
+considerably more. `trending_score_update_at` tells you exactly how stale your copy is.
 
-`GET /api/tokens/{address}/score` is the exception: it **recomputes** the score on the spot and
-returns the full breakdown — every signal's `raw`, `cap` and `normalized` value, the two component
-scores, the decay multiplier, and the final result — as well as writing the fresh value back to the
-token record. Use it when you want the current score rather than the cached one, or when you want to
-see which signal is carrying a token.
+`GET /api/tokens/{address}/score` **recomputes** the score on the spot and returns the full
+breakdown — every signal's `raw`, `cap` and `normalized` value, the two component scores, the decay
+multiplier, and the final result — and writes the fresh value back to the token record. Use it when
+you want the current score rather than the cached one, or to see which signal is carrying a token.
 
 ## Where it comes from
 
@@ -102,17 +97,16 @@ see which signal is carrying a token.
 | `trending_score_update_at` | Timestamp of the last recalculation |
 | `order_by=trending_score` | Sorts a token list by it, descending — and applies the eligibility gate |
 
-The score is stored as `decimal(10,6)`, so six decimal places of a number between 0 and 1. A token
-that has never been scored, or whose score came out `NaN`, sits at `0`; a startup job resets `NaN`
-rows to `0` explicitly.
+The score is stored as `decimal(10,6)` — six decimal places of a number between 0 and 1. A token
+that has never been scored sits at `0`.
 
 ## The eligibility gate
 
 `order_by=trending_score` is **not only a sort**. It also applies an all-time eligibility filter,
-which is why the app deliberately omits the ordering when a user types a name into token search and
-uses it only for the cold-start "what is trending" list.
+which is why the app omits the ordering when a user types a name into token search and uses it only
+for the "what is trending" list.
 
-Three conditions, all of them all-time rather than windowed, from `TOKEN_LIST_ELIGIBILITY_CONFIG`:
+Three conditions, all of them all-time rather than windowed:
 
 | Condition | Threshold |
 | --- | --- |
@@ -125,62 +119,47 @@ an enthusiastic feed and two trades. The counts behind the second and third are 
 refresh job on a 2-hour cron (`15 */2 * * *`), so a token that has just crossed a threshold may take
 a couple of hours to appear.
 
-There is one escape hatch: **if no token at all clears the gate, the controller drops it and returns
-the unfiltered list.** An empty trending tab is judged worse than an inactive one. So an empty
-eligible set does not produce an empty response — it produces an ungated one, silently.
+If no token at all clears the gate, the controller drops the filter and returns the unfiltered list,
+so an empty eligible set produces an ungated response rather than an empty one.
 
 `GET /api/tokens/{address}/trending-eligibility` returns the breakdown for a single token —
 `holders_count`, `post_count`, `trade_count`, the three thresholds, and a `passes` object saying
-which of them the token clears. That is the endpoint to call when a token you expect to see is
-missing from the trending list.
+which of them the token clears. Call it when a token you expect to see is missing from the trending
+list.
 
 If you are building on the list endpoint:
 
 - Use `order_by=trending_score` when you want the trending set.
-- Do **not** use it when you want to find a specific token by name, or you will get an empty result for a token that plainly exists.
+- Do **not** use it when you want to find a specific token by name — a token that plainly exists can be absent from the gated result.
 
 ## Ranking
 
-Related but distinct, `GET /api/tokens/{address}/rankings` returns a paginated list of `sale_address`
-and `rank` pairs, and the token record carries its own `rank` field. Rank is an ordinal position;
-trending score is a magnitude. Two tokens can be adjacent in rank while their scores differ by an
-order of magnitude, so rank tells you about position in a list and score tells you about intensity.
+`GET /api/tokens/{address}/rankings` returns a paginated list of `sale_address` and `rank` pairs,
+and the token record carries its own `rank` field. Rank is an ordinal position; trending score is a
+magnitude. Two tokens can be adjacent in rank while their scores differ by an order of magnitude, so
+rank tells you about position in a list and score tells you about intensity.
 
-## How the agent skill uses it
+## Using it in a trading strategy
 
-The skill treats the score as its primary momentum signal:
+A falling score means activity is fading and is a reasonable exit signal. A rising score does
+**not** mean buying pressure specifically: sells carry the same weight as buys, and social signals
+outweigh both. Confirm direction from the trade flow before treating a rising score as demand.
 
-> **Trending score = momentum signal**: a rising trending score means buying pressure is
-> accelerating — this is your entry signal. A falling score means momentum is fading — this is your
-> exit signal.
+The agent skill's three strategy templates set an exit rule as a relative drop from the score at
+entry:
 
-Half of that is right. A falling score does mean activity is fading, and it is a reasonable exit
-signal. A rising score does **not** mean buying pressure specifically: sells carry the same weight as
-buys, and social signals outweigh both. Confirm direction from the trade flow before treating a
-rising score as demand.
+| Strategy | Exit on score drop | Max position | Max positions | Cycle |
+| --- | --- | --- | --- | --- |
+| Conservative | 10% | 5% of balance | 3 | every 6h |
+| Moderate | 25% | 10% of balance | 5 | every 4h |
+| Aggressive | 40% | 20% of balance | 7 | every 2h |
 
-Its three strategy templates set an entry bar as an absolute score and an exit rule as a relative
-drop from the score at entry:
+The score is between 0 and 1; pick entry thresholds in that range. Relative or rank-based entry
+rules — "in the top ten by trending score", "score has risen 50% since the last cycle" — hold
+whatever the scale is. For an absolute bar, pull the current trending list
+(`GET /api/tokens?order_by=trending_score&limit=100`) and look at the distribution first.
 
-| Strategy | Entry bar | Exit on score drop | Max position | Max positions | Cycle |
-| --- | --- | --- | --- | --- | --- |
-| Conservative | score above 100,000 | 10% | 5% of balance | 3 | every 6h |
-| Moderate | score above 50,000 | 25% | 10% of balance | 5 | every 4h |
-| Aggressive | score above 20,000 | 40% | 20% of balance | 7 | every 2h |
-
-**The entry bars in that table cannot be met.** The backend's score is bounded above by 1, so
-"score above 20,000" excludes every token that has ever existed. A strategy that takes those numbers
-literally never opens a position. Either the templates predate the current scoring implementation or
-they were written against a differently scaled figure; in the current backend they are dead
-conditions.
-
-The exit rules are fine, and they are the durable half anyway. **Write entry rules as relative or
-rank-based conditions** — "in the top ten by trending score", "score has risen 50% since the last
-cycle" — and keep "score has fallen 25% since I bought" as the exit. Those hold whatever the scale
-is. If you do want an absolute bar, calibrate it by pulling the current trending list and looking at
-the distribution, and re-calibrate it when the weights change.
-
-The pre-buy checklist in the skill also refuses to act on score alone, and that is the right instinct:
+Never act on the score alone. The pre-buy checklist:
 
 1. Read the score: `node scripts/superhero-trending.mjs token-info ct_...`
 2. Check the trade flow: `node scripts/superhero-transactions.mjs token ct_... 30` — many small buyers is organic, one large buyer is a pump with exit risk.
@@ -203,31 +182,22 @@ node scripts/superhero-trending.mjs performance ct_<sale_address>
 `price`, `created_at`, `name`, `treasury` or `rank` — which is a useful cross-check. A token that is
 top-ten by trending score and nowhere by holder count is telling you something.
 
-## Honest limitations
+## Limitations
 
 - **It is not a buying-pressure signal.** Buys and sells carry identical weight. A token being sold off scores as well as one being bought.
-- **It is blind above the caps.** 5,000 AE of volume and 500,000 AE score the same; 25 active wallets and 2,500 score the same. Above the caps the score stops distinguishing entirely, which is exactly where the largest tokens live.
-- **It is comparable across tokens, but flatteringly so for small ones.** Every signal is normalised against a fixed cap rather than against the token's own size, so the scale is the same for everybody — and log normalisation means a token's first few trades and posts buy far more score than a large token's next hundred.
+- **It is blind above the caps.** 5,000 AE of volume and 500,000 AE score the same; 25 active wallets and 2,500 score the same. Above the caps the score stops distinguishing, which is exactly where the largest tokens live.
+- **It is comparable across tokens, but flatteringly so for small ones.** Every signal is normalised against a fixed cap rather than against the token's own size, and log normalisation means a token's first few trades and posts buy far more score than a large token's next hundred.
 - **Social activity is 65% of it, and social activity is cheap.** Posts, comments and distinct authors carry 0.86 of the social weight between them. Manufacturing those is much cheaper than manufacturing volume.
 - **It is periodic.** Up to two hours stale on an active token, longer on a quiet one. `trending_score_update_at` tells you how stale, and `GET /api/tokens/{address}/score` gives you a fresh figure.
-- **It is a lagging indicator either way.** A momentum score describes activity that has already happened. On a curve where price rises with every buy, acting on it means buying after the price has already moved.
+- **It is a lagging indicator.** A momentum score describes activity that has already happened. On a curve where price rises with every buy, acting on it means buying after the price has already moved.
 
-None of that makes the score useless — it plainly orders the list in a way that surfaces active
-communities, which is the job it was built for. It does mean an automated strategy should treat it
-as one input among several rather than as ground truth, and should never read it as a directional
-signal.
+The score orders the list in a way that surfaces active communities, which is the job it was built
+for. Treat it as one input among several, never as a directional signal.
 
-## Read more
+## Related
 
 - [Reading a Token Page](/tokens/token-page) — the other signals to weigh the score against
 - [Transaction History](/tokens/transactions) — the trade flow that confirms or contradicts a rising score
-- [Risks](/tokens/risks) — why momentum signals are particularly double-edged on a bonding curve
-- [Trending API](/api-reference/trending) — the endpoints behind the trending list, with the full signal-by-signal derivation of the score
-- [Agent trading strategies](/agents/strategies) — the full strategy templates these thresholds come from
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list, sortable by score or market cap
-- [Trading leaderboard](https://superhero.com/trends/leaderboard) — realised results, which the score does not measure
-
-## Open questions
-
-- **The distribution of live scores is unknown.** The formula bounds the score in `[0, 1]`, but where real tokens actually sit in that interval — whether a busy token reaches 0.5 or tops out near 0.1 — cannot be derived from the weights alone. Pull `GET /api/tokens?order_by=trending_score&limit=100` and look at the spread before setting any absolute threshold.
-- **Whether the weights and caps documented here match what mainnet is running.** They come from `superhero-api/src/configs/constants.ts` in the checked-out backend; a deployed instance could be on a different revision. `GET /api/tokens/{address}/score` echoes each signal's `cap` alongside its `raw` value, so one call against the live API confirms or refutes the whole table.
+- [Risks](/tokens/risks) — why momentum signals are double-edged on a bonding curve
+- [Trending API](/api-reference/trending) — the endpoints behind the trending list, with the full signal-by-signal derivation
+- [Agent trading strategies](/agents/strategies) — the full strategy templates

@@ -1,60 +1,40 @@
 ---
 title: "Block Explorers"
-description: "Verify any transaction, account or contract independently of the Superhero UI."
+description: "Check any transaction, account or contract on æScan, and read the same data over the middleware API."
 ---
 
 # Block Explorers
 
-Superhero tells you what happened. An explorer lets you check. Every post, tip, trade and vote
-is a public transaction, so nothing in this application requires you to trust its own interface —
-and when something looks wrong, the explorer is where you find out whether the problem is the
-chain or the app.
+Every post, tip, trade and vote on Superhero is a public transaction, so you can check any of
+them on an explorer. When something looks wrong, the explorer tells you whether the problem is
+the chain or the app.
 
 | Network | Explorer |
 | --- | --- |
 | Mainnet | `https://aescan.io` |
 | Testnet | `https://testnet.aescan.io` |
 
-These are the values of `EXPLORER_URL` in `src/config.ts`. æScan is built by æLabs and covers
-key blocks, micro blocks, accounts, transactions, contracts, AENS names and AEX-9 tokens.
+æScan is built by æLabs and covers key blocks, micro blocks, accounts, transactions, contracts,
+AENS names and AEX-9 tokens.
 
-## The URL shapes
+## URL shapes
 
-Superhero builds explorer links itself, in `src/utils/address.ts`. The mapping from prefix to
-path is exact, so you can construct any link by hand:
+Superhero links out to æScan wherever it shows an identifier — address chips, the post detail
+view's tip overview, DEX activity and transaction cards, and the profile view. You can also
+construct any link by hand:
 
-| You have | URL Superhero builds | Page it lands on |
+| You have | URL | Page |
 | --- | --- | --- |
-| An account `ak_...` | `https://aescan.io/accounts/ak_...` | **Account** |
-| A contract `ct_...` | `https://aescan.io/contracts/ct_...` | **Smart Contract** |
-| A transaction `th_...` | `https://aescan.io/transactions/th_...` | **Transaction** |
-| A name `nm_...` | `https://aescan.io/names/nm_...` | **AENS Name** |
-| An oracle `ok_...` | `https://aescan.io/oracles/queries/ok_...` | **Nothing — see below** |
+| An account `ak_...` | `https://aescan.io/accounts/ak_...` | Account |
+| A contract `ct_...` | `https://aescan.io/contracts/ct_...` | Smart Contract |
+| A transaction `th_...` | `https://aescan.io/transactions/th_...` | Transaction |
+| A name `nm_...` or `name.chain` | `https://aescan.io/names/...` | AENS Name |
+| An oracle `ok_...` | `https://aescan.io/oracles/ok_...` | Oracle |
 
-`prepareExplorerUrl(hash, explorerUrl)` composes these as
-`explorerUrl + "/" + endpoint + "/" + hash` from the `ADDRESS_TYPES` map in
-`src/utils/address.ts`, and refuses anything that is not one of the five prefixes above. Swap the
-host for `testnet.aescan.io` to look at `ae_uat`.
+Swap the host for `testnet.aescan.io` to look at `ae_uat`. The name route takes either the name
+itself or its `nm_` hash.
 
-The first four match æScan's route table exactly (`src/pages/` in
-[aeternity/aescan](https://github.com/aeternity/aescan): `accounts/[id]`, `contracts/[id]`,
-`transactions/[id]`, `names/[name]`). The name route takes either the name itself or its `nm_`
-hash, because it passes the parameter straight through to the middleware's `/names/{id}`.
-
-**The oracle link is broken.** Superhero maps `ok_` to the path segment `oracles/queries`, but
-æScan has no such route — only `oracles/index` and `oracles/[id]`, so
-`aescan.io/oracles/queries/ok_...` falls through to its 404 page. The working URL is
-`https://aescan.io/oracles/ok_...`. In practice nothing in Superhero renders an oracle identifier,
-so the entry is latent rather than a bug you will hit; construct oracle links by hand.
-
-The app already links out in most places where an identifier is shown: `AddressChip`, the post
-detail view's tip overview, the DEX activity and transaction cards, and the profile view all
-render an explorer link. Follow them rather than retyping a hash.
-
-### Beyond the five Superhero links
-
-æScan indexes considerably more than the app ever links to. Each of these is a top-level route you
-can navigate to directly:
+æScan indexes considerably more than Superhero links to:
 
 | Path | What is there |
 | --- | --- |
@@ -69,70 +49,55 @@ can navigate to directly:
 | `/mining`, `/nodes` | Network health |
 | `/search/<term>` | Names, tokens and NFTs, as three tabs |
 
-## Three things worth verifying yourself
+## Check that a transaction happened
 
-### 1. That a transaction actually happened
-
-Paste the `th_` into `aescan.io/transactions/`. The first panel is a flat table with these rows,
-in order:
+Paste the `th_` into `aescan.io/transactions/`. The first panel is a flat table:
 
 ```text
 Transaction ID · Transaction Type · Keyblock Height · Keyblock Confirmations
 Status · Microblock Hash · Created · Fee · Nonce · API Links
 ```
 
-What to read:
+- **Status.** A mined transaction can still have failed. Read this row, not just the presence of
+  the transaction.
+- **Keyblock Height and Keyblock Confirmations.** When, and how deeply buried. The height links to
+  the keyblock page.
+- **Transaction Type**, then the type-specific panel below it — for a contract call, the caller,
+  the entrypoint and the decoded arguments.
+- **API Links** gives you the middleware query behind the page.
 
-- **Status.** A mined transaction can still have failed. Look at this row, not just the presence
-  of the transaction.
-- **Keyblock Height and Keyblock Confirmations.** Confirms when, and how deeply buried. The height
-  links to the keyblock page.
-- **Transaction Type**, then the panel below it, which is type-specific — for a contract call it
-  carries the caller, the entrypoint and the decoded arguments.
-- **API Links** gives you the middleware query behind the page, if you would rather script it.
+If the hash returns nothing, the transaction is not on chain yet. Superhero treats a middleware
+`404` as "still pending" rather than as an error; wait for a block before concluding anything.
 
-If the hash returns nothing, the transaction is not on chain yet. Superhero's own
-`useTransactionStatus.ts` treats a middleware `404` as "still pending" rather than as an error,
-and you should too — wait for a block before concluding anything.
+## Check what a contract call did
 
-### 2. What a contract call actually did
+Open `aescan.io/contracts/ct_...`. The header carries the contract's ID, type, create transaction,
+creation height and time, creator, bytecode, account address, balance and call count; below it
+are tabs for **Call Transactions** and **Events**, plus **Verification**, **Read Contract** and
+**Write Contract** once a contract has been verified. æScan decodes the arguments, so you can
+read the actual values a call was made with.
 
-Open the contract page, `aescan.io/contracts/ct_...`. The header table carries the contract's ID,
-type, create transaction, creation height and time, creator, bytecode, its account address and
-balance, and a call count; below it are tabs for **Call Transactions** and **Events**, plus
-**Verification**, **Read Contract** and **Write Contract** once a contract has been verified.
-æScan decodes the arguments, which is what makes this useful: you can read the actual values a
-call was made with, not just that a call happened.
-
-The same decoded data is available over HTTP if you would rather script it. This is how the
-agent skill reads posts back out of the Tipping contract, in `superhero-read.mjs`:
+The same decoded data is available over HTTP. This is how the agent skill reads posts back out of
+the Tipping contract:
 
 ```bash
 curl "https://mainnet.aeternity.io/mdw/v3/transactions?contract=ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb&account=ak_...&limit=20"
 ```
 
-Each returned transaction carries `tx.function` (which entrypoint was called),
-`tx.arguments` (the decoded argument list) and `tx.return` (the decoded result). The script
-filters on `tx.function === 'post_without_tip'` and reads the post text out of
-`tx.arguments[0].value`. If you want to know what a Superhero action really wrote on chain,
-that is the shape of the answer.
+Each returned transaction carries `tx.function` (the entrypoint called), `tx.arguments` (the
+decoded argument list) and `tx.return` (the decoded result). The skill filters on
+`tx.function === 'post_without_tip'` and reads the post text from `tx.arguments[0].value`.
 
-### 3. That a token's sale contract is the one the UI claims
+## Check a token's sale contract
 
-This is the check that matters most before you spend money, because "the right token name" and
-"the right contract" are not the same thing.
+"The right token name" and "the right contract" are not the same thing. Before you spend:
 
 1. On the token page, copy the sale address (`ct_...`).
 2. Open `aescan.io/contracts/ct_...` and confirm it exists, is a contract, and has the call
    history a live sale should have.
 3. Cross-check the address against a second source — the Superhero API's factory and token
-   endpoints, or [Deployed addresses](/contracts/addresses) — rather than against the page that
-   showed it to you.
-
-The same technique applies to the platform contracts. The Tipping v3 address in
-`src/config.ts` (`CONTRACT_V3_ADDRESS`) and the `CONTRACT_ADDRESS` constant in the agent skill's
-`superhero-read.mjs` are the same `ct_2Hyt9ZxzXra5NAzhePkRsDPDWppoatVD7CtHnUoHVbuehwR8Nb` — two
-independently maintained repositories agreeing is a much stronger signal than either one alone.
+   endpoints, or [Deployed addresses](/contracts/addresses) — rather than the page that showed it
+   to you.
 
 ## The account page
 
@@ -140,24 +105,17 @@ independently maintained repositories agreeing is a much stronger signal than ei
 Generalized, Contract Id, Nonce** and **API Links**, with tabs for **Activities**,
 **Transactions** and **AENS Names**.
 
-Two rows are worth knowing about:
+- **Is Generalized** tells you whether the account is a generalized account with contract
+  authentication rather than a plain keypair.
+- **AENS Names** is the fastest way to see every `.chain` name an address owns.
 
-- **Is Generalized** tells you whether the account is a GA (generalized account) with contract
-  authentication rather than a plain key pair. See
-  [Accounts & Keys](/aeternity/accounts-and-keys).
-- **AENS Names** is the fastest way to see every `.chain` name an address owns without writing a
-  middleware query.
-
-## What else æScan exposes
-
-Useful for the parts of æternity these docs otherwise skim:
+## What else æScan shows
 
 - **AENS.** Active `.chain` names, live auctions and recent registrations — the practical way to
   watch an auction you are bidding in. See [AENS](/aeternity/aens).
 - **AEX-9 tokens.** Listed and unlisted tokens, with holder lists. See
   [AEX Standards](/aeternity/aex-standards).
-- **State channels.** Active channels network-wide, which is one way to see for yourself that
-  Superhero opens none. See [State Channels](/aeternity/state-channels).
+- **State channels.** Active channels network-wide. See [State Channels](/aeternity/state-channels).
 - **Network economics.** Circulating supply, burned coins, current block reward, plus the
   standalone charts under `/charts`.
 
@@ -165,10 +123,7 @@ Useful for the parts of æternity these docs otherwise skim:
 
 - [Accounts & Keys](/aeternity/accounts-and-keys) — which prefix goes to which explorer path.
 - [Transactions](/tokens/transactions) — what a Superhero trade looks like before you go looking for it.
-- [Node & middleware API](/api-reference/node-and-middleware) — the programmatic version of everything on this page.
+- [Node & middleware API](/api-reference/node-and-middleware) — the programmatic version of everything above.
 - [Networks & Endpoints](/aeternity/networks) — mainnet versus testnet hosts.
 - [æScan](https://aescan.io/) — the mainnet explorer.
-- [æScan documentation](https://docs.aeternity.com/aeternity-user-tools-and-services/aescan-aeternity-blockchain-explorer) — what the explorer covers, from æternity's docs.
-- [ae_mdw middleware](https://github.com/aeternity/ae_mdw) — the index æScan and the `curl` above both read from.
-- [aescan](https://github.com/aeternity/aescan) — the explorer's own source; `src/pages/` is the
-  route table and `src/components/*Panel.vue` are the field labels quoted on this page.
+- [æScan documentation](https://docs.aeternity.com/aeternity-user-tools-and-services/aescan-aeternity-blockchain-explorer) — what the explorer covers.

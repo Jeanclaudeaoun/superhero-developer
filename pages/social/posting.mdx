@@ -1,15 +1,14 @@
 ---
 title: "Posting"
-description: "Publish a post on-chain, from the app or the command line."
+description: "Publish a post on chain from the app, the command line or the SDK — the contract call, the ids, the encoding conventions and the limits."
 ---
 
 # Posting
 
 A Superhero post is a contract call. The text and any attached media go into the `Tipping` v3
 contract's state, the caller's address is recorded as the author, and the contract returns an
-integer id. There is no edit and no delete — not as a policy, but because the contract exposes
-no entrypoint that could do either. This page covers the data model, the call, the encoding
-conventions the app layers on top, the cost, and both the UI and CLI paths.
+integer id. The contract has no edit and no delete entrypoint, so a published post is
+permanent.
 
 ## The data model
 
@@ -25,15 +24,14 @@ strings:
 
 Posts live in a map keyed by a monotonically increasing `tip_id`, giving a deterministic,
 append-only ordering of everything ever published through the contract. The contract's state
-record is just that map plus a `version` string, currently `"v3"`.
+is that map plus a `version` string, currently `"v3"`.
 
 The field is called `title` for historical reasons. It holds the whole post body, not a
 headline.
 
 ## Contract entrypoints
 
-The full Tipping v3 surface, read from `tipping-contract/contracts/v3/Tipping_v3.aes`, is four
-entrypoints. None of them is `payable`:
+Tipping v3 has four entrypoints. None of them is `payable`:
 
 | Entrypoint | Signature | Stateful | Purpose |
 | --- | --- | --- | --- |
@@ -46,8 +44,8 @@ Both posting entrypoints return the new `tip_id` and emit
 `PostWithoutTipReceived(address, string)` — the author and the title — so indexers can follow
 new content without polling state.
 
-Note what is **not** there: despite the contract's name, Tipping v3 has no tipping entrypoint.
-Tips are plain AE transfers with a payload; see [Tipping](/social/tipping).
+Tipping v3 has no tipping entrypoint. Tips are plain AE transfers with a payload; see
+[Tipping](/social/tipping).
 
 ## Addresses
 
@@ -60,15 +58,14 @@ These are `CONTRACT_V3_ADDRESS` in the app's per-network configuration.
 
 ## Post ids and slugs
 
-The contract returns a bare integer. The indexer forms the API id as the contract's return
-value plus `_v` plus the contract's configured version — `_v3` today — so a post created as
-`3903` is referenced everywhere as `3903_v3`. If the middleware hands the indexer a transaction
-with no return value, it falls back to the **last eight characters of the transaction hash**
-plus the same suffix, which is why an occasional id is not numeric.
+The contract returns a bare integer. The indexer forms the API id as that value plus `_v` plus
+the contract version — `_v3` today — so a post created as `3903` is referenced everywhere as
+`3903_v3`. If the middleware hands the indexer a transaction with no return value, the id falls
+back to the **last eight characters of the transaction hash** plus the same suffix, which is
+why an occasional id is not numeric.
 
-In-app links then drop the suffix again: a post link is `/post/` plus the id with `_v3`
-stripped, or a human-readable slug the API generates for SEO. The resolver at `/post/:slug`
-tries, in order:
+In-app links drop the suffix again: a post link is `/post/` plus the id with `_v3` stripped, or
+a human-readable slug the API generates for SEO. The resolver at `/post/:slug` tries, in order:
 
 1. `GET /api/posts/` with the key exactly as given — this handles slugs.
 2. If the key is numeric or already ends in `_v3`, retry with `_v3` appended.
@@ -77,8 +74,7 @@ tries, in order:
 Write the suffix when you call the API and drop it when you build a URL, and the round trip
 works from either direction.
 
-The slug itself is derived once, at index time, from the post's own text
-(`superhero-api/src/social/services/post.service.ts`):
+The slug is derived once, at index time, from the post's own text:
 
 ```text
 base = content.toLowerCase()
@@ -90,13 +86,13 @@ slug = (base ? base + '-' : '') + <the numeric part of the id>
 ```
 
 So `"Hello, æternity!"` as post `3903_v3` becomes `hello-æternity-3903`. Letters and digits in
-any script survive; the id suffix makes the slug unique even when two posts normalise
-identically. Slugs are never regenerated, so editing is moot — there is no edit.
+any script survive, and the id suffix makes the slug unique even when two posts normalise
+identically.
 
 ## Content encoding
 
 The contract stores a string. Everything below is a client-side convention the indexer and the
-renderer agree on — the contract neither knows nor enforces any of it.
+renderer agree on; the contract does not enforce any of it.
 
 | Convention | Written as | Meaning |
 | --- | --- | --- |
@@ -105,60 +101,57 @@ renderer agree on — the contract neither knows nor enforces any of it.
 | Token display envelope | `#SYMBOL{mode=advanced}` | An optional suffix asking for a richer rendering. The symbol is never modified. |
 | Comment marker | `comment:<parent post id>` | First entry in `media`, marking the post as a reply. |
 
-The account-mention macro is a pure client contract: the API does not index raw `ak_` mentions,
-and a bare address in the text renders as a plain link. The token-tag envelope is permissive to
-write and strict to read — an unparseable payload falls back to the plain tag rather than
-rendering as text, so nothing already on chain can be broken by a future syntax change. See
-[Hashtags & Topics](/social/hashtags-and-topics) for the envelope's option grammar.
+The account-mention macro is a pure client convention: the API does not index raw `ak_`
+mentions, and a bare address in the text renders as a plain link. The token-tag envelope is
+permissive to write and strict to read — an unparseable payload falls back to the plain tag
+rather than rendering as text. See [Hashtags & Topics](/social/hashtags-and-topics) for the
+envelope's option grammar.
 
 ## Limits
 
-There are three layers and they do not agree. The contract accepts anything; the composer is
-strict; the indexer sits in between and quietly rewrites what it stores.
+Limits are enforced at three layers:
 
 | Limit | Value | Enforced by |
 | --- | --- | --- |
 | Character count, composer | 280 | The web composer, for posts and comments alike |
-| Character count, indexed copy | 5,000 | `sanitizeContent` in the indexer — longer content is **truncated**, not rejected |
+| Character count, indexed copy | 5,000 | The indexer — longer content is **truncated**, not rejected |
 | Character count, on chain | Unbounded | The contract stores whatever string you pass |
-| Media entries, indexed | 5 | `extractMedia` keeps the first five valid entries and drops the rest |
+| Media entries, indexed | 5 | The indexer keeps the first five valid entries and drops the rest |
 | Media entries, on chain | Unbounded | The contract stores the whole list |
-| Topics per post | 10 | `extractTopics`, each at most 50 characters after normalization |
-| Editing | Impossible | The contract has no update entrypoint |
-| Deletion | Impossible | The contract has no delete entrypoint |
+| Topics per post | 10 | The indexer, each at most 50 characters after normalization |
+| Editing | Not possible | The contract has no update entrypoint |
+| Deletion | Not possible | The contract has no delete entrypoint |
 
 The 280-character limit is a client-side constant. A post written through the SDK or the CLI is
-not bound by it, but the copy the API serves is normalised on the way in
-(`superhero-api/src/social/utils/content-parser.util.ts`):
+not bound by it, but the copy the API serves is normalised on the way in:
 
 - trimmed;
 - CRLF converted to LF;
 - three or more consecutive newlines collapsed to two;
 - truncated to 5,000 characters.
 
-So a 6,000-character post is on chain in full and truncated everywhere a reader will see it.
-Read it back from the contract if you need the original.
+A 6,000-character post is on chain in full and truncated everywhere a reader will see it. Read
+it back from the contract if you need the original.
 
 ### What counts as a media entry
 
-`extractMedia` does not store the `media` list verbatim. Each entry must be a parseable URL
-with an `http:` or `https:` scheme, and must either end in `.jpg`, `.jpeg`, `.png`, `.gif`,
+The indexer does not store the `media` list verbatim. Each entry must be a parseable URL with
+an `http:` or `https:` scheme, and must either end in `.jpg`, `.jpeg`, `.png`, `.gif`,
 `.webp`, `.mp4`, `.webm` or `.mov`, or be hosted on `imgur.com`, `giphy.com`, `youtube.com` or
 `vimeo.com` (or a subdomain of one). Everything else is dropped from the indexed `media` array,
 and only the first five survivors are kept.
 
-That rule is why a comment's `comment:3903_v3` marker never appears in the API's `media` field
-even though it is the first entry on chain: it is not a URL, so it is filtered out. The
-`tx_args` field still carries the raw list, which is where the client's parser looks.
+A comment's `comment:3903_v3` marker is therefore never in the API's `media` field even though
+it is the first entry on chain: it is not a URL. The `tx_args` field still carries the raw
+list, which is where the client's parser looks.
 
-The same convention has one more hook: if any raw media entry contains the substring `hidden`,
-the indexer sets `posts.is_hidden = true`, which removes the post from the feeds and from
-popular ranking. It is a self-applied flag, not a moderation control — see
-[Moderation](/social/moderation).
+If any raw media entry contains the substring `hidden`, the indexer sets `is_hidden = true` on
+the post, which removes it from the feeds and from popular ranking. It is a flag an author
+applies to their own post — see [Moderation](/social/moderation).
 
 ## Posting from the app
 
-Compose at the top of the feed at `https://superhero.com/`, or from a token's topic tab where
+Compose at the top of the feed at `https://superhero.com/`, or from a token's topic tab, where
 the composer requires that token's hashtag before the Post button enables. On submit the app:
 
 1. Expands tagged mentions from their display form to the `[account:…]` storage form.
@@ -169,9 +162,8 @@ the composer requires that token's hashtag before the Post button enables. On su
 5. Suffixes the returned id with `_v3`, optimistically inserts the post into the feed cache,
    and reconciles against `GET /api/posts/` once the backend has indexed it.
 
-The optimistic insert is why a new post appears instantly even though the indexer has not seen
-it yet. If the backend 404s on the first fetch, the app keeps its own optimistic copy and
-retries.
+The optimistic insert is why a new post appears instantly. If the backend returns `404` on the
+first fetch, the app keeps its optimistic copy and retries.
 
 ## Posting from the command line
 
@@ -196,11 +188,9 @@ Every argument after the first becomes a `media` entry. The script prints JSON:
 }
 ```
 
-Note that `post_id` here is the bare integer — add `_v3` before you look it up through the API.
+`post_id` here is the bare integer — add `_v3` before you look it up through the API.
 
-## Posting with the SDK directly
-
-Illustrative shape, matching what both the app and the CLI do:
+## Posting with the SDK
 
 ```js
 import { AeSdk, Node, MemoryAccount, Contract } from '@aeternity/aepp-sdk';
@@ -231,20 +221,18 @@ The ACI ships with the agent skill at `contracts/Tipping_v3.aci.json`.
 
 ## Cost
 
-The agent skill states that a post costs roughly **0.00001 AE** in gas. It is a single stateful
-contract call with no payable amount, so the cost is gas only and does not scale with the
-value of anything. Treat the figure as an order of magnitude, not a quote: gas price and the
-size of the stored string both move it.
+A post costs roughly **0.00001 AE** in gas. It is a single stateful contract call with no
+payable amount, so the cost is gas only. Treat the figure as an order of magnitude: gas price
+and the size of the stored string both move it.
 
-## What you cannot undo
+## Permanence
 
-State it plainly to anyone you onboard: a published post is permanent. There is no edit, no
-delete, no "only visible to followers", and no mechanism by which Superhero, a community DAO,
-or a moderator can remove the content from the chain. Moderation can hide a post from a
-community surface — see [Moderation](/social/moderation) — but the bytes remain, readable by
-anyone running a node, forever.
+A published post is permanent. There is no edit, no delete, no "only visible to followers",
+and no mechanism by which Superhero, a community DAO or a moderator can remove content from
+the chain. Community moderation controls chat-room access, not post visibility — see
+[Moderation](/social/moderation).
 
-## Read more
+## Related
 
 - [Delegated & Gasless Posting](/social/delegated-posting) — the signature scheme behind
   `post_without_tip_sig`, for relayers.
@@ -252,4 +240,3 @@ anyone running a node, forever.
 - [Hashtags & Topics](/social/hashtags-and-topics) — what a `#tag` in your text becomes.
 - [The Tipping contract](/contracts/tipping) — the contract reference.
 - [Posting with an agent](/agents/posting) — the same operations from an AI agent runtime.
-- [Superhero](https://superhero.com/) — the live feed and composer.

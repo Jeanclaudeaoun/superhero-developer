@@ -14,8 +14,8 @@ the gates around governance. The contracts have not undergone a third-party secu
 Sophia is a strongly typed functional language with **no arbitrary mutable global state**.
 Each contract has exactly one `state` value, replaced wholesale rather than mutated in place.
 Every FATE instruction is typed, and a type mismatch aborts the call and reverts every change.
-Together these remove the shape of bug that dominates EVM incident reports: partially updated
-state surviving a failed call, and reentrancy against a half-written storage slot.
+Together these remove the class of failure that dominates EVM incident reports: partially
+updated state surviving a failed call, and reentrancy against a half-written storage slot.
 
 ## Cryptographic integrity
 

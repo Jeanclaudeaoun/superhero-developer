@@ -1,25 +1,21 @@
 ---
 title: "Risks"
-description: "What can go wrong with a community token, stated plainly and with numbers."
+description: "What can go wrong with a community token — the 1% starting loss, slippage on exit, reflexivity, thin communities and contract risk — with numbers."
 ---
 
 # Risks
 
 Community tokens are volatile, reflexive, and structurally loss-making on a short round trip. The
 bonding curve removes some risks that exist elsewhere — there is no liquidity to pull and no
-counterparty to default — and introduces others that are specific to it. This page states both,
-specifically, with the arithmetic where arithmetic helps.
+counterparty to default — and introduces others that are specific to it.
 
 Nothing here is financial advice. Never risk funds you cannot afford to lose.
 
 ## 1. Every position starts about 1% down
 
-This is not a warning about fees in general. It is a fact about the first second of every position
-you open.
-
 You buy at the curve price plus a 0.5% affiliation fee. You can only sell at 0.995 times the curve
-price. Those two facts alone mean an instant round trip at unchanged supply returns
-`0.995 / 1.005 = 0.99502` of what you paid:
+price. An instant round trip at unchanged supply therefore returns `0.995 / 1.005 = 0.99502` of what
+you paid:
 
 ```text
 buy 1,000 tokens at supply 10,000,000
@@ -33,18 +29,18 @@ loss                               0.001052764439 AE   = 0.995% of what you paid
 ```
 
 Before gas. **The price has to rise about 1% before you are level**, which on this curve means the
-supply must grow by roughly the same 1% — somebody else has to buy about as much as you did, just for
-you to break even.
+supply must grow by roughly the same 1% — somebody else has to buy about as much as you did for you
+to break even.
 
-For a trader doing many round trips, this compounds hard: ten round trips at unchanged prices leave
-you with `0.99502^10 = 0.951` of your capital, a 4.9% loss from friction alone. Frequent trading on a
-1% spread is a losing strategy unless each move is substantially larger than 1%.
+For a trader doing many round trips this compounds: ten round trips at unchanged prices leave you
+with `0.99502^10 = 0.951` of your capital, a 4.9% loss from friction alone. Frequent trading on a 1%
+spread loses unless each move is substantially larger than 1%.
 
 ## 2. The exit price is not the quoted price
 
 A holdings row or a market cap figure prices your tokens at the current spot price. Selling walks the
-curve down as your tokens burn, so what you actually receive is the integral, not the rectangle. For
-a token with 10,000,000 supply:
+curve down as your tokens burn, so what you receive is the integral, not the rectangle. For a token
+with 10,000,000 supply:
 
 | Your balance | Share of supply | Quoted value (AE) | Actual sell return (AE) | Shortfall |
 | --- | --- | --- | --- | --- |
@@ -53,7 +49,7 @@ a token with 10,000,000 supply:
 | 5,000,000 | 50% | 523.72 | 388.53 | 25.8% |
 
 **The larger your position relative to the token, the more the displayed value overstates your
-exit.** Call `sell_return(balance)` on the sale contract for the honest number before you plan around
+exit.** Call `sell_return(balance)` on the sale contract for the exact number before you plan around
 a position's value. See [Portfolio & PnL](/tokens/portfolio).
 
 The same logic makes large entries expensive: adding 10% to a token's supply costs about 5% above
@@ -62,9 +58,8 @@ not help — the curve is path-independent. See [Fees & Slippage](/tokens/fees-a
 
 ## 3. Reflexivity
 
-Price is a pure function of supply and nothing else. There is no external market, no arbitrageur, and
-no fundamental value pulling the price back to anything. That makes the feedback loop unusually
-direct:
+Price is a pure function of supply and nothing else. There is no external market, no arbitrageur,
+and no fundamental value pulling the price back to anything, so the feedback loop is direct:
 
 - Buying raises the price, which makes the token look like it is performing, which attracts buyers, which raises the price.
 - Selling lowers the price, which makes it look like it is failing, which triggers more selling, which lowers the price.
@@ -73,17 +68,17 @@ Both directions are self-reinforcing and neither has a natural floor above the c
 that rose on one large buy is exactly as "real" as a price that rose on a thousand small ones — the
 curve cannot tell the difference, and neither can the chart.
 
-A particular trap follows from this: **momentum signals describe buying that has already moved the
-price.** By the time a token is at the top of the trending list, the supply that made it trend has
-already been minted, and you would be buying further up the curve than the people the signal is
-reporting on. See [The Trending Score](/tokens/trending-score).
+**Momentum signals describe buying that has already moved the price.** By the time a token is at
+the top of the trending list, the supply that made it trend has already been minted, and you would
+be buying further up the curve than the people the signal is reporting on. See
+[The Trending Score](/tokens/trending-score).
 
 ## 4. Thin communities and concentration
 
 Most community tokens are small. The specific dangers in a thin one:
 
 - **A single holder can be the market.** If one address holds 50% of the supply, their exit walks the price down through every other holder's position first. Check the Holders tab before you buy.
-- **The creator's entry was much cheaper than yours.** A pre-buy at creation happens at the very bottom of the curve: the first 437,014 tokens cost exactly 1 AE, while the same 437,014 tokens bought at a supply of 10,000,000 cost 47.06 AE — 47 times more. That asymmetry is intentional and disclosed, but it means an early holder can be far ahead while a later one is underwater.
+- **The creator's entry was much cheaper than yours.** A pre-buy at creation happens at the very bottom of the curve: the first 437,014 tokens cost exactly 1 AE, while the same 437,014 tokens bought at a supply of 10,000,000 cost 47.06 AE — 47 times more. An early holder can be far ahead while a later one is underwater.
 - **Low holder count with high supply is one person's position with a price attached**, not a community.
 - **Dilution.** Supply is unlimited and minted on demand. Your balance does not change when other people buy, but your share of the supply — and therefore your governance weight — falls.
 
@@ -94,7 +89,7 @@ prices and the curve keeps working, but:
 
 - There is no one to trade against except the curve, and no activity to move it.
 - Whatever the DAO treasury accumulated stays there. Opening a DAO vote costs **555 AE** paid by the proposer, so a treasury worth less than 555 AE is effectively unspendable: nobody will rationally pay more to propose a payout than the payout is worth. See [DAO voting](/dao/voting).
-- Governance requires a quorum of 10% of the token stake and 55% approval within two weeks. In an abandoned community that quorum may be unreachable, which means the treasury, the moderator set and the write threshold are all frozen as they are.
+- Governance requires a quorum of 10% of the token stake and 55% approval within two weeks. In an abandoned community that quorum may be unreachable, which freezes the treasury, the moderator set and the write threshold as they are.
 
 You can always sell back to the curve — solvency is guaranteed — but you will be selling into whatever
 supply remains, at whatever price the last trades left behind.
@@ -114,35 +109,8 @@ supply remains, at whatever price the last trades left behind.
 The contracts are written in Sophia, a functional language with strong static typing and no mutable
 global state, which narrows the surface for reentrancy and state-corruption bugs. The economic design
 is solvent by construction: the sell curve sits strictly below the buy curve at every supply, so the
-reserve can always redeem the entire supply.
-
-**The contracts say, in their own source, that they are not audited.** Every one of the ten BCL
-Sophia files opens with the same banner, directly above the `@compiler` pragma:
-
-```text
-// THIS IS NOT SECURITY AUDITED
-// DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST
-```
-
-The same notice appears at the top of the æternity governance `Poll.aes` and `Registry.aes`. Each
-BCL file also carries an explicit liability disclaimer: "Under no circumstances, whether in tort
-(including negligence), contract, or otherwise, unless required by applicable law, shall BCTSL be
-liable for damages… arising out of the deployment or use of this smart contract."
-
-This is not an inference from silence. The deployed code is annotated as unaudited by the people who
-wrote it, and the whitepaper's claim that the suite is "designed for independent audit and formal
-verification" describes an intention rather than a result. No audit report, auditor name or date
-appears in the contract repository, the whitepaper, the application repository, the FAQ or the agent
-skill. See [Contract security](/contracts/security) for what is known about the security model.
-
-One known defect, for calibration of what "unaudited" means in practice:
-`BondingCurveExponential.get_sell_return_precision()` returns the wrong constant, so an off-chain
-caller deriving the sell factor from the two getters overestimates sell returns by 0.5%. The
-on-chain math is unaffected because it uses the constants directly — but a getter shipped returning
-the wrong variable is the kind of thing a review catches. See
-[Curve Parameters & Units](/tokens/curve-parameters).
-
-The specific risks worth weighing:
+reserve can always redeem the entire supply. The contracts have not undergone a third-party audit.
+See [Contract security](/contracts/security).
 
 - **Bugs in the sale, curve, DAO or factory contracts.** These are immutable once deployed. A `ChangeDAO` vote can migrate a community's DAO, but the token and sale contracts are fixed.
 - **Upgrade and governance paths.** The `ChangeDAO` vote subject transfers ownership, beneficiary rights and accumulated funds to another DAO contract. It requires 55% approval and 10% participation, but in a community where one holder controls a majority of the supply, that is one holder's decision.
@@ -160,39 +128,22 @@ The specific risks worth weighing:
 
 The chain is the system of record; superhero.com is a client on top of it. If the web app or the
 indexer is down, your tokens are unaffected and the contracts still work — you can trade directly
-against the sale contract with the SDK. But while it is down you lose the price charts, the trending
+against the sale contract with the SDK. While it is down you lose the price charts, the trending
 score, the portfolio valuations and the transaction history, all of which are served by the backend
 rather than read from the chain.
 
-Indexer lag is also normal: a freshly created token takes 2–5 minutes to appear, and a trade may be
+Indexer lag is normal: a freshly created token takes 2–5 minutes to appear, and a trade may be
 on-chain before it shows in a list. Verify against the explorer before concluding something failed.
 
-## 10. Eligibility and programme risk
+## What a community token is not
 
-The Superhero Rewards Program is explicit that eligibility and rewards depend on on-chain activity and
-**are not guaranteed**, that the programme can be **paused at any time without notice**, and that
-users from blacklisted countries are not eligible. That is separate from token trading, but it is the
-same platform and worth knowing if rewards are part of your reasoning. See
-[Rewards program](/rewards/rewards-program).
-
-## What this is not
-
-- A community token is **not equity**, not a revenue share, and not a claim on any company's assets.
+- **Not equity**, not a revenue share, and not a claim on any company's assets.
 - The DAO treasury is spent by vote, not distributed. There is **no dividend**.
-- Nothing on this site is **financial, legal or tax advice**. Read the [Terms](https://superhero.com/terms) and [Privacy policy](https://superhero.com/privacy), and take your own advice.
 
-## Read more
+## Related
 
 - [Bonding Curves](/tokens/bonding-curve) — the arithmetic behind the spread and slippage numbers above
 - [Fees & Slippage](/tokens/fees-and-slippage) — the three cost components separated out
 - [Portfolio & PnL](/tokens/portfolio) — why a position's displayed value overstates its exit
 - [Reading a Token Page](/tokens/token-page) — how to check concentration and flow before buying
 - [Contract security](/contracts/security) — the security model of the contract suite
-- [Superhero Terms](https://superhero.com/terms) — the terms you accept by using the platform
-- [Superhero FAQ](https://superhero.com/faq) — the platform's own risk statement, in its own words
-- [Superhero whitepaper](https://superhero.com/whitepaper) — the security considerations section quoted above
-
-## Open questions
-
-- **Whether an audit has been completed since deployment.** The contract sources are explicitly marked unaudited, but those banners date from the code as written and would not be updated by an audit performed afterwards. No report, auditor or date appears in any repository or published page consulted for this documentation. If one exists, this page should name the auditor, the scope, the date and the resolution of any findings.
-- The gas cost of a buy, a sell and a post is undocumented, so the friction figures above count the 1% spread only. Real round-trip friction is the spread plus three transaction fees, since a sell is two transactions.

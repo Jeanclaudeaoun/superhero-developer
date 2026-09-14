@@ -1,6 +1,6 @@
 ---
 title: "AENS — the æternity Naming System"
-description: "How .chain names work at the protocol level: preclaim, claim, pointers, expiry and the short-name auction."
+description: "How .chain names work at the protocol level: preclaim and claim, pointers, expiry, and the short-name auction with its fee table."
 ---
 
 # AENS — the æternity Naming System
@@ -8,84 +8,62 @@ description: "How .chain names work at the protocol level: preclaim, claim, poin
 AENS is part of the æternity protocol, not an application-level registry contract. A `.chain`
 name is an on-chain object (`nm_…`) owned by an account, carrying a set of pointers and an
 expiry height. Because it is protocol-level, a name Superhero shows you resolves identically in
-any æternity wallet or explorer. This page is the protocol companion to the user-facing
-[Chain names](/identity/chain-names) guide.
+any æternity wallet or explorer. For the user-facing side, see
+[Chain names](/identity/chain-names).
 
 ## Length decides everything
 
 | Name length before `.chain` | What happens |
 | --- | --- |
-| 13 characters or more | Instant registration. Preclaim, claim, done. |
-| 12 characters or fewer | A first-price auction opens. Nobody gets the name immediately. |
+| 13 characters or more | Instant registration: preclaim, claim, done |
+| 12 characters or fewer | A first-price auction opens; nobody gets the name immediately |
 
-`superhero-name.mjs` encodes the threshold directly:
+Superhero registers long names only. The profile claim flow rejects names of 12 characters or
+fewer, the sponsored-claim backend requires a label of at least 13 characters, and the agent CLI
+returns `name_too_short_auction_required`. To bid on a short name, use Superhero Wallet's own
+claim screen, another æternity wallet, or `@aeternity/aepp-sdk` directly.
 
-```js
-const AUCTION_LENGTH_THRESHOLD = 12; // names with <= 12 chars (before .chain) go to auction
-```
+## Register a name: preclaim, then claim
 
-and refuses to register anything at or below it, returning
-`error: "name_too_short_auction_required"`. The Superhero tooling registers long names only.
+Registration is two transactions in two different blocks.
 
-## Registration: preclaim, then claim
-
-Registration is deliberately two transactions in two different blocks.
-
-1. **Preclaim.** You pick a random salt, hash it together with the name, and publish only the
-   hash as a commitment (`cm_…`). The name itself is not in this transaction, so nobody watching
-   the mempool learns what you are claiming.
-2. **Claim.** In a *later* block, you publish the name and the salt. The protocol recomputes the
+1. **Preclaim.** Pick a random salt, hash it together with the name, and publish only the hash
+   as a commitment (`cm_…`). The name itself is not in this transaction, so nobody watching the
+   mempool learns what you are claiming.
+2. **Claim.** In a *later* block, publish the name and the salt. The protocol recomputes the
    hash, matches it against your commitment, and awards the name — or opens an auction.
 
-Without this split, a bot watching the transaction pool could read your name out of the pending
-claim and submit its own claim with a higher fee. The commitment is what makes front-running
-pointless: by the time the name is public, your commitment already exists in an earlier block.
+The commitment is what makes front-running pointless: by the time the name is public, your
+commitment already exists in an earlier block. Three protocol rules constrain the pair:
 
-Three protocol rules constrain the pair, all from
-[AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md):
+- The claim must not be in the same block as its preclaim, and must follow within **300 blocks**.
+- Only the **first** claim has to be signed by the key that made the preclaim. A later claim in
+  the same auction is a bid from anyone, and from Lima it must carry `name_salt = 0`.
+- From **Ceres** the preclaim is optional: a claim with `name_salt = 0` can open an auction or
+  take a long name directly. Use the two-step flow for a name you care about, because skipping
+  it puts the name in the mempool.
 
-- The claim must not be in the same block as its preclaim, and must follow within **300 blocks**
-  or it is rejected.
-- Only the **first** claim has to be signed by the key that made the preclaim. A later claim in the
-  same auction is a bid from anyone, and from Lima it must carry `name_salt = 0` — the opposite of
-  the opening claim, which carries the real salt.
-- From **Ceres** the preclaim is optional entirely: a claim with `name_salt = 0` can open an
-  auction or take a long name directly. The two-step flow is still what you want for a name you
-  care about, because skipping it puts the name in the mempool.
-
-`superhero-name.mjs` enforces the block separation explicitly rather than hoping for it. After
-the preclaim is mined it reads the top block height and polls `/v3/headers/top` every 30 seconds
-until the height has advanced, then claims:
-
-```js
-const preclaimHeight = await getTopBlockHeight();
-await waitForNextBlock(preclaimHeight);   // polls until height increases
-const claimResult = await nameObj.claim();
-```
-
-It then adds a third step of its own — a `NameUpdateTx` pointing the name at your wallet — so
-the CLI's `register` is preclaim, claim, point:
+The agent CLI waits for the block height to advance after the preclaim is mined, then claims,
+then adds a third transaction — a `NameUpdateTx` pointing the name at your wallet:
 
 ```bash
 node scripts/superhero-name.mjs available myagentname   # check first
-node scripts/superhero-name.mjs register myagentname    # three transactions
+node scripts/superhero-name.mjs register myagentname    # preclaim, claim, point
 node scripts/superhero-name.mjs resolve myagentname.chain
 ```
 
-A freshly claimed name points nowhere until that update lands. Claiming and pointing are
-separate protocol operations.
+A freshly claimed name points nowhere until that update lands. Claiming and pointing are separate
+protocol operations.
 
 ## The auction, for names of 12 characters or fewer
 
-This is the part most people trip over: short names cannot be bought, only bid on.
+Short names cannot be bought, only bid on.
 
 - **Format:** first-price auction. The highest bid at close pays what it bid and takes the name.
 - **Starting bid:** scales with length, steeply. See the table below.
-- **Bid increment:** every subsequent bid must be **at least 5% above** the previous bid. The
-  protocol spec calls this "a percentage of the price (currently 5%) defined in governance"; the
-  SDK hard-codes the same figure as `NAME_FEE_BID_INCREMENT = 0.05` and refuses a smaller one.
-- **Duration:** scales with length, counted in key blocks from the opening claim. Ceres cut the
-  two longest timeouts sharply:
+- **Bid increment:** every subsequent bid must be **at least 5% above** the previous bid
+  (`NAME_FEE_BID_INCREMENT = 0.05` in the SDK).
+- **Duration:** scales with length, counted in key blocks from the opening claim:
 
 | Name length | Timeout before Ceres | Timeout from Ceres | Roughly, at ~3 min per key block |
 | --- | --- | --- | --- |
@@ -94,18 +72,15 @@ This is the part most people trip over: short names cannot be bought, only bid o
 | 5 to 8 | 14,880 blocks | 960 blocks | ~31 days, now ~2 days |
 | 1 to 4 | 29,760 blocks | 2,400 blocks | ~62 days, now ~5 days |
 
-Both timeout columns are from the "Protocol fees and protection times" section of
-[AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md); the Ceres column is the one
-`computeAuctionEndBlock` in `@aeternity/aepp-sdk` implements
-(`src/tx/builder/helpers.ts`). A short name no longer takes two months to settle.
+Before Ceres a bid restarted the full timeout. From Ceres a bid extends the auction **by up to
+120 key blocks**: there are always at least 120 generations (roughly six hours) left to outbid
+after any successful bid, so the end moves only when it would otherwise fall inside that window.
+A one-to-four-character auction is a 2,400-block race from the opening claim, with a six-hour
+floor after each bid.
 
-**How a bid moves the deadline changed at Ceres, and it is not what you would guess.** Before
-Ceres a bid restarted the full timeout — every late bid on a one-to-four-character name bought
-another ~62 days. From Ceres a bid extends the auction **by up to 120 key blocks**: the rule is
-that there are always at least 120 generations (roughly six hours) left to outbid after any
-successful bid, so the end moves only when it would otherwise fall inside that window. A
-one-to-four-character auction is therefore a 2,400-block race from the opening claim, with a
-six-hour floor after each bid. **After Ceres, a late bid buys the competition hours, not weeks.**
+A bid is a claim transaction on a name that already has an auction running; it needs no preclaim
+of its own and may come from any account. Nothing settles until the window elapses with no higher
+bid. Live auctions are browsable on [æScan](https://aescan.io/).
 
 ### The starting-bid table
 
@@ -131,49 +106,17 @@ The values are Fibonacci numbers running backwards from length 31:
 | 15 | 6,765 | 0.6765 | 30 | 5 | 0.0005 |
 | | | | 31 | 3 | 0.0003 |
 
-Four rules govern how it is applied:
-
-- **Length is the label only**, in its punycode form, without the `.chain` suffix. The SDK computes
-  it as `nameToPunycode(name).length - AENS_SUFFIX.length`, so a non-ASCII name is measured after
-  IDN encoding, not by its character count.
-- **Names of 32 characters or more pay the 31-character price**, 0.0003 AE. The SDK clamps with
-  `Math.min(nameLength, 31)`; the protocol table simply stops at 31.
+- **Length is the label only**, in its punycode form, without the `.chain` suffix. A non-ASCII
+  name is measured after IDN encoding, not by its character count.
+- **Names of 32 characters or more pay the 31-character price**, 0.0003 AE.
 - **Only names of 12 characters or fewer are auctioned.** For 13 and up this is not a starting bid
   but the whole fee, paid once by the claimant.
 - **The fee is locked, not spent.** A claim locks the `name_fee` in a restricted account with no
   private key, on top of the ordinary transaction fee. It does not go to a miner.
 
-Sources: the table in
-[AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md#protocol-fees-and-protection-times),
-and `NAME_BID_RANGES` in `@aeternity/aepp-sdk` (`src/tx/builder/constants.ts`), which reproduces it
-verbatim and multiplies by `NAME_FEE_MULTIPLIER = 1e14`. Both cite the node's
-`aec_governance.erl` as the normative original.
-
-A bid is just a claim transaction on a name that already has an auction running, and it needs no
-preclaim of its own — from Lima a bid carries `name_salt = 0` and may come from any account.
-Nothing settles until the window elapses with no higher bid; then the winner's claim takes effect.
-
-Live auctions are browsable on [æScan](https://aescan.io/), which tracks active names, ongoing
-auctions and recent registrations.
-
-### You cannot bid from Superhero
-
-No Superhero surface supports a short name, and each one refuses at a different layer:
-
-| Surface | Behaviour on a name of 12 characters or fewer |
-| --- | --- |
-| Web app profile claim | `validateClaimChainName` returns `chainNameClaimTooShort` for `name.length <= 12`, before any price is computed or any transaction is built (`src/components/modals/ProfileEditModal.tsx`) |
-| Sponsored claim (backend) | Rejected by `SponsoredChainNameLabelPipe`, which requires `PROFILE_CHAIN_NAME_MIN_LABEL_LENGTH` = 13 (`superhero-api/src/profile/validation/`) |
-| Agent CLI | `superhero-name.mjs` refuses with `name_too_short_auction_required` |
-
-So a short name has to be bid on somewhere else — Superhero Wallet's own claim screen, another
-æternity wallet, or `@aeternity/aepp-sdk` directly.
-
-**In code, do not transcribe the table — call the SDK.** `getMinimumNameFee(name)` in
-`@aeternity/aepp-sdk` implements the length-to-fee function above, including the punycode
-measurement and the 31-character clamp, and it is what the app itself calls when pricing a
-long-name claim (`src/utils/claimChainName.ts`). For a short name the same call returns the
-auction's starting bid:
+In code, call the SDK rather than transcribing the table. `getMinimumNameFee` implements the
+length-to-fee function, including the punycode measurement and the 31-character clamp, and stays
+correct across a hard fork that changes the coefficients:
 
 ```js
 import { getMinimumNameFee, computeBidFee } from '@aeternity/aepp-sdk';
@@ -182,32 +125,28 @@ getMinimumNameFee('abcd.chain');  // 134626900000000000000 aettos — the openin
 computeBidFee('abcd.chain');      // that × 1.05 — the minimum bid that would beat it
 ```
 
-`computeBidFee` also takes a `startFee`, so you can compute the next legal bid over a standing one
-rather than over the floor. Reading it from the SDK keeps you correct across a hard fork that
-changes the coefficients; the table above is what the current protocol version says.
+`computeBidFee` also takes a `startFee`, so you can compute the next legal bid over a standing
+one rather than over the floor.
 
 ## Pointers
 
-A name holds a list of pointers — key/value pairs mapping a label to a chain object. The one
-that matters for Superhero is `account_pubkey`, which is what "this name is this wallet" means:
+A name holds a list of pointers — key/value pairs mapping a label to a chain object. The one that
+matters for Superhero is `account_pubkey`, which is what "this name is this wallet" means:
 
 ```js
 await nameObj.update({ account_pubkey: 'ak_...' }, { extendPointers: true });
 ```
 
-**A `NameUpdateTx` replaces the pointer set, it does not merge into it.** The protocol spec is
-explicit: on `update`, the pointers field "is replaced with the pointers in the transaction". So
-sending one pointer wipes the others. `extendPointers: true` is the SDK reading the current set and
-sending it back with yours added — always pass it on a name that already points at something.
+**A `NameUpdateTx` replaces the pointer set; it does not merge.** Sending one pointer wipes the
+others. `extendPointers: true` makes the SDK read the current set and send it back with yours
+added — always pass it on a name that already points at something.
 
-Superhero's own resolver looks for exactly one key — both `superhero-name.mjs`
-(`getAccountPointer`) and the web app's `src/hooks/useClaimChainName.ts`
-(`extractAccountPointer`) search the pointer list for `account_pubkey` and ignore the rest.
+Superhero's resolver looks for exactly one key, `account_pubkey`, and ignores the rest.
 
 Beyond accounts, a pointer may target an oracle, a channel or a contract, and from Ceres it may
-also hold up to 1024 bytes of uninterpreted data — an update using that new target type has to use
-version 2 of the update-transaction serialization. Since the **Iris** upgrade the protocol caps a
-name at **32 pointers**, forbids duplicate keys, and limits a key to **256 bytes**.
+also hold up to 1024 bytes of uninterpreted data (which requires version 2 of the
+update-transaction serialization). Since Iris a name holds at most **32 pointers**, with no
+duplicate keys and keys of at most **256 bytes**.
 
 ## Expiry and extension
 
@@ -215,22 +154,21 @@ A name is a lease, not a purchase.
 
 - The name's TTL is a **delta in key blocks**, not an absolute height — the name enters the
   revoked state that many blocks after the transaction that set it.
-- Since the **Iris** upgrade the maximum `expire_by` is **180,000 blocks** (roughly 375 days),
-  raised from the earlier 50,000 (roughly 100 days).
-- Extending is a `NameUpdateTx`. The spec states plainly that no additional fee is required for
-  extending the lease — you still pay the transaction fee.
-- Let it lapse and the name becomes claimable by anyone again. There is no ownership memory.
+- Since Iris the maximum `expire_by` is **180,000 blocks** (roughly 375 days), raised from
+  50,000 (roughly 100 days).
+- Extending is a `NameUpdateTx`. No additional name fee is required; you pay only the transaction
+  fee.
+- Let it lapse and the name becomes claimable by anyone. There is no ownership memory.
 
 ```bash
 node scripts/superhero-name.mjs extend myagentname.chain
 ```
 
-Superhero surfaces the expiry it knows about: `useClaimChainName.ts` reads an
-`expires_at` / `approximate_expire_time` field off the backend's claim status, and the
-ProfileRegistry contract stores a chain name together with an expiration timestamp (see
-[ProfileRegistry](/contracts/profile-registry)).
+Superhero surfaces the expiry it knows about in the claim status (`expires_at` /
+`approximate_expire_time`), and the ProfileRegistry contract stores a chain name together with an
+expiration timestamp (see [ProfileRegistry](/contracts/profile-registry)).
 
-## Reading names without a wallet
+## Read names without a wallet
 
 The middleware indexes names, so you can list what an address owns over plain HTTP:
 
@@ -238,17 +176,14 @@ The middleware indexes names, so you can list what an address owns over plain HT
 curl "https://mainnet.aeternity.io/mdw/v3/names?owned_by=ak_...&state=active&limit=100"
 ```
 
-That is the exact query `superhero-name.mjs lookup` makes. The web app does the same against
-whatever `MIDDLEWARE_URL` its build is configured with — see [Networks](/aeternity/networks).
+That is the query `superhero-name.mjs lookup` makes. See [Networks](/aeternity/networks) for
+hosts.
 
 ## Read more
 
 - [Chain names](/identity/chain-names) — the same system from the Superhero user's side.
 - [Claim a name](/getting-started/claim-name) — the in-app flow, step by step.
-- [Accounts & Keys](/aeternity/accounts-and-keys) — what `nm_` and `cm_` are, next to every other prefix.
+- [Accounts & Keys](/aeternity/accounts-and-keys) — `nm_` and `cm_` next to every other prefix.
 - [Profiles](/identity/profiles) — how a resolved name becomes a display name.
-- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the official AENS overview, including auction pricing.
+- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the official AENS overview.
 - [AENS in the protocol spec](https://github.com/aeternity/protocol/blob/master/AENS.md) — the normative source for auction timeouts, commitments and pointer limits.
-- [æScan](https://aescan.io/) — browse active names and live auctions.
-- [aepp-sdk-js](https://github.com/aeternity/aepp-sdk-js) — `getMinimumNameFee`, `computeBidFee`
-  and `computeAuctionEndBlock`, in `src/tx/builder/helpers.ts`.

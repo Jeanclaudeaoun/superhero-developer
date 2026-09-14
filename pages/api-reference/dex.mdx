@@ -6,9 +6,8 @@ description: "Token, pair, route and transaction data for the æternity AMM, ser
 # DEX API
 
 The DEX endpoints cover the constant-product AMM behind Superhero's swap UI: listed tokens and
-their prices, liquidity pairs and their reserves, swap routes between any two tokens, and every
-swap and liquidity event. They are the counterpart to the bonding-curve endpoints under
-[Tokens](/api-reference/tokens).
+prices, liquidity pairs and reserves, swap routes, and every swap and liquidity event. The
+bonding-curve counterpart is [Tokens](/api-reference/tokens).
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
 
@@ -146,12 +145,10 @@ swap_exact_ae_for_tokens
 swap_ae_for_exact_tokens
 ```
 
-The `tx_type` query parameter is an exact-match filter, so `?tx_type=swap` matches nothing. To
-select all swaps, make six requests or filter client-side on the `swap_` prefix.
-
-`PairMint` and `PairBurn` are the pair contract's **event names** and appear only inside
-`pair_mint_info.type`. An `add_liquidity*` transaction carries a `PairMint` event, a
-`remove_liquidity*` transaction a `PairBurn`.
+The `tx_type` filter is exact-match, so `?tx_type=swap` matches nothing; to select all swaps,
+make six requests or filter client-side on the `swap_` prefix. `PairMint` and `PairBurn` are the
+pair contract's event names and appear only inside `pair_mint_info.type`: `add_liquidity*`
+carries a `PairMint`, `remove_liquidity*` a `PairBurn`.
 
 Date filters on this endpoint are `from_date` and `to_date`, both ISO 8601, both bounds
 inclusive. `order_by` accepts `created_at` (the default) or `tx_type`; anything else is a 400.

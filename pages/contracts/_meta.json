@@ -11,7 +11,7 @@
   "community-management": "CommunityManagement",
   "affiliation-treasury": "AffiliationTreasury",
   "aex9": "FungibleTokenFull (AEX-9)",
-  "profile-registry": "ProfileRegistry",
+  "profile-registry": "AddressLink",
   "governance-contracts": "Registry & Poll",
   "events": "Events",
   "security": "Security Model"

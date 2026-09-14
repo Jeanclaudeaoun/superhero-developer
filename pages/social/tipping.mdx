@@ -1,17 +1,15 @@
 ---
 title: "Tipping"
-description: "Send AE directly to a creator against a specific post."
+description: "Send AE directly to a creator against a specific post — the payload format, how tips are attributed, and how to read totals."
 ---
 
 # Tipping
 
-Tipping on Superhero is a plain AE transfer with a payload that names the post. Despite the
-content contract being called `Tipping`, the tip itself is not a contract call: it is a spend
-transaction from your account straight to the author's, and the indexer reads the payload to
-attribute it. That design means no fee, no escrow, and no intermediary that could fail to pay
-out.
+A tip on Superhero is a plain AE transfer with a payload that names the post: a spend
+transaction from your account straight to the author's. The indexer reads the payload to
+attribute it. There is no fee, no escrow and no intermediary.
 
-## What actually happens
+## The transaction
 
 ```text
 sdk.spend(amountInAettos, recipientAddress, { payload })
@@ -31,55 +29,39 @@ appended, so `TIP_POST:3903_v3` is the canonical form regardless of how the call
 Because it is an ordinary spend, the AE lands in the author's balance in the same transaction.
 There is nothing to claim, no vesting, and no minimum enforced by the protocol.
 
-## Why the Tipping contract is not involved
-
-`tipping-contract/contracts/v3/Tipping_v3.aes` is 78 lines. Its complete entrypoint surface is
-`init`, `post_without_tip`, `post_without_tip_sig` and `get_state`; its only content variant is
-`datatype tip = PostWithoutTip(tip_meta, list(string))`; and its state is a map of posts plus a
-`version` string. **No entrypoint is marked `payable`**, so the contract cannot receive AE at
-all, and it holds no balance to distribute. The name is historical: v3 is the content layer,
-and tipping migrated to plain transfers.
-
-A companion contract, `Tipping_v3_Getter.aes`, adds exactly one read helper —
-`get_tip_by_id(c : Tipping, tip_id : int) : option(Tipping.tip)` — which looks a post up inside
-another contract's `get_state().tips` map so a caller can fetch one post without pulling the
-whole state. It is a read convenience, not a tipping path.
+The `Tipping` v3 contract is not involved: it stores posts, has no `payable` entrypoint and
+holds no balance. (A companion `Tipping_v3_Getter` contract adds one read helper,
+`get_tip_by_id(c : Tipping, tip_id : int) : option(Tipping.tip)`, for fetching a single post
+without pulling the whole state.)
 
 Practical consequences:
 
 - A tip cannot fail because of contract logic; it fails only if you cannot pay.
-- A tip is attributable off-chain, by the indexer reading the payload. If the indexer misses
-  it, the AE still arrived — only the displayed total is wrong.
-- Anyone can reconstruct tip attribution themselves by scanning spend transactions to an
-  address and decoding payloads that start with `TIP_POST:`.
+- Attribution happens off chain, by the indexer reading the payload. If the indexer misses a
+  tip, the AE still arrived — only the displayed total is affected.
+- Anyone can reconstruct tip attribution by scanning spend transactions to an address and
+  decoding payloads that start with `TIP_POST:`.
 
 ## How the indexer attributes a tip
-
-`superhero-api/src/tipping/services/tips.service.ts` is the whole rule, and it is short enough
-to state exactly:
 
 1. The transaction must have `tx.type === 'SpendTx'`. Contract calls are never tips.
 2. The payload is decoded from its `ba_…` form to a string. It must start with `TIP_PROFILE`
    or `TIP_POST`, otherwise the transaction is skipped.
 3. For a `TIP_POST:` payload, everything after the colon is taken as a post id and looked up
-   directly by `id`. A miss leaves the tip unattached to a post, not rejected.
+   directly by `id`. A miss leaves the tip unattached to a post.
 4. Self-tips are dropped, not stored — for a post tip that means `sender == post.sender_address`
-   (tipping your own post), and for a profile tip `sender == receiver`
-   (`src/tipping/utils/is-self-tip.util.ts`).
+   (tipping your own post), and for a profile tip `sender == receiver`.
 5. The row is keyed on `tx_hash`, so reprocessing the same transaction is idempotent.
 6. The amount is stored as `toAe(tx.amount)` — a decimal AE string, not aettos.
 
-Two things follow that matter if you are integrating:
+Two things follow:
 
-- **Tips sent outside the app count.** The check is entirely on the on-chain spend and its
-  payload. A manually constructed `spend` with a `TIP_POST:3903_v3` payload is indistinguishable
-  from one the app sent, and is indexed identically. Nothing binds a tip to the Superhero
-  client.
+- **Tips sent outside the app count.** A manually constructed `spend` with a `TIP_POST:3903_v3`
+  payload is indistinguishable from one the app sent, and is indexed identically.
 - **There is no minimum and no dust filter.** Any positive amount is stored and summed. The web
-  composer requires a positive amount within your balance; the indexer applies no floor of its
-  own.
+  composer requires a positive amount within your balance; the indexer applies no floor.
 
-## Tipping from the app
+## Tip from the app
 
 The tip button sits on every post in the feed and on the post page. It shows the post's current
 total in AE when there is one, and the word Tip when there is not.
@@ -90,13 +72,12 @@ total in AE when there is one, and the word Tip when there is not.
 3. Confirm in your wallet. The modal closes before the wallet opens so the two do not stack.
 
 The button then shows Sending, and Tipped once the transaction returns. Your balance is checked
-client-side before the send, so an amount above your balance disables the button rather than
-failing in the wallet.
+client-side before the send, so an amount above your balance disables the button.
 
 ### Why the total takes a moment
 
-The displayed total comes from the indexer, which has to see the transaction confirm before it
-can update. The app bridges the gap:
+The displayed total comes from the indexer, which has to see the transaction confirm. The app
+bridges the gap:
 
 - It optimistically adds your amount to the cached total immediately.
 - It then polls `GET /api/tips/posts/{postId}/summary` — 5 seconds after the send, then every
@@ -104,9 +85,9 @@ can update. The app bridges the gap:
 - It stops as soon as the backend total reaches or exceeds the expected value.
 
 If the minute elapses without the backend catching up, the app does a final refetch and leaves
-the real value in place. Your optimistic bump is display only; it is never written anywhere.
+the real value in place. The optimistic bump is display only.
 
-## Reading tip totals
+## Read tip totals
 
 | Endpoint | Returns |
 | --- | --- |
@@ -119,38 +100,32 @@ The post id in the path takes the `_v3` suffix, matching the payload form.
 `GET /api/tips` accepts `sender`, `receiver`, `type` and `post_id` filters,
 `order_by` of `amount`, `type` or `created_at`, an `order_direction`, and `page`/`limit` with a
 maximum limit of 100. Ordering by `amount` casts the stored string to numeric first, so it
-sorts by value rather than lexically. Note that `type` holds the **whole decoded payload** —
+sorts by value rather than lexically. `type` holds the **whole decoded payload** —
 `TIP_PROFILE`, or `TIP_POST:3903_v3` — so filtering by `type` is an exact-string match on that,
 not on the bare word `TIP_POST`.
 
 Tip signals also feed the popular feed: `tipsAmountAE`, `tipsCount` and `uniqueTippers` are
-three of the eight weighting inputs a reader can scale, and all three are computed with
-self-tips excluded. See [The Feed](/social/feed).
+three of the eight weighting inputs a reader can scale, all computed with self-tips excluded.
+See [The Feed](/social/feed).
 
-## Tipping someone who has not claimed anything
+## Tipping an address that has never used Superhero
 
 There is nothing to claim. The recipient is an æternity address, and an address exists whether
-or not anyone has ever opened it in a wallet. A tip to an address whose owner has never used
-Superhero simply increases that address's balance; if the key is lost, so is the AE. There is
-no pending-tip pool and no reclaim path.
+or not anyone has ever opened it in a wallet. A tip simply increases that address's balance;
+if the key is lost, so is the AE. There is no pending-tip pool and no reclaim path.
 
 ## Tips and notifications
 
-There is no tip notification type. The catalog in
-`superhero-api/src/notifications/notification-catalog.ts` carries six types and none of them is
-a tip. The closest is `incoming-transfer`, which fires on any incoming `SpendTx` — a tip
-included — above `NOTIF_MIN_AMOUNT_AETTOS`, an anti-dust floor that defaults to 0, meaning off.
-But that type is declared `via(): ['expo']`, mobile push only, deliberately never written to
-the web feed because it would otherwise write a feed row for every transfer on chain. So an
-incoming tip produces a mobile push, if the recipient has a registered device, and nothing in
-the bell. See [Notifications](/social/notifications).
+There is no tip notification type. The closest is `incoming-transfer`, which fires on any
+incoming `SpendTx` — a tip included — above `NOTIF_MIN_AMOUNT_AETTOS` (default 0, meaning
+off). That type is mobile push only, so an incoming tip produces a mobile push if the recipient
+has a registered device, and nothing in the web bell. See
+[Notifications](/social/notifications).
 
-## Read more
+## Related
 
 - [Posting](/social/posting) — the ids and `_v3` suffix convention the payload depends on.
 - [The Feed](/social/feed) — how tip signals influence popular ranking.
 - [Notifications](/social/notifications) — why a tip does not raise a bell notification.
-- [Value flow](/concepts/value-flow) — where money moves elsewhere in the protocol, and how
-  tipping differs from the bonding-curve fee splits.
+- [Value flow](/concepts/value-flow) — where money moves elsewhere in the protocol.
 - [Transactions](/api-reference/transactions) — reading spend transactions and their payloads.
-- [Superhero](https://superhero.com/) — tip a post from the live feed.

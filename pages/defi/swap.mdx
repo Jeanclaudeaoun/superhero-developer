@@ -37,9 +37,8 @@ Open **Settings** on the swap card.
 | Slippage tolerance | **5%** | 0.1, 0.5, 1.0 | 0 to 50 | `dex:slippage` in local storage |
 | Transaction deadline | **30 minutes** | 10, 20, 30 | 1 to 60 | `dex:deadline` in local storage |
 
-The 5% default is generous and applies to every swap until you change it. On a deep pool it is
-unnecessary slack; on a thin one it is the difference between a bad fill and a rejected
-transaction. Set it deliberately.
+The 5% default applies to every swap until you change it. Set it deliberately: on a thin pool it
+is the difference between a bad fill and a rejected transaction.
 
 - **Slippage** sets the protective bound, not the price. For an exact-in swap the app computes
   `amountOutMin` by subtracting your tolerance from the quoted output. For exact-out it queries
@@ -194,9 +193,7 @@ The AE-side entrypoints do the wrapping for you. `swap_exact_ae_for_tokens` and
 `wae.withdraw(amount)` and `Chain.spend(to, amount)`. Both exact-out AE-input forms refund the
 unspent AE to you in the same transaction.
 
-Router and factory addresses for both networks are in the [deployment table](/defi). At startup
-the app asks the router for its own `factory()` and falls back to the configured factory address
-only if that call fails.
+Router and factory addresses for both networks are in the [deployment table](/defi).
 
 ## What can go wrong
 
