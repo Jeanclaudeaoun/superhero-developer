@@ -85,6 +85,13 @@ custody anything on your behalf.
 
 Availability and pairs change. Confirm details with the provider before sending anything.
 
+**Superhero Wallet has a card-purchase entry too, and it is switched off in released builds.** Its
+"Buy AE" panel item and dashboard card link a Simplex integration at `https://simplex.superhero.com`
+(`AE_SIMPLEX_URL`), but both are rendered under `isNodeMainnet && UNFINISHED_FEATURES`, and
+`.env.production` sets `UNFINISHED_FEATURES=false`. So you will not see it in the extension or the
+app you installed from a store. That is the same pattern as superhero.com's disabled bridge and
+buy-with-ETH routes below: the on-ramp code exists in both codebases and is turned off in both.
+
 ### Withdrawing to your own address
 
 Whichever route you take, the end state you want is **native AE in your own `ak_...` address**, not a
@@ -147,9 +154,11 @@ The get-AE page's own warnings, which are the right ones:
 
 - **Are the `/defi/bridge` and `/defi/buy-ae-with-eth` routes disabled temporarily or permanently?**
   The router keeps both the redirect and the commented-out view, which reads as "re-enable later",
-  but nothing states the intent — and the backend offers no clue either: `superhero-api` has no
-  bridge or on-ramp module at all, only the aeETH token address the DEX needs to price the pair.
-  Only a maintainer can say; ask on
+  but nothing states the intent — and neither of the other two codebases resolves it. `superhero-api`
+  has no bridge or on-ramp module at all, only the aeETH token address the DEX needs to price the
+  pair; `superhero-wallet` keeps its own on-ramp (Simplex) behind an `UNFINISHED_FEATURES` flag that
+  production builds set to `false`, which is consistent with "parked" but is evidence about a
+  different product. Only a maintainer can say; ask on
   [the issue tracker](https://github.com/superhero-com/superhero/issues). See
   [Bridging from Ethereum](/defi/bridge).
 - **Which exchanges besides Gate.io support AE withdrawal to a native `ak_` address?** The app links

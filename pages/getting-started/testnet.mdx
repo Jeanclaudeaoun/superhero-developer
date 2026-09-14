@@ -87,8 +87,10 @@ configuration. The active factory address comes from the backend's factory endpo
 ## Getting test AE
 
 Use the æternity faucet at **[faucet.aepps.com](https://faucet.aepps.com/)**: select Testnet, paste
-your `ak_...` address, and submit. The form takes nothing but the address. It also has a programmatic
-form:
+your `ak_...` address, and submit. The form takes nothing but the address. Superhero Wallet points at
+the same host — `AE_FAUCET_URL` in its æternity config is exactly `https://faucet.aepps.com` — so if
+you are already in the wallet on testnet, its **Faucet** entry saves you the paste. It also has a
+programmatic form:
 
 ```bash
 curl -X POST https://faucet.aepps.com/account/ak_YOUR_ADDRESS
@@ -114,9 +116,38 @@ on the æternity docs hub.
 
 ## Pointing a wallet at testnet
 
-Superhero Wallet — extension, mobile or web — supports switching to testnet in its own network
-settings. Because the app is build-pinned, the two must agree: a mainnet build plus a testnet wallet
-produces a mismatch the app cannot fix for you.
+Superhero Wallet — extension, mobile app, or `wallet.superhero.com` — is the easy half of this.
+**Every build ships both networks.** `ensureDefaultNetworksExists` in
+`superhero-wallet/src/composables/networks.ts` creates a Mainnet entry and a Testnet entry on first
+run regardless of how the wallet was built, so switching is a menu choice under Settings → Network,
+not a rebuild. Custom networks can be added there too, with per-protocol URLs.
+
+Its æternity testnet defaults, from `src/protocols/aeternity/config.ts`:
+
+| Setting | Value |
+| --- | --- |
+| Node | `https://testnet.aeternity.io` |
+| Middleware | `https://testnet.aeternity.io/mdw` |
+| Explorer | `https://testnet.aescan.io` |
+| Superhero API | `https://testnet.api.dev.tokensale.org` |
+| Tipping backend | `https://superhero-backend-testnet.prd.service.aepps.com` |
+| Multisig backend | `https://ga-multisig-backend-testnet.prd.service.aepps.com` |
+
+The Superhero API row matches `src/config.ts` in the web app, which is a useful cross-check that the
+testnet backend is the same deployment both clients talk to.
+
+Once the wallet is on testnet it grows a **Faucet** entry — on the More screen and on the AE asset
+screen — which is just a link to `https://faucet.aepps.com?address=<your ak_ address>` with your
+address prefilled (`buildAeFaucetUrl`). It is hidden on mainnet.
+
+There is also `npm run build:Testnet` in the wallet repository, which sets `NETWORK=Testnet` and
+changes only the *placeholder* values in the add-custom-network form. It is not needed for ordinary
+testnet use.
+
+Because superhero.com is build-pinned, the two must still agree: a mainnet build plus a testnet
+wallet produces a mismatch the app cannot fix for you, and an æpp cannot ask the wallet to switch —
+Superhero Wallet answers that RPC method with `RpcMethodNotFoundError`. See
+[Connecting a Wallet](/wallets/connecting).
 
 ## The agent skill is mainnet-only
 
@@ -155,16 +186,6 @@ different host rather than a path on the same one.
 Treat every agent-skill command in these docs as a **mainnet command spending real AE** unless you
 have changed those constants yourself.
 
-## Read more
-
-- [Using Testnet from an agent](/agents/quickstart) — the setup those scripts assume, all of it mainnet by default.
-- [Contract Addresses](/contracts/addresses) — the full address reference across both networks.
-- [Networks](/aeternity/networks) — what `ae_uat` is at the protocol level and how it differs from mainnet.
-- [Troubleshooting](/wallets/troubleshooting) — the network-mismatch and passkey-RP-ID symptoms a testnet build produces.
-- [æternity testnet faucet](https://faucet.aepps.com/) — where to get test AE.
-- [Testnets and Faucet documentation](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet) — the upstream guide.
-- [testnet.aescan.io](https://testnet.aescan.io) — the testnet explorer.
-
 ## Is there a hosted testnet front end?
 
 Probably, but no public URL for it is recorded anywhere, and you should plan on building your own.
@@ -176,6 +197,11 @@ treats `testnet` as one of four named deploy environments in its workflow (along
 `https://testnet.api.dev.tokensale.org` in `src/config.ts` being a live service rather than a
 leftover.
 
+The backend repository agrees: `superhero-api/src/configs/network.ts` defines `NETWORK_TESTNET` as a
+first-class entry beside `NETWORK_MAINNET` and selects between them with an `AE_NETWORK_ID`
+environment variable defaulting to `ae_mainnet`. Running the API against testnet is a deployment
+setting, not a fork.
+
 What is not established is a testnet build of the **web app**. No `testnet.superhero.com` or
 equivalent appears in any repository, the deploy hosts in the workflow are GitHub secrets, and the
 app's own config never refers to a testnet front-end origin. So assume you build it:
@@ -183,6 +209,22 @@ app's own config never refers to a testnet front-end origin. So assume you build
 ```bash
 VITE_NETWORK=ae_uat npm run dev
 ```
+
+There is one hosted testnet front end you do not have to build, though it is not superhero.com:
+**`wallet.superhero.com` switches to testnet from its own settings**, as described above, which is
+enough to hold test AE, claim testnet `.chain` names, inspect AEX-9 balances and sign for a locally
+built app.
+
+## Read more
+
+- [Using Testnet from an agent](/agents/quickstart) — the setup those scripts assume, all of it mainnet by default.
+- [Contract Addresses](/contracts/addresses) — the full address reference across both networks.
+- [Networks](/aeternity/networks) — what `ae_uat` is at the protocol level and how it differs from mainnet.
+- [Troubleshooting](/wallets/troubleshooting) — the network-mismatch and passkey-RP-ID symptoms a testnet build produces.
+- [Web Wallet](/wallets/web-wallet) — the hosted wallet whose network switcher reaches `ae_uat` with no build step.
+- [æternity testnet faucet](https://faucet.aepps.com/) — where to get test AE.
+- [Testnets and Faucet documentation](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet) — the upstream guide.
+- [testnet.aescan.io](https://testnet.aescan.io) — the testnet explorer.
 
 ## Open questions
 
@@ -193,9 +235,10 @@ VITE_NETWORK=ae_uat npm run dev
   duration. Both close in one request: `POST https://faucet.aepps.com/account/<address>` and read
   the response, then repeat it and read the graylist message. Outbound HTTP is blocked in the
   environment these docs were written in, so neither call could be made.
-- **Is a public testnet deployment of the Superhero front end hosted anywhere?** See above — the
-  testnet *backend* is evidently operated, but no front-end URL exists in any repository. Only
-  Superhero can say whether one is published.
+- **Is a public testnet deployment of the Superhero *social* front end hosted anywhere?** See above
+  — the testnet backend is evidently operated, and the hosted wallet at `wallet.superhero.com`
+  reaches testnet from its own settings, but no testnet origin for superhero.com itself exists in
+  any repository. Only Superhero can say whether one is published.
 
 The `disabled: true` flag on the mainnet network entry is no longer an open question: it is
 vestigial and inert, and [Networks & Endpoints](/aeternity/networks) traces it end to end.

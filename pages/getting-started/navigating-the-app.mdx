@@ -153,9 +153,15 @@ not find it on superhero.com.
 
 - A screenshot per major section would make this page substantially easier to use. None is included
   here because none exists in the repository; capturing them against the live app is a follow-up.
-- **Do the native mobile apps use the same route paths, or a different navigation model?** The web
-  routes in `src/routes.tsx` are authoritative for superhero.com, and no repository describes the
-  native apps' navigation. Nothing in the app distinguishes native from PWA — the surface-gated
-  behaviours it does have key on *installed versus browser tab* — which is suggestive of a shared
-  route table but is not evidence of one. Someone with the native app installed would have to
-  compare, or Superhero would have to say whether the store builds wrap the same web routes.
+- **Do the "Superhero — Web3 Communities" store apps use the same route paths as superhero.com?**
+  The web routes in `src/routes.tsx` are authoritative for superhero.com, and the reason no
+  repository describes the native apps' navigation is now specific: `/home/user/superhero` contains
+  **no native project at all** — no Capacitor config, no `android/` or `ios/` directory, no Cordova
+  or React Native setup — so the store builds are produced from a source not in any available
+  repository. Nothing in the web app distinguishes native from PWA either; its surface-gated
+  behaviours key on *installed versus browser tab*. Someone with the native app installed would have
+  to compare, or Superhero would have to publish that source.
+
+  For the avoidance of confusion: the **standalone Superhero Wallet** app is a different program with
+  a different, self-contained route table of its own (`superhero-wallet/src/popup/router/routes.ts`,
+  hash-routed on the extension and mobile builds). None of the paths on this page apply to it.

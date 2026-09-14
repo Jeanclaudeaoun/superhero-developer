@@ -114,6 +114,44 @@ If a server VAPID key is rotated, an existing subscription made with the old key
 push; the client detects the mismatch, unsubscribes and re-subscribes rather than leaving you
 silently unnotified.
 
+## The standalone Superhero Wallet apps, and how they differ from a PWA
+
+The iOS and Android apps are the **`PLATFORM=ionic` build** of
+`superhero-com/superhero-wallet` — Ionic Vue wrapped by Capacitor (`capacitor.config.ts`, app id
+`com.superhero.cordova`, app name "Superhero Wallet"). They are the same `src/` tree as the browser
+extension and the hosted web wallet, built with `npm run build:android` or `npm run build:ios`.
+
+That matters for a question people ask a lot: **is installing `wallet.superhero.com` to your home
+screen the same as installing the app?** No. An installed PWA is still the web build
+(`PLATFORM === 'web'`), and the code branches on `IS_MOBILE_APP`, which is `PLATFORM === 'ionic'`.
+The differences are concrete:
+
+| | Installed PWA of the web wallet | Native app |
+| --- | --- | --- |
+| Platform flag | `IS_WEB` | `IS_MOBILE_APP` |
+| Where the seed lives | Site `localStorage`, encrypted under your password | OS keychain via Capacitor Secure Storage, `whenUnlocked` access, encrypted with a per-install key |
+| Unlock | Password (or none, if you turned protection off) | Biometrics — Face ID, Touch ID, fingerprint — or the device credential |
+| Default auto-lock | 5 minutes of inactivity | **Immediately** |
+| In-app dæpp browser | No | **Yes** |
+| QR scanning | Browser camera via a JavaScript scanner | Native scanner (ML Kit) |
+| Ledger over WebUSB | Yes, on Chromium | **No** — the button is hidden on mobile |
+| AirGap pairing | Yes | Yes |
+| Deep links | `https://wallet.superhero.com/...` only | Also the `superhero://` scheme, and universal links on `applinks:wallet.superhero.com` |
+| Survives "clear site data" | No | Yes |
+
+Sources for each of those: the platform flags are in `src/constants/environment.ts`; the storage
+split is `src/composables/storageRef.ts` choosing `SecureMobileStorage` over `WalletStorage` when
+`enableSecureStorage && IS_MOBILE_APP`; the auto-lock defaults are `AUTHENTICATION_TIMEOUT_DEFAULT`
+in `src/composables/auth.ts` picking `AUTHENTICATION_TIMEOUTS[0]` (0 ms) on mobile and
+`AUTHENTICATION_TIMEOUTS[2]` (300000 ms) elsewhere; the dæpp browser is rendered under
+`IS_MOBILE_APP || UNFINISHED_FEATURES` in `src/popup/pages/Dashboard.vue`, and
+`UNFINISHED_FEATURES=false` in `.env.production`, so on a release build it is mobile-only; the
+universal-link domain is in the repository README's iOS build steps.
+
+The practical reading: **the native app is the stronger place to hold value on a phone** — keychain
+storage and biometrics — and the PWA is the convenient one. Neither changes your backup obligation,
+which is the seed phrase in both cases.
+
 ## Connecting the standalone Superhero Wallet app instead
 
 On a mobile browser the app cannot detect an extension — there are none — so it uses a deep link.
@@ -128,7 +166,10 @@ the app through the transaction queue route, described in
 - [Connecting a Wallet](/wallets/connecting) — the deep-link path mobile uses instead of extension detection.
 - [Choosing a Wallet](/wallets/choosing-a-wallet) — built-in versus standalone, decided by recovery model.
 - [Backup & Recovery](/wallets/backup-and-recovery) — especially the passkey-sync rule above.
+- [Web Wallet](/wallets/web-wallet) — what an installed PWA of `wallet.superhero.com` is, and what it cannot do.
 - [Superhero — Web3 Communities on Google Play](https://play.google.com/store/apps/details?id=com.superhero.apps) — the app listing, with its current feature description.
+- [Superhero Wallet on Google Play](https://play.google.com/store/apps/details?id=com.superhero.cordova) — the standalone wallet's Android listing.
+- [Superhero Wallet on the App Store](https://apps.apple.com/us/app/superhero-wallet/id1502786641) — the standalone wallet's iOS listing.
 - [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet's documentation.
 
 ## Open questions
@@ -138,9 +179,12 @@ the app through the transaction queue route, described in
   "Tap the three-dot menu (⋯)" — and both live in `src/locales/en.json`, so the repository cannot
   adjudicate between them. This needs one test on a current iOS Safari, after which the losing string
   should be fixed in the app rather than worked around here.
-- **Do the native apps and the installed PWA differ in any feature beyond the store wrapper?** No
-  comparison exists in any repository. The surface-gated behaviours documented above are keyed on
-  *installed versus browser tab*, not on native versus PWA, so there is no code path that
-  distinguishes them — but that is an absence of evidence, not evidence of parity. Someone with both
-  installed would have to compare, and a screenshot-based walkthrough of native onboarding is still
-  wanted for this page.
+- **Does the "Superhero — Web3 Communities" store app differ from the installed superhero.com PWA?**
+  This half of the question is still open, and now for a specific reason: `/home/user/superhero`, the
+  web app's repository, contains **no native project at all** — no `capacitor.config.*`, no
+  `android/` or `ios/` directory, no Cordova or React Native configuration. Its surface-gated
+  behaviours key on *installed versus browser tab*, not on native versus PWA. So whatever the store
+  builds wrap, they are produced from a source that is not in any available repository, and only
+  Superhero can say what it contains. (The *standalone* half of this question is settled above: the
+  Superhero Wallet native apps and the installed web wallet genuinely differ, and the table says
+  how.) A screenshot-based walkthrough of native onboarding is still wanted for this page.

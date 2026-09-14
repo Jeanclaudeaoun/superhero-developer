@@ -22,7 +22,7 @@ start with the distinction before anything else.
 | What happens when you sell | Tokens are **burned** back to the curve | Tokens go **into the pool** |
 | Counterparty | The curve contract's reserve | Other liquidity providers |
 | Contracts | `AffiliationBondingCurveTokenSale`, `BondingCurveExponential` | `AedexV2Router`, `AedexV2Factory`, `AedexV2Pair` |
-| Fee | 1% spread, split 0.5% DAO and 0.5% affiliation | 0.3% per swap, to liquidity providers |
+| Fee | 1% spread, split 0.5% DAO and 0.5% affiliation | 0.3% per swap, to liquidity providers — a constant in the pair contract |
 | Can it run out of liquidity | No — the reserve always covers the full supply | Yes — a thin pool gives terrible prices or no route at all |
 | Main risk | Price falls back down the curve | Price impact, no route, and impermanent loss if you provide liquidity |
 
@@ -72,7 +72,9 @@ The app also queries a DEX indexer alongside the chain:
 | Testnet | `https://dex-backend-testnet.prd.service.aepps.com` |
 
 At runtime the router is asked for its own `factory()` address, and the configured factory
-above is only used as a fallback.
+above is only used as a fallback. The router, factory and WAE addresses match the official
+deployments listed in the [dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2)
+README, and the app builds against that repository's published ACIs rather than a local copy.
 
 ## In this section
 

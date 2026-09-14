@@ -5,23 +5,97 @@ description: "Which wallet to use on which surface, compared on custody, recover
 
 # Choosing a Wallet
 
-There are four ways to hold an æternity account for Superhero, and they differ less in what they can
-do than in where the key sits and what gets you back in. Pick by surface and by recovery model, not
-by feature list — all four end up holding the same kind of `ak_...` account on the same derivation
-path.
+There are five ways to hold an æternity account for Superhero, and three of them are the same
+program on different surfaces. They differ less in what they can do than in where the key sits and
+what gets you back in. Pick by surface and by recovery model, not by feature list — all of them end
+up holding the same kind of `ak_...` account on the same derivation path.
 
 ## Comparison
 
 | | Browser extension | Mobile app | Web wallet | Built-in wallet | Raw key (agent) |
 | --- | --- | --- | --- | --- | --- |
-| Product | Superhero Wallet | Superhero Wallet | `wallet.superhero.com` | Superhero app itself | Your own process |
+| Product | Superhero Wallet | Superhero Wallet | Superhero Wallet | Superhero app itself | Your own process |
+| Build | `PLATFORM=extension` | `PLATFORM=ionic` (Capacitor) | `PLATFORM=web`, served at `wallet.superhero.com` | Part of superhero.com | Your own process |
 | Custody | Yours, in the extension | Yours, on the device | Yours, in a hosted page | Yours, in this browser's storage | Yours, in an env var |
 | Platforms | Chrome, Brave, Opera, Firefox | iOS, Android | Any browser | Any browser; signing installed in the installed PWA | Anywhere Node runs |
 | Install needed | Yes | Yes | No | No | No |
-| Unlocks with | Wallet password | Password or biometrics | Wallet password | Passkey, passphrase or recovery code | Nothing — the key is live |
+| Unlocks with | Wallet password | Device biometrics, if enabled | Wallet password | Passkey, passphrase or recovery code | Nothing — the key is live |
+| Change the unlock secret later | Yes | No password to change — biometrics on or off | Yes | **No** | n/a |
 | Portable backup | Seed phrase | Seed phrase | Seed phrase | Seed phrase, or a syncing passkey | The secret key |
+| Export one account's private key | Yes | Yes | Yes | **No** | It *is* the key |
+| Ledger (æternity app) | Chromium only | No | Yes | No | No |
+| AirGap cold signing | Yes | Yes | Yes | No | No |
+| In-app dæpp browser | No | Yes | No | n/a | n/a |
 | Multi-chain | Yes | Yes | Yes | æternity only | æternity only |
 | Good for agents | No | No | No | No | **Yes** |
+
+Those first three columns are one program. `superhero-com/superhero-wallet` builds all of them from a
+single source tree — `package.json` has `build:extension:chrome`, `build:extension:ff`,
+`build:web`, `build:android` and `build:ios` side by side — so the differences below are platform
+capability differences, not different products.
+
+## Three things called "Superhero wallet"
+
+Readers mix these up constantly, so name them precisely:
+
+| Name | What it is | Where its code lives |
+| --- | --- | --- |
+| **Superhero Wallet** (standalone) | The multi-chain wallet: browser extension, iOS and Android apps, and the hosted web build | `superhero-com/superhero-wallet` |
+| **The web wallet** at `wallet.superhero.com` | Not a fourth product — the `PLATFORM=web` build of that same repository, deployed to GitHub Pages by the repo's own CI (`.github/workflows/main.yml` publishes `dist/web/root` with `cname: wallet.superhero.com` on `master`) | `superhero-com/superhero-wallet` |
+| **The built-in wallet** | A vault inside superhero.com itself, æternity-only, unlocked by a passkey or passphrase | `superhero/src/features/wallet/` |
+
+## Hardware and cold signing
+
+Both hardware options are **æternity-only** in Superhero Wallet: the buttons that start them are
+rendered under `protocol === PROTOCOLS.aeternity` in
+`superhero-wallet/src/popup/components/Modals/AccountCreate.vue`.
+
+**Ledger** is real and shipped. `src/composables/ledger.ts` talks to the device over WebUSB
+(`@ledgerhq/hw-transport-webusb`) using the SDK's `AccountLedgerFactory`, and the on-screen guide says
+"Open the æternity app on your Ledger" — so it is the æternity app, not a generic transport. You can
+either *discover* accounts that already have activity or *derive* one at an account index you type.
+Ledger accounts then sign transactions and messages on the device.
+
+Two limits, both in the same component's `v-if`:
+
+- **Not on Firefox.** The button is hidden when `IS_FIREFOX`, because Firefox does not implement WebUSB.
+- **Not on the mobile apps.** Hidden when `IS_MOBILE_APP`.
+
+That leaves Chromium extension and the hosted web build as the surfaces where a Ledger works.
+
+**AirGap** is the offline-device path, and unlike Ledger it has **no platform guard at all** — it
+works on the extension, the mobile apps and the hosted web wallet alike. `src/composables/airGap.ts`
+speaks the AirGap serializer's V3 format over BC-UR QR fragments: you scan your AirGap Vault's QR
+code (or paste the `airgap-wallet://?ur=…` string) to import accounts, then scan a second pair of QR
+codes to get a transaction signed by the offline device and broadcast it from Superhero Wallet. Set
+AirGap to **QR code V3** or the pairing will not decode. One gap to know about: AirGap accounts
+cannot sign *messages* — the wallet shows "Signing messages is currently not supported for AirGap
+accounts" (`airGap.signMessageErrorModal` in `src/popup/locales/en-US.json`).
+
+## What else Superhero Wallet exposes
+
+Beyond holding coins, the standalone wallet has a feature surface superhero.com does not. Everything
+here is in its route table (`src/popup/router/routes.ts`) and available on all three surfaces unless
+noted:
+
+| Feature | Where |
+| --- | --- |
+| **`.chain` name manager** — register, bid in auctions, set pointers, transfer, set default, auto-extend | Account details → Names |
+| **AEX-9 tokens**, including adding one by pasting its `ct_` contract address | Account details → Assets |
+| **Multisig vaults** — generalised-account vaults with authorized signers, a consensus threshold and a proposal queue | Dashboard → Show multisig vaults |
+| **Permissions manager** — per-host standing permissions and a daily spend limit | More → Settings → Permissions |
+| **Address book** with import | More → Address book |
+| **Gift cards** — funded invite links, toppable and reclaimable | More → Gift cards |
+| **Claim tips** for a URL you can prove you own | More → Claim tips |
+| **Network manager** — Mainnet, Testnet and custom networks | More → Settings → Network |
+| **Secure login** — password change, auto-lock interval, biometrics on mobile | More → Settings → Secure login |
+| **WalletConnect** sessions | EVM chains only |
+| **In-app dæpp browser** | Mobile apps only |
+
+The last two are worth separating. **WalletConnect in Superhero Wallet is for EVM chains, not for
+æternity** — `src/composables/walletConnect.ts` handles `eth_sendTransaction` and `personal_sign`
+under the Ethereum chain namespace. æternity æpps connect over AEX-2 instead; see
+[Connecting a Wallet](/wallets/connecting).
 
 ## Pick by who you are
 
@@ -50,6 +124,12 @@ Use the **built-in wallet** created from a passkey, or the **web wallet** at
 `wallet.superhero.com`. Both work with zero install. Both have caveats worth reading first —
 [The Built-In Wallet](/wallets/built-in-wallet) and [Web Wallet](/wallets/web-wallet).
 
+### You want to keep the key on a hardware device
+
+Use the **extension on a Chromium browser** or the **hosted web wallet**, and import your Ledger's
+æternity accounts. If your offline device is an AirGap Vault rather than a Ledger, any of the three
+Superhero Wallet surfaces will pair with it. Neither option exists in the built-in wallet.
+
 ### You are building or running an agent
 
 Use a **raw key in an environment variable**, in a dedicated account funded with a capped amount.
@@ -77,10 +157,18 @@ Everything else on the comparison table is convenience. This is not.
 
 | Wallet | What gets you back in on a new device |
 | --- | --- |
-| Extension, mobile, web wallet | The seed phrase. Nothing else. |
+| Extension, mobile, web wallet | The seed phrase — or, for one account at a time, that account's exported private key. |
 | Built-in wallet from a phrase | The seed phrase. Its passphrase and recovery code are **same-device only**. |
 | Built-in wallet from a passkey | The passkey — **only if it syncs**. The recovery code is same-device only. |
 | Raw agent key | The secret key string. |
+| A Ledger or AirGap account held in Superhero Wallet | The device's own recovery words. The Superhero Wallet seed phrase does **not** restore it — the wallet only stores its public address. |
+
+That last row is easy to miss. `AeAccountHdWallet.getInMemorySigner` in
+`superhero-wallet/src/protocols/aeternity/libs/AeAccountHdWallet.ts` refuses to sign for Ledger and
+AirGap accounts precisely because the wallet never holds their keys. The same applies to an account
+you imported by pasting a private key — the wallet's own help text says so: "An account imported into
+your wallet with private key cannot be restored with your seed phrase but with this private key
+only."
 
 The built-in wallet's storage is also evictable in a way an installed wallet's is not: clearing site
 data deletes the encrypted vault, and Safari's tracking prevention can evict it after about seven
@@ -104,16 +192,6 @@ These are not exclusive, and mixing them is normal:
 - [The Built-In Wallet](/wallets/built-in-wallet) — how the in-app vault works, in detail.
 - [Backup & Recovery](/wallets/backup-and-recovery) — the recovery table above, expanded and explained.
 - [Connecting a Wallet](/wallets/connecting) — what happens after you have chosen one.
+- [Web Wallet](/wallets/web-wallet) — which build `wallet.superhero.com` is, and what it can and cannot do.
 - [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet's own documentation.
-
-## Open questions
-
-- **Does Superhero Wallet support a Ledger for æternity accounts specifically?** The wallet's own
-  FAQ copy mentions importing from a cold wallet or Ledger and cold signing via AirGap, and a
-  "Add ledger module" pull request exists on
-  [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — but a pull
-  request is not a shipped feature, and æternity support is a separate question from support for the
-  wallet's other chains. Settle it in the wallet's
-  [releases](https://github.com/superhero-com/superhero-wallet/releases), or by connecting a Ledger
-  and checking whether an `ak_` account appears. **Do not assume it works before testing with a
-  small balance.**
+- [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — the source for all three standalone surfaces.

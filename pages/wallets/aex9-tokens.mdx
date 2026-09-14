@@ -79,6 +79,26 @@ answer before you add liquidity.
 You need a **connected wallet** for it to have an account to scan. The address it works with is the
 AEX-9 **token address**, not the sale address.
 
+**There is no manual-entry field on superhero.com.** `src/views/AddTokens.tsx` discovers balances; it
+does not accept an arbitrary contract address. So a token the middleware has not indexed and the DEX
+has never seen has no route into superhero.com's own UI.
+
+### Superhero Wallet does take a pasted contract address
+
+The standalone wallet is the workaround. Its asset selector treats the search box as an address field
+when what you type *is* one: `getAssetSelectorSearchMode` in
+`superhero-wallet/src/popup/components/Modals/assetSelectorSearch.ts` runs the term through the SDK's
+`isAddressValid(…, Encoding.ContractAddress)`, and an exact `ct_` match switches the selector into
+`exact-contract` mode. That calls `loadSingleToken`, which fetches the token's metadata directly from
+the middleware (`GET /v3/aex9/<contract_id>`) and adds it to the available list — no pool, no
+indexed balance and no DEX listing required.
+
+Two conditions, both in the same function: the search term must be a **valid contract address**, and
+the selected protocol must be **æternity**. Anything else falls back to a name-prefix search.
+
+So: to see a token superhero.com will not show you, open it in Superhero Wallet by pasting its
+`ct_...` **token address** (not the sale address).
+
 ## Allowances
 
 An allowance grants a specific contract permission to move up to a stated number of *your* tokens.
@@ -145,13 +165,5 @@ Check before you assume, and revoke anything left standing on a token you hold i
 - [AEX Standards](/aeternity/aex-standards) — what AEX-9 specifies at the protocol level.
 - [AEX-9 Contracts](/contracts/aex9) — the contract-side reference for these entrypoints.
 - [Tokens API](/api-reference/tokens) — the token object carrying both `address` and `sale_address`.
+- [Web Wallet](/wallets/web-wallet) — the surface where pasting a contract address works, with no install.
 - [Token Standards on the æternity docs hub](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — the upstream specification.
-
-## Open questions
-
-- **Is there any in-app way to add a token by pasting a contract address?** Not one that was found:
-  the add-tokens screen discovers balances rather than accepting an arbitrary address, and
-  `src/views/AddTokens.tsx` has no manual-entry field. A token the middleware has not indexed and
-  the DEX has never seen therefore has no route into the UI. Whether that is deliberate — an
-  anti-scam-token measure — or simply missing is a product question for Superhero; the code says
-  only that it is absent.

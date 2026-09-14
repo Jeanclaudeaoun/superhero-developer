@@ -165,6 +165,12 @@ defaults documented in
 are what you actually get, and a call that runs out of gas in the app will do so at the SDK's
 default limit.
 
+**`gasPrice` is not a constant, which is why every figure on this page is an order of magnitude
+rather than a price.** The SDK's default is based on network demand, with the consensus minimum
+the node reports as the floor and `MIN_GAS_PRICE = 1e9` as the fallback when the node does not
+report one (`src/tx/builder/constants.ts`). The 0.000076 AE worked example above is therefore a
+floor-price figure: under load, the same deploy costs more for the same `gasUsed`.
+
 ## Getting AE
 
 Superhero links its own on-ramp at [superhero.com/get-ae](https://superhero.com/get-ae). For
@@ -183,8 +189,10 @@ testnet, see [Testnet](/getting-started/testnet).
 
 - **The per-action costs above are estimates, not measurements.** They are the agent skill authors'
   observations, without a block height or gas price attached, and no contract determines them — gas
-  depends on the deployed bytecode and the network gas price at execution. Buy and sell have no
-  figure at all. Closing this means submitting one transaction of each kind on mainnet and reading
-  `gasUsed` and `gasPrice` off it in [æScan](/aeternity/explorers), recording the block height
-  alongside. The contract comment quoted above (~0.000201 AE for an invitation redemption) is the
-  only measured number available, and it covers one call shape.
+  depends on the deployed bytecode, and the price on network demand at execution. Buy and sell have
+  no figure at all. What would close it is a table of `gasUsed` — which is a property of the
+  bytecode and stable between runs — separately from `gasPrice`, which is not. Submit one
+  transaction of each kind on mainnet, open it on [æScan](/aeternity/explorers), and record
+  `gasUsed`, `gasPrice` and the keyblock height together. The contract comment quoted above
+  (~0.000201 AE for an invitation redemption) is the only measured number available anywhere in
+  these repositories, and it covers one call shape at one price.

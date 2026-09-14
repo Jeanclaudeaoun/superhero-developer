@@ -121,6 +121,88 @@ There is no blanket allowance and no session token. If you use the built-in wall
 guarantee is stronger and stated explicitly: user verification runs on *every* signature, with no
 cached unlock.
 
+## The same handshake, from Superhero Wallet's side
+
+superhero.com stores whatever wallet info the SDK hands back and narrows nothing, so the
+authoritative answer to "what does connecting grant" lives in the wallet. In Superhero Wallet it is
+`src/composables/aeSdk.ts` plus `src/composables/permissions.ts`.
+
+**Connecting is not the step that prompts you.** `onConnection` simply records the æpp's
+self-description against its client id and returns. The dialog you see is triggered one step later,
+by `onSubscription` — the æpp asking to subscribe to an address — which calls
+`checkOrAskPermission(METHODS.subscribeAddress, host)` and opens the connect popup.
+
+What the wallet sends back about itself is small and fixed (`AeSdkSuperhero.getWalletInfo`):
+
+| Field | Value |
+| --- | --- |
+| `id` | `Superhero Wallet` |
+| `name` | `Superhero` |
+| `networkId` | `ae_mainnet` or `ae_uat`, whichever network the wallet is on |
+| `origin` | the wallet's own origin |
+| `type` | `extension` in the extension, `window` in the web build and the mobile apps |
+
+The connect popup itself lists the permissions the æpp asked for, drawn from
+`CONNECT_PERMISSIONS` in `src/constants/common.ts`. There are exactly four:
+
+| Permission | What the popup says |
+| --- | --- |
+| `address` | "View your address" — your current account address |
+| `addressList` | "View your address list" — every account address |
+| `networks` | "Use available networks" — Mainnet and Testnet |
+| `transactions` | "Propose transactions. You are in charge of confirming them." |
+
+That last wording is exact and it is the point: a connection lets an æpp *propose*. Nothing in the
+set grants spending.
+
+### The permission record, and what "Remember me" actually remembers
+
+Approving the popup writes one record per **host** (`test.com`, not a full URL) into the wallet's
+storage. Its shape is `IPermission` in `src/types/index.ts`, and every field starts `false` or `0`
+(`PERMISSION_DEFAULTS`):
+
+| Field | Meaning | Set by the connect popup? |
+| --- | --- | --- |
+| `address` | Skip the connect prompt next time | **Only if you tick "Remember me"** |
+| `addressList` | Answer "list all my accounts" without asking | No |
+| `messageSign` | Auto-sign messages | No |
+| `dailySpendLimit` / `transactionSignLimit` | Sign transactions up to a daily AE ceiling without asking | No |
+| `transactionSignSpent` / `transactionSignFirstAskedOn` | Running total and the 24-hour window it resets in | Bookkeeping |
+
+So the checkbox grants exactly one standing permission — a silent reconnect — and leaves everything
+else prompting. The other switches exist only in **More → Settings → Permissions**, where you can
+edit a host's record or add one by hand; the wallet's own copy there reads "Use this feature with
+caution and only for platforms you trust."
+
+`checkPermission` maps the standing record onto RPC methods one-for-one: `connect` and
+`subscribeAddress` read `address`, `address` (list accounts) reads `addressList`, `signMessage` reads
+`messageSign`, and `sign` runs the daily-limit check. Anything else — `signTypedData`,
+`signDelegation`, `unsafeSign` — has no standing-permission path at all and always opens a
+confirmation.
+
+Two more guards worth knowing:
+
+- **A standing spend limit never applies off æternity.** `checkOrAskPermission` refuses the fast path
+  when the method is `sign` and the protocol is not æternity, so an EVM or Solana transaction always
+  prompts.
+- **A transaction the wallet cannot decode gets a different, louder dialog.** If the payload is not
+  one of the transaction types the wallet knows how to render, the modal swaps to the raw-sign
+  warning screen rather than showing a friendly summary.
+
+### What an æpp cannot ask for
+
+`onAskToSelectNetwork` throws `RpcMethodNotFoundError`. **An æpp cannot make Superhero Wallet switch
+networks** — there is a TODO in the source for a confirmation popup, and until it exists a network
+mismatch is only fixable by the user, in the wallet. That is the wallet-side half of the mismatch
+described below.
+
+### Why reconnecting sometimes just works
+
+In the extension, the offscreen document re-announces the wallet to every connected page every
+**three seconds** (`src/offscreen/wallet.ts`), and the iframe transport does the same on the same
+interval (`src/lib/FramesConnection.ts`). That is what makes superhero.com's 15-second silent
+reconnect window land: the app does not need the wallet to be there at boot, only within the window.
+
 ## Switching accounts
 
 With a live RPC session, the wallet pushes address changes to the app and the active account follows
@@ -159,13 +241,7 @@ built-in wallet's vault from the device — that is a separate, deliberate erase
 - [The Built-In Wallet](/wallets/built-in-wallet) — the fourth case, where there is no transport at all.
 - [Troubleshooting](/wallets/troubleshooting) — detection windows, stale sessions and read-only reconnects, as symptoms.
 - [Navigating the App](/getting-started/navigating-the-app) — which parts of superhero.com actually need a connected account.
+- [Web Wallet](/wallets/web-wallet) — the two transports a hosted wallet has, and the deep-link route table.
 - [Connect an æpp to a wallet](https://sdk.aeternity.io/latest/guides/connect-aepp-to-wallet/) — the SDK guide for the RPC protocol underneath all of this.
 - [How to build a wallet](https://docs.aeternity.com/developer-documentation/aepp-sdk-js/docs/guides/build-wallet) — the other side of the same handshake.
-
-## Open questions
-
-- **What exact permission set does a Superhero Wallet connection return?** The app stores whatever
-  wallet info the SDK hands back and narrows nothing, so the authoritative list is the wallet's, not
-  this repository's. Read `superhero-com/superhero-wallet`'s AEX-2 responder — the object it returns
-  from its connect and subscribe handlers — or inspect a live `connect` response in the browser
-  console after pressing Connect.
+- [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — the wallet side of the handshake documented above.

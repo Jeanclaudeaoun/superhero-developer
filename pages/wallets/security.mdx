@@ -155,6 +155,28 @@ particular bug is dangerous — it is that a getter shipped wrong and nobody cau
 Size your exposure accordingly, and note that the DEX contracts are a separate matter: those were
 audited by QuviQ in April 2022 and are not part of the BCL suite.
 
+## Reporting something you found
+
+There is no published disclosure policy, but there is an invitation. The Superhero Wallet
+repository's README carries a **Security** section — "If you discover a security vulnerability within
+this application, please get in touch with us. All security vulnerabilities will be promptly
+addressed" — without naming a channel to use. The channels the same repository does name are:
+
+| Channel | Where it comes from |
+| --- | --- |
+| `superherowallet@protonmail.com` | `CONTACT_EMAIL` in `superhero-wallet/src/constants/common.ts` |
+| A bug-report form at `form.typeform.com/to/Kk3Zyjdr` | `BUG_REPORT_URL`, linked from the wallet's More screen and About page |
+| The GitHub issue trackers | The README's contribution section |
+| Superhero chat — `chat.superhero.com`, `chat.superhero.chat`, `matrix.superhero.chat` | `SUPERHERO_CHAT_URLS` in the same file |
+
+A public issue tracker is the wrong place for an unfixed vulnerability. Use the email, and say only
+that you have something to report until someone answers.
+
+On the defensive side, the wallet repository does run **CodeQL** on `develop` and `master` and weekly
+on a schedule (`.github/workflows/codeql.yml`), and its Firefox review build ships a provenance
+bundle — commit SHA, lockfile, dependency tree and a deterministic file list — so a reviewer can
+reproduce the published bundle from source.
+
 ## Read more
 
 - [Backup & Recovery](/wallets/backup-and-recovery) — the other half of this page: what survives when something goes wrong.
@@ -166,13 +188,14 @@ audited by QuviQ in April 2022 and are not part of the BCL suite.
 
 ## Open questions
 
-- **Does Superhero publish a security contact or a vulnerability disclosure policy?** No. Six
-  repositories were checked — the web app, `superhero-api`, the agent skill, `bcl-contracts`,
-  `tipping-contract` and `aepp-governance` — and none contains a `SECURITY.md`, a security address
-  or a bounty programme. The only address any of them gives is `superherowallet@protonmail.com`,
-  which the terms and privacy policy name for legal and data-protection questions rather than for
-  security reports. Closing this means Superhero publishing a `SECURITY.md` or a disclosure
-  address. Until then see [Support](/resources/support) for how to report privately anyway.
+- **Does Superhero publish a dedicated security address, an expected response time, or a bounty?**
+  No. Seven repositories were checked — the web app, `superhero-api`, `superhero-wallet`, the agent
+  skill, `bcl-contracts`, `tipping-contract` and `aepp-governance` — and none contains a
+  `SECURITY.md`, a `security.txt`, a dedicated address or a bounty programme. The wallet's README
+  asks you to "get in touch with us" and stops there; the only address anywhere is the general
+  contact mailbox listed above. Closing this means Superhero publishing a `SECURITY.md` naming an
+  address and a disclosure timeline. Until then, use the email and see
+  [Support](/resources/support).
 - **Will the BCL contracts be audited?** The headers say they have not been, and no report exists in
   any repository. A published audit naming a firm, a date and a commit hash would close this;
   nothing weaker should. Ask on

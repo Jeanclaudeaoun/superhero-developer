@@ -52,8 +52,10 @@ What each one does at the contract boundary:
   If the pool has moved past that bound by the time the transaction executes, the router
   reverts and you keep your tokens.
 - **Deadline** becomes an absolute timestamp: the app sends `Date.now()` plus your minutes,
-  **in milliseconds since epoch**. Past it, the router refuses the swap. Note the unit — the
-  router here expects milliseconds, not seconds.
+  **in milliseconds since epoch**. Every router entrypoint opens with
+  `require(deadline >= Chain.timestamp, "AedexV2Router: EXPIRED")`
+  (`dex-contracts-v2/contracts/router/AedexV2Router.aes`), and Sophia's `Chain.timestamp` is unix
+  time in milliseconds, so milliseconds is the correct unit — not seconds.
 
 ## How a route is found
 
@@ -168,8 +170,8 @@ factory's `create_pair` takes only `min_liquidity` and `debug_time` — there is
 set, and no governance entrypoint that changes one. **Every pair on the exchange charges the same
 0.3%.**
 
-A sixth of that fee can be diverted to a protocol-fee collector, if the factory's owner switches it
-on. That switch is off by default and is described under
+A sixth of that fee can be diverted to a protocol-fee collector, if the factory's `fee_to_setter`
+switches it on. That switch is off by default and is described under
 [Where the 0.3% goes](/defi/pools#where-the-03-goes) on the pools page, because the fee is minted
 as LP tokens rather than deducted from your trade.
 
@@ -250,23 +252,41 @@ falls back to the configured factory address if that call fails.
 | Two wallet prompts for one swap | The first is the AEX-9 allowance approval |
 | Insufficient balance error | Checked client-side before submission, against the input token's balance |
 
+When the revert comes from the chain rather than the client, the abort string names the check
+that failed. The ones you will actually see:
+
+| Abort string | What it means |
+| --- | --- |
+| `AedexV2Router: EXPIRED` | Your deadline passed before the transaction was mined |
+| `AedexV2Router: INSUFFICIENT_OUTPUT_AMOUNT` | An exact-in swap would have returned less than `amount_out_min` |
+| `AedexV2Router: EXCESSIVE_INPUT_AMOUNT` | An exact-out swap would have cost more than `amount_in_max` |
+| `AedexV2Library: NO_PAIR_FOUND` | A hop in the path has no pair contract |
+| `AedexV2Library: INSUFFICIENT_LIQUIDITY` | A hop's reserves are zero — the pool is empty or one-sided |
+| `AedexV2Router: INVALID_PATH_FIRST` / `INVALID_PATH_LAST` | An AE entrypoint was called with a path that does not start or end at WAE |
+| `AedexV2Pair: INSUFFICIENT_BALANCE` | The pair's own invariant check failed — the input never arrived, or the fee was short |
+
+The first three are the ordinary ones and mean the market moved. The last is a contract-level
+safety net you should not normally reach through the app.
+
 ## Swapping from an agent or a script
 
 The agent skill's `scripts/superhero-token-swap.mjs` is a **bonding-curve** tool — its `buy`,
 `sell` and `price` commands call the token sale contract, not the router. There is no
 DEX-swap script in the skill. To swap on the AMM programmatically, initialise the router with
-the `AedexV2Router` ACI from `dex-contracts-v2` and call the entrypoints in the table above
-directly.
+the `AedexV2Router` ACI from `dex-contracts-v2` (`deployment/aci/AedexV2Router.aci.json`) and call
+the entrypoints in the table above directly. The router also re-exports the pricing library as
+read-only entrypoints, so you can quote without holding anything:
 
-## Open questions
+| Entrypoint | Use |
+| --- | --- |
+| `get_amounts_out(amount_in, path)` | Exact-in quote across the whole route |
+| `get_amounts_in(amount_out, path)` | Exact-out quote across the whole route |
+| `get_amount_out(amount_in, reserve_in, reserve_out)` | One hop, from reserves you already have |
+| `get_amount_in(amount_out, reserve_in, reserve_out)` | One hop, inverted |
+| `quote(amount_a, reserve_a, reserve_b)` | The fee-free ratio — for liquidity math, not for swaps |
 
-- **Is the 0.3% fee fixed, or configurable per pair?** Nothing in the Superhero stack settles it:
-  neither the web app nor `superhero-api` contains the constant, because neither computes AMM
-  output. Read `AedexV2Pair.aes` in
-  [aeternity/dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) — specifically whether
-  the swap invariant hard-codes a `997/1000` term or reads a per-pair field, and whether the factory
-  carries a protocol-fee switch of the kind Uniswap V2 has. That repository is not vendored in any
-  Superhero repository and could not be fetched from this environment.
+`quote` is the odd one out: it is `amount_a * reserve_b / reserve_a` with no fee applied, because
+it exists to price the second side of a liquidity deposit. Do not use it to predict a swap.
 
 ## Read more
 

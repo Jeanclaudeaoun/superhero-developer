@@ -147,8 +147,11 @@ The script signs with `AE_PRIVATE_KEY` from the environment and targets mainnet 
 
 - **Is there a limit on the number of media entries in one post?** File size is not a question —
   nothing is uploaded, so a "size limit" has no place to live; the media list is a list of URL
-  strings. But no count cap was found in `PostForm.tsx`, and the contract takes an unbounded
-  `list(string)`, so the practical ceiling is gas and whatever the pickers let you accumulate. Adding
-  many entries to a post on testnet and watching where it stops would settle it.
+  strings. No count cap exists anywhere in the path: not in `PostForm.tsx`, not in the contract
+  (which takes an unbounded `list(string)`), and not in the indexer — `superhero-api` stores
+  `media` as a plain JSON column defaulting to `[]` with no length validator
+  (`src/social/entities/post.entity.ts`). So the practical ceiling is gas and whatever the pickers
+  let you accumulate. Adding many entries to a post on testnet and watching where it stops would
+  turn that into a number.
 - A screenshot of the composer with each control labelled would make this page easier to follow.
   None exists in the repositories; capturing one against the live app is a follow-up.

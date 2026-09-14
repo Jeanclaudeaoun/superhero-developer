@@ -129,17 +129,50 @@ To bid on a short name, use Superhero Wallet's own claim screen, another æterni
 including the Ceres rule that every bid extends the auction by up to 120 key blocks, and
 `getMinimumNameFee(name)` as the way to compute a starting bid.
 
+## Superhero Wallet's name manager
+
+The standalone wallet — extension, mobile app, or `wallet.superhero.com` — has a full AENS section
+that superhero.com does not, under **Account details → Names**, with three tabs: *My names*,
+*Auctions* and *Register name*. It is the same feature set on all three surfaces.
+
+| Tab | What it does |
+| --- | --- |
+| Register name | Claims a name, showing the price when one is payable, with an **Auto extend name** checkbox at claim time |
+| Auctions | Lists names currently at auction and lets you place a bid, showing the minimum bid and the bid history |
+| My names | Per name: set the default (display) name, set a pointer to an `ak_`, `ct_`, `ok_` or `ch_` target, transfer it to another account, extend it, and toggle auto-extend |
+
+Its constants match the protocol rules described above, from
+`superhero-wallet/src/protocols/aeternity/config.ts`: the domain is `.chain`, a label is at most 63
+characters, a name of **12 characters or fewer plus the suffix** goes to auction, and a bid must beat
+the standing one by a ratio of **1.05**.
+
+### It will renew a name for you
+
+This is the one thing on this page that the Superhero web app genuinely cannot do. Tick **Auto
+extend** on a name and Superhero Wallet extends it for you: on every new block it checks your names
+and sends a `NameUpdateTx` for any that is auto-extending, unexpired, and within
+`AUTO_EXTEND_NAME_BLOCKS_INTERVAL` = **17,000 blocks** of its expiry height
+(`extendExpiringOwnedNames` in `src/protocols/aeternity/composables/aeNames.ts`). The same 17,000-block
+window drives an **Expiring** badge in the names list, so even without auto-extend the wallet warns
+you.
+
+Two caveats. The extension has to be running for the check to happen — this is a client-side timer,
+not a service — and the extension costs a transaction fee each time. Neither is a substitute for
+knowing your own expiry height.
+
 ## After you have one
 
 **Point it where you want.** The registration flow sets the `account_pubkey` pointer to your address.
 You can repoint it later with `update`, which preserves existing pointers rather than replacing them.
+Superhero Wallet's *Set pointer* control does the same thing with a form.
 
 **Use it as your display name.** A `.chain` name can be your profile's display source, so it appears
 instead of your address across the app. You have to own one before you can select that option.
 
 **Keep it alive.** AENS names have a time to live measured in blocks and expire if not extended. Use
-`extend` before the expiry height, which `available` reports as `expires_at_height`. Nothing in the
-repositories describes an automatic renewal, so treat this as your responsibility.
+`extend` before the expiry height, which `available` reports as `expires_at_height` — or hold the
+name in Superhero Wallet with auto-extend on, which is the only automatic renewal any Superhero
+software offers. superhero.com itself will not warn you.
 
 ## Read more
 
@@ -147,20 +180,21 @@ repositories describes an automatic renewal, so treat this as your responsibilit
 - [Superhero ID](/identity/superhero-id) — the wider identity model a name plugs into.
 - [AENS on æternity](/aeternity/aens) — the naming system at the protocol level, including auctions.
 - [Profiles](/identity/profiles) — setting the name as your display source.
+- [Web Wallet](/wallets/web-wallet) — the no-install surface where the name manager above is available.
 - [Superhero FAQ](https://superhero.com/faq) — the sponsored-claim answer in the project's own words.
 - [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the upstream specification, including the commitment scheme and the Lima and Ceres upgrades.
 
 ## Open questions
 
-Both are about expiry, and neither is answerable from the Superhero side — the app reads a name's
-expiry height but does nothing with it.
+Half of what used to be here is answered above: **Superhero Wallet does warn you and can auto-extend**
+(a 17,000-block window), while superhero.com and `superhero-api` do neither — there is no expiry job
+anywhere in the backend. What is left is the protocol constant and the lapse behaviour.
 
-- **What is a name's default TTL in blocks, and does Superhero warn you before one lapses?** The
-  profile modal reads a `chain_expires_at` value and the agent CLI's `available` reports an
-  `expires_at_height`, but no notification, banner or scheduled check exists in the web app or in
-  `superhero-api` — there is no expiry job anywhere in the backend. The TTL itself is a protocol
-  constant in [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md); treat renewal as
-  entirely your responsibility until Superhero ships a reminder.
+- **What is a name's default TTL in blocks?** Still a protocol question, and the wallet does not
+  settle it: it lets the SDK choose the TTL when extending (`extendTtl(undefined, …)`), and the
+  literal `nameTtl: 50000` in `getNameExtendFee` is a dummy value used only to build a throwaway
+  transaction for fee estimation. The authoritative figure is in
+  [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md) and in the SDK's own default.
 - **What happens to a lapsed name's pointer, and to a profile using it as its display source?** The
   protocol side (whether pointers are cleared, and whether the name re-enters auction) is in AENS.md.
   The Superhero side — whether a profile silently falls back to the address or keeps showing a dead

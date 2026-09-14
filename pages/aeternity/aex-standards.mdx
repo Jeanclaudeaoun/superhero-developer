@@ -71,33 +71,47 @@ Four things will bite you if you port ERC-20 assumptions directly:
    allowance already exists before you write one.
 3. **`transfer_allowance` is `transferFrom`.** Same withdraw pattern, different name.
 4. **Extensions are declared, not assumed.** Call `aex9_extensions()` before assuming `mint` or
-   `burn` exists. A minimal AEX-9 token has neither.
+   `burn` exists. A minimal AEX-9 token has neither — the reference `fungible-token.aes` returns an
+   empty list. Superhero's own stack spans the range: a community token returns four extensions,
+   while the DEX's [WAE contract](/defi/wrapped-ae) and every
+   [liquidity-pool token](/defi/pools) return `["allowances"]` and nothing else, because their
+   supply changes only through deposit, withdraw, mint and burn paths that are not AEX-9
+   entrypoints.
 
 Also, as everywhere on æternity: amounts are integers scaled by the token's own `decimals` from
 `meta_info()`, which is not necessarily 18. See [AE & Gas](/aeternity/ae-and-gas).
 
 ### Which extensions a Superhero community token needs
 
-You can infer the answer from the protocol rather than guessing. Every community token is created
-by the sale contract as a `FungibleTokenFull`
+Every community token is created by the sale contract as a `FungibleTokenFull`
 (`Chain.create(name, decimals, symbol, None) : FungibleTokenFull` in
 `bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`), and the ProtocolDAO token the same
-way in `CommunityFactory.init`. The reference implementation's "full" variant declares
-**`allowances`, `mintable` and `burnable`**, and Superhero's contracts exercise all three:
+way in `CommunityFactory.init`. `FungibleTokenFull` is the reference implementation's "full"
+variant, pulled in from `aeternity/aeternity-fungible-token` at tag **v2.2.0**
+(`bcl-contracts/package.json`). At that tag, `contracts/fungible-token-full.aes` declares:
+
+```sophia
+entrypoint aex9_extensions() : list(string) = ["allowances", "mintable", "burnable", "swappable"]
+```
+
+So `aex9_extensions()` on any Superhero community token returns those four strings, in that order.
+Superhero's own contracts exercise the first three:
 
 | Extension | Where the protocol depends on it |
 | --- | --- |
 | `mintable` | `buy` calls `token_contract.mint(Call.caller, count)` |
 | `burnable` | `sell` calls `token_contract.burn(count)` |
 | `allowances` | `sell` calls `transfer_allowance`; `DAOVote.vote` locks tokens the same way |
+| `swappable` | Nothing in the Superhero stack calls `swap` or `check_swap` — it comes with the variant |
 
-So a Superhero community token cannot be a minimal AEX-9 — remove any one of those three and buying,
-selling or voting stops working. Note that `decimals` is fixed at **18** for every community token:
-`CommunityFactory.decimals()` returns 18 and the sale contract's `init` enforces
-`decimals == bonding_curve.supported_decimals()`, which is also 18.
+A Superhero community token therefore cannot be a minimal AEX-9: remove any of the first three and
+buying, selling or voting stops working. `swappable` is inherited baggage from the reference
+contract's token-migration support, and is worth knowing about only so that a fourth string in the
+list does not surprise you.
 
-Treat the three-item list as what the deployed tokens must support, not as a transcription of the
-string literal they return — see the open questions.
+`decimals` is fixed at **18** for every community token: `CommunityFactory.decimals()` returns 18
+and the sale contract's `init` enforces `decimals == bonding_curve.supported_decimals()`, which is
+also 18.
 
 ### Reading AEX-9 balances without a contract call
 
@@ -114,13 +128,27 @@ lookups use `v3`. See [Networks & Endpoints](/aeternity/networks).
 
 ## The other AEX standards
 
+Statuses are as recorded in the index table of the
+[AEXs repository](https://github.com/aeternity/AEXs) README at its current `master` head, which
+was last changed in November 2022. AEX-1 defines the terms: **Review** means past initial
+iteration and under wide review, **Active** means in constant flux with no unaddressed objections,
+**Final** means it sat in Last Call for two weeks with every technical change addressed.
+
 | Standard | Subject | Status | Superhero's relationship to it |
 | --- | --- | --- | --- |
 | AEX-2 | Wallet-to-æpp communication | Withdrawn, but still the js-sdk's reference implementation | Used. `useWalletConnect.ts` runs `walletDetector` over a `BrowserWindowMessageConnection` and calls `aeSdk.connectToWallet` — that is the AEX-2 RPC flow |
 | AEX-3 | Encrypted secret storage (keystore JSON) | Active | Not used directly in these repositories; relevant if you import a keystore file |
+| AEX-8 | Message signing | Draft | Relevant to any off-chain signature, including the tipping contract's signed messages |
 | AEX-9 | Fungible tokens | Review | Used everywhere |
 | AEX-10 | BIP32 derivation path for deterministic wallets | Final | Applies to any mnemonic-based æternity wallet used with Superhero — see [Accounts & Keys](/aeternity/accounts-and-keys) |
+| AEX-130 | æpp meta-information format | Draft | Not used |
 | AEX-141 | Non-fungible tokens | Review | Not used. Superhero has no NFT feature |
+
+**AEX-9 is still "Review", and nothing supersedes it.** The status has not moved since the
+standard was written in 2019 — `AEXS/aex-9.md` carries `Status: Review` in its own header, the
+README index agrees, and no AEX in the repository carries the `Superseded` status at all. Read
+"Review" here as "stable in practice but never formally finalised", not as "in flux": every
+æternity wallet, explorer and the middleware's AEX-9 indexing are all built against it as written.
 
 ## Read more
 
@@ -131,16 +159,4 @@ lookups use `v3`. See [Networks & Endpoints](/aeternity/networks).
 - [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the normative standard.
 - [AEXs repository](https://github.com/aeternity/AEXs) — every standard, with its status.
 - [Token standards overview](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — æternity's own summary.
-- [Reference fungible-token implementation](https://github.com/aeternity/aeternity-fungible-token) — the Sophia source these token contracts descend from.
-
-## Open questions
-
-- **The exact strings `aex9_extensions()` returns are not transcribed here.** Which extensions a
-  Superhero token must implement is settled above, but the returned list is a literal in
-  `fungible-token-full.aes` from `aeternity/aeternity-fungible-token`, which is pulled in as a
-  dependency and is not vendored in any Superhero repository. Either read that file, or make one
-  read-only `aex9_extensions()` call against a live token contract — both were out of reach from
-  this environment, where outbound HTTP is blocked.
-- **AEX-9's status is listed as "Review" rather than "Final"** in the AEXs repository. Whether that
-  has since changed, and whether any later proposal supersedes part of it, needs the current
-  [AEXs repository](https://github.com/aeternity/AEXs) index.
+- [Reference fungible-token implementation](https://github.com/aeternity/aeternity-fungible-token) — the Sophia source these token contracts descend from, including `fungible-token-full.aes`.
