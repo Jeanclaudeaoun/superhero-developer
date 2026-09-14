@@ -1,7 +1,7 @@
-# Superhero Documentation
+# Superhero Dev
 
-The documentation site for [Superhero](https://superhero.com) — the on-chain attention market
-for social trends, built on the æternity blockchain.
+The developer documentation for [Superhero](https://superhero.com) — the on-chain attention
+market where you can discover, trade, and govern the trends you believe in.
 
 Built with [Nextra](https://nextra.site) (docs theme, `pages/` router).
 

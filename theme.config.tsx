@@ -25,7 +25,7 @@ const config: DocsThemeConfig = {
         style={{ display: 'block' }}
       />
       <strong style={{ fontWeight: 700 }}>Superhero</strong>
-      <span style={{ opacity: 0.45, fontWeight: 400 }}>Docs</span>
+      <span style={{ opacity: 0.45, fontWeight: 400 }}>Dev</span>
     </span>
   ),
   logoLink: '/',
@@ -64,7 +64,7 @@ const config: DocsThemeConfig = {
     const { asPath } = useRouter()
     return {
       titleTemplate:
-        asPath === '/' ? 'Superhero Documentation' : '%s – Superhero Docs',
+        asPath === '/' ? 'Superhero Dev' : '%s – Superhero Dev',
     }
   },
 
@@ -74,8 +74,8 @@ const config: DocsThemeConfig = {
     const url = `${SITE_URL}${asPath}`
     const description =
       (frontMatter as { description?: string })?.description ??
-      'Documentation for Superhero — the on-chain attention market for social trends, built on æternity.'
-    const pageTitle = title ? `${title} – Superhero Docs` : 'Superhero Documentation'
+      'Superhero is the on-chain attention market where you can discover, trade, and govern the trends you believe in — before everyone else.'
+    const pageTitle = title ? `${title} – Superhero Dev` : 'Superhero Dev'
 
     return (
       <>
@@ -84,7 +84,7 @@ const config: DocsThemeConfig = {
         <meta name="theme-color" content="#1161FE" />
 
         <meta property="og:type" content="website" />
-        <meta property="og:site_name" content="Superhero Documentation" />
+        <meta property="og:site_name" content="Superhero Dev" />
         <meta property="og:url" content={url} />
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={description} />
