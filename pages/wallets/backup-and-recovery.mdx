@@ -147,11 +147,38 @@ and the app re-derives your addresses from index 0 upward.
 - [Create an Account](/getting-started/create-account) — the flow that produced whatever you are backing up.
 - [Superhero Wallet](https://wallet.superhero.com/) — the hosted wallet you can import a phrase into with no install.
 
+## You cannot change the built-in wallet's passphrase
+
+This is settled, and it is settled the unwelcome way: **there is no passphrase-change flow, and no
+way to remove a factor at all.** The vault format supports both; nothing wires them up.
+
+Tracing `src/features/wallet/`:
+
+| Primitive | Where it lives | Who calls it |
+| --- | --- | --- |
+| `createVault(mnemonic, enrollment, now)` | `vault-record.ts` | `wallet-lifecycle.ts`, once, at creation — this is the **only** place a passphrase factor is enrolled |
+| `addRecoveryCodeFactor` | `wallet-lifecycle.ts` | Onboarding |
+| `addPasskeyFactor` | `wallet-lifecycle.ts` | Onboarding |
+| `addFactor` | `vault-record.ts` | Only the two functions above |
+| `removeFactor` | `vault-record.ts` | **Nothing.** Exported and never called |
+
+There is no `addPassphraseFactor`, so a passphrase cannot be enrolled after creation, replaced, or
+retired. The practical consequences:
+
+- **To change your passphrase, you recreate the vault.** Unlock with any enrolled factor, write down
+  the recovery phrase, erase the wallet, and create a new one with the same phrase and a new
+  passphrase. You will get new factor ids and a new recovery code; the account and its address are
+  unchanged, because they come from the seed.
+- **A compromised factor cannot be revoked.** Because the factors form an OR-set — any one of them
+  opens the vault — a passphrase you believe someone has seen stays valid until the vault is
+  recreated. Treat "someone saw my passphrase" as "recreate the vault today", not as "change it
+  later". See [Security Best Practices](/wallets/security) for what the OR-set property means.
+
 ## Open questions
 
-- Does Superhero Wallet (the standalone extension and app) support exporting a per-account private
-  key in addition to the seed phrase? Its FAQ copy says private keys can be viewed and backed up,
-  but the exact screen path was not verified against the wallet's own repository.
-- Is there a supported way to rotate the built-in wallet's passphrase without erasing and recreating
-  the vault? `vault-record.ts` supports adding and removing factors, but no passphrase-change flow
-  was found in the onboarding component.
+- **Does Superhero Wallet (the standalone extension and app) support exporting a per-account private
+  key in addition to the seed phrase?** Its FAQ copy says private keys can be viewed and backed up,
+  but the screen path was not verified. This belongs to the wallet project rather than to the web
+  app: check [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet),
+  or open the wallet's account settings and look for an export control. Note this is a different
+  question from the built-in wallet, which offers no export of any kind.

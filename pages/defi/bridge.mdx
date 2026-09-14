@@ -126,17 +126,26 @@ sidestep bridging entirely.
 
 ## Open questions
 
-- **Why was the bridge disabled, and will it return?** The code carries re-enable
-  instructions but no reason and no date. Nothing in the repository says whether this is
-  temporary maintenance, a security response, or an abandonment.
-- **Are the configured bridge contracts still live?** The addresses above are what the
-  disabled code points at. Whether those contracts are deployed, funded and operating right
-  now is not something the app can tell you.
+The *status* is settled — the feature is commented out at the route table and nothing imports it.
+What remains open is intent and live state, and neither is in any repository. The backend confirms
+the shape of the gap: `superhero-api` has no bridge module, no bridge plugin and no bridge
+endpoint. Its only reference to the asset is the aeETH token address in
+`src/dex/config/dex-contracts.config.ts`, which exists so the DEX can price the pair — exactly the
+"aeETH still trades, bridging does not" position described above.
+
+- **Why was the bridge disabled, and will it return?** The code carries re-enable instructions but
+  no reason and no date. Only a maintainer can say whether this was maintenance, a security
+  response, or an abandonment — ask on
+  [the app's issue tracker](https://github.com/superhero-com/superhero/issues).
+- **Are the configured bridge contracts still live?** The addresses above are what the disabled
+  code points at. Closing this means querying each contract on æternity and on Ethereum for its
+  current state and balances; neither call could be made from this environment.
 - **Is `ae-bridge.com` the officially supported replacement?** It appears in æternity's own
-  documentation and announcements, but nothing in the Superhero codebase points to it.
-- **What were the fees and settlement times?** The disabled code documents a 12-hour cooldown
-  on æternity-originated transfers and balance thresholds, but no fee schedule and no
-  expected settlement window in either direction.
+  documentation and announcements, but no Superhero repository points to it — not the app, not the
+  backend. æternity would have to confirm it, or Superhero would have to link it.
+- **What were the fees and settlement times?** The disabled code documents a 12-hour cooldown on
+  æternity-originated transfers and balance thresholds, but no fee schedule and no expected
+  settlement window in either direction. The operating bridge's own interface is the only source.
 
 ## Read more
 

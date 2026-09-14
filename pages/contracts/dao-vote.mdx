@@ -9,7 +9,13 @@ description: "One proposal, its options, and the token stake locked behind them.
 so its address is the proposal's identity. It holds the subject being voted on, the tally, and
 the community tokens voters have locked behind each side.
 
-The ACI lives inside `superhero-agent-skill/contracts/CommunityFactory.aci.json`.
+The ACI lives inside `superhero-agent-skill/contracts/CommunityFactory.aci.json`; the source is
+`bcl-contracts/contracts/DAOVote.aes`.
+
+One correction worth making up front, because it is widely assumed the other way round:
+**`DAOVote` contains no quorum or supermajority logic.** It counts stake and gates on height.
+The 10% and 55% tests are in `DAO.apply_vote_subject` — see
+[Passing conditions](#passing-conditions).
 
 ## Entrypoints
 
@@ -100,6 +106,18 @@ reaches that height and closed from then on.
 Note that this is measured in key blocks, not in wall-clock time. If block production slows,
 the vote stays open longer in real time.
 
+`is_closed()` is the single predicate every height gate goes through:
+
+```sophia
+entrypoint is_closed() : bool = Chain.block_height >= state.close_height
+```
+
+Note the `>=`: the vote is closed *at* `close_height`, not after it.
+
+`init` also caps the proposal text — `require(String.length(metadata.description) =< 300,
+"DESCRIPTION_STRING_TOO_LONG")`. A description over 300 characters makes `DAO.add_vote` abort,
+taking the whole 555 AE transaction with it. `link` is unchecked.
+
 ## The allowance you need before voting
 
 `vote` locks your tokens in the vote contract by pulling them with the AEX-9 allowance
@@ -140,11 +158,33 @@ to the tally.
 | | `revoke_vote()` | `withdraw()` |
 | --- | --- | --- |
 | When | While the vote is open | After the close height |
+| Height gate | `require(!is_closed(), "VOTE_ALREADY_CLOSED")` | `require(is_closed(), "VOTE_NOT_CLOSED")` |
 | Effect on the tally | Removes your stake from the option you chose | None — the result is already final |
+| Repeatable | Yes, after voting again | No — `AMOUNT_ALREADY_WITHDRAWN` |
 | Use it to | Change your mind, or exit before close | Reclaim locked tokens from a finished vote |
 
-`has_withdrawn(voter)` returns `option(bool)` — `None` if that address never voted at all,
-`Some(false)` if they voted and have not withdrawn, `Some(true)` if they have.
+**Both gates are enforced on chain, by block height, not by the client.** They are exact
+complements of each other through `is_closed()`, so at every height exactly one of the two is
+callable. There is no window where both work and none where neither does.
+
+Each also requires that you actually voted — `require(Map.member(Call.caller,
+state.vote_accounts), "VOTER_NOT_VOTED")`.
+
+### Changing your mind
+
+`vote` refuses a second vote from the same address:
+
+```sophia
+require(!Map.member(Call.caller, state.vote_accounts), "VOTER_ALREADY_VOTED")
+```
+
+`revoke_vote` deletes your entry from `vote_accounts` outright, rather than flagging it. So the
+sequence **vote, revoke, vote again works** — and the second vote may use a different option
+and a different amount. That is the supported way to switch sides or resize a position while a
+vote is open. What you cannot do is add to an existing position without revoking it first.
+
+`has_withdrawn(voter)` returns `option(bool)` — `None` if that address never voted at all or
+has revoked, `Some(false)` if they voted and have not withdrawn, `Some(true)` if they have.
 
 If you voted and never withdraw, your tokens stay locked in the vote contract indefinitely.
 Nothing expires them back to you.
@@ -175,30 +215,42 @@ hence the `?? 0n`.
 
 ## Passing conditions
 
-Per the whitepaper, a vote must clear both:
+A vote must clear both:
 
-- at least **10%** of the total token stake participating, and
+- at least **10%** of the token's total supply participating, and
 - at least **55%** of the participating stake in favour.
 
-Those thresholds are evaluated in the contract, and the DAO reads the result through
-`final_vote_state()`. The exact comparison was not read from source — see Open questions.
+Neither test is in this contract. Both are in `DAO.apply_vote_subject`, which reads the frozen
+tally out of `final_vote_state()` and then does the arithmetic itself:
 
-## Open questions
+```sophia
+let total_vote_stake = vote_state[true] + vote_state[false]
+let in_favor_percentage = (vote_state[true] * 100) / total_vote_stake
+require(in_favor_percentage >= 55, "GREATER_55_PERCENT_AGREEMENT_REQUIRED")
 
-- **Where the 10% and 55% thresholds are enforced.** They are stated in the whitepaper and the
-  `option` return of `final_vote_state()` implies the check lives in `DAOVote.aes`, but the
-  comparison itself was not read line by line. Confirm against
-  [`DAOVote.aes`](https://github.com/superhero-com/bcl-contracts) before building anything
-  that predicts whether a vote will pass.
-- **What total supply the 10% quorum is measured against.** Circulating supply changes with
-  every buy and sell while a vote is open; whether the contract snapshots supply at creation
-  or reads it at close was not verified.
-- **Whether `revoke_vote` can be followed by a second `vote`.** The ACI allows both calls; the
-  contract's handling of a re-vote after revocation was not read.
+let stake_percentage = (total_vote_stake * 100) / get_token().total_supply()
+require(stake_percentage >= 10, "GREATER_10_PERCENT_STAKE_REQUIRED")
+```
+
+Three consequences for anyone predicting an outcome from this contract's state alone:
+
+- **The 55% denominator is votes cast**, `yes + no`, not supply. Non-voters do not count
+  against a proposal.
+- **The 10% denominator is `total_supply()` read at execution time.** It is not snapshotted at
+  creation and not snapshotted at close. Buys between the close height and the
+  `apply_vote_subject` call inflate the denominator and can drop a passing vote below quorum;
+  sells can lift a failing one above it. The source acknowledges this directly and cites the
+  short 960-key-block application window as the mitigation.
+- **Both are truncating integer divisions compared with `>=`.** 55 and 10 exactly pass; one
+  base unit short rounds down and fails.
+
+So `final_vote_state()` tells you the tally. To know whether a proposal will actually execute
+you additionally need `get_token().total_supply()` at the height you expect execution to
+happen. See [DAO](/contracts/dao) for the full gate list.
 
 ## Read more
 
-- [DAO](/contracts/dao) — the contract that deploys these and executes the result
+- [DAO](/contracts/dao) — the contract that deploys these, runs the thresholds, and executes the result
 - [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance calls voting depends on
 - [Voting](/dao/voting) — the same flow from the app
 - [Quorum and thresholds](/dao/quorum-and-thresholds) — what it takes for a proposal to pass

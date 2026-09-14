@@ -15,6 +15,14 @@ the agent skill under `superhero-agent-skill/contracts/`. Those files are author
 entrypoint names, argument names, argument types, return types, and the `stateful` / `payable`
 flags — they are the same files the SDK loads at runtime.
 
+An ACI says nothing about **behaviour**, though: what a call requires, who may make it, what it
+burns, and what it silently does not check. For that, these pages quote the Sophia itself. The
+sources are `bcl-contracts/contracts/` for the token, DAO and affiliation suite,
+`tipping-contract/contracts/v3/` for posting, and
+`aepp-governance/governance-contracts/contracts/` for the polls. Two contracts have no source
+in any repository reachable here — `FungibleTokenFull`, which is a pinned upstream dependency,
+and `AddressLink`, which ships only as a compiled ACI. Both pages say so.
+
 ## The contract suite
 
 | Contract | Role | ACI vendored |
@@ -31,7 +39,8 @@ flags — they are the same files the SDK loads at runtime.
 | `AffiliationTreasury.aes` | Referral accounting, invite codes, payouts | inside `CommunityFactory.aci.json` |
 | `FungibleTokenFull.aes` | The AEX-9 token implementation | `FungibleTokenFull.aci.json` |
 | `Registry.aes` / `Poll.aes` | æternity governance polls | `RegistryWithEventsACI.json`, `PollACI.json` |
-| `ProfileRegistry.aes` | Identity, profiles and names | **not vendored** |
+| `AddressLink` | Identity: provider-keyed links from an address to an X handle, AENS name or nostr key | `superhero-api` `src/plugins/address-links/aci/AddressLink.aci.json` |
+| `ProfileRegistry.aes` | The retired identity contract `AddressLink` replaced | **not vendored, source not public** |
 
 Several contracts have no ACI file of their own because the compiler inlines every contract
 the factory references into `CommunityFactory.aci.json`. That single file therefore carries
@@ -45,19 +54,23 @@ load the factory ACI.
 CommunityFactory                      one per network, deployed once
   ├── create_collection(...)          registers a naming namespace (555 AE, burned)
   └── create_community(...)           deploys four contracts in one transaction:
-        ├── FungibleTokenFull         the community's AEX-9 token (18 decimals)
-        ├── BondingCurveExponential   shared, not redeployed per community
-        ├── AffiliationBondingCurveTokenSale
-        │     ├── buy / buy_with_affiliation → mints tokens, splits the 1% spread
-        │     └── sell                       → burns tokens, pays out AE
+        ├── CommunityManagement       moderators, mute list, write threshold
         ├── DAO                       owner + beneficiary of the sale
         │     └── add_vote(...)       deploys a DAOVote (555 AE)
-        └── CommunityManagement       moderators, mute list, write threshold
+        └── AffiliationBondingCurveTokenSale
+              ├── FungibleTokenFull   the community's AEX-9 token, created in the sale's init
+              ├── buy                 mints tokens, splits the 1% spread
+              └── sell                burns tokens, pays out AE
 ```
 
-Two contracts sit outside that tree and are shared by every community: the
-`AffiliationTreasury`, which accounts for referral rewards across all sales, and the
+Three contracts sit outside that tree and are shared by every community:
+`BondingCurveExponential`, which prices every trade and is never redeployed;
+`AffiliationTreasury`, which accounts for referral rewards across all sales; and the
 ProtocolDAO AEX-9 token, which the factory mints into every buyer's account.
+
+`buy_with_affiliation` is not a user-facing alternative to `buy` — it is factory-only, used for
+the creator's initial buy. An ordinary `buy` already credits the buyer's own referral chain. See
+[AffiliationBondingCurveTokenSale](/contracts/token-sale).
 
 ## Why Sophia
 
@@ -85,7 +98,7 @@ answer is that the public Sophia sources carry an explicit "not security audited
 | [CommunityManagement](/contracts/community-management) | Moderators, mute list, write threshold |
 | [AffiliationTreasury](/contracts/affiliation-treasury) | Referral tree, invite codes, reward withdrawal |
 | [FungibleTokenFull (AEX-9)](/contracts/aex9) | The token standard and the allowance calls you need |
-| [ProfileRegistry](/contracts/profile-registry) | Identity — documented from the whitepaper, ACI not vendored |
+| [ProfileRegistry](/contracts/profile-registry) | The retired identity contract, and the `AddressLink` contract that replaced it |
 | [Registry & Poll](/contracts/governance-contracts) | The two æternity governance contracts |
 | [Events](/contracts/events) | One cross-contract event catalogue, with topic hashes |
 | [Security Model](/contracts/security) | The threat model, and the honest audit status |

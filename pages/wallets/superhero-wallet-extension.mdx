@@ -20,6 +20,17 @@ instead of your extension.
 The Chrome extension ID is `mnhmmkepfddpifjkamaligfeemcbhdne`. superhero.com links exactly these two
 listings from its own connect dialog, and shows you the one matching your browser.
 
+Two builds, one codebase: the extension is built from
+[superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet), whose build
+targets both Chrome and Firefox from the same source. **Brave and Opera are Chromium browsers
+installing the Chrome Web Store build** — they are not separate builds, which is why the app links
+only two listings even though the wallet is commonly described as supporting four browsers.
+
+At the time of writing the Chrome Web Store listing showed **version 2.10.1**. Do not treat that as
+current: extension versions move independently of these docs, the store listing is the only
+authoritative figure, and the Firefox listing can lag the Chrome one because the two stores review
+separately. Check the listing rather than this page.
+
 After installing, pin the extension so its icon is visible — a wallet you cannot see is a wallet you
 will forget to unlock, and an unlocked wallet is what the detection step below needs.
 
@@ -99,9 +110,8 @@ More symptoms, including the ones specific to the built-in wallet, are in
 
 ## Open questions
 
-- What is the current published extension version, and does the Firefox build track the Chrome one?
-  Store listings were confirmed to exist but version numbers were not read, and a docs page that
-  pins a version goes stale immediately — check the listing.
-- Are Brave and Opera officially supported, or merely Chromium-compatible? Search results describe
-  the wallet as available for Chrome, Brave, Opera and Firefox, but the app itself only links the
-  Chrome Web Store and Firefox Add-ons listings.
+- **Does the Firefox build currently match the Chrome one?** The two are produced from the same
+  repository but published through separate review queues, so they can diverge for days at a time.
+  This is not answerable from a docs page at all — by design it would be stale on publication.
+  Compare the version on the two store listings, or the latest tag in
+  [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet/releases).

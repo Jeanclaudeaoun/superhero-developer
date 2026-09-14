@@ -23,7 +23,13 @@ you type. This page explains the derivation, so that "Unsupported" stops being a
 | `create_collection(collection_name, allowed_name_length, allowed_name_chars)` | Create a namespace. Payable |
 
 The registry enforces two rules beyond the character set: a community's name must be unique within
-its collection, and the token's name must match its symbol. There is one name, and it is the symbol.
+its collection (`require_name_unique`, aborting with `NAME_ALREADY_REGISTERED`), and the token's
+name must match its symbol — `create_community` passes the same `name` string as both. There is one
+name, and it is the symbol.
+
+Both name checks live in `create_community` and abort the whole transaction:
+`NAME_TOO_LONG` when `String.length(name)` exceeds the collection's `allowed_name_length`, and
+`NAME_NOT_ALLOWED_CHAR` when any character falls outside its `allowed_name_chars`.
 
 ## The collection id
 
@@ -36,6 +42,15 @@ WORDS-ak_2X6…      the English collection
 ```
 
 Everything before `-ak_` is the collection's own name; the address is the account that created it.
+The suffix is not a convention a client applies — `CommunityFactory.create_collection` builds it:
+
+```sophia
+let collection_name = String.concat(String.concat(collection_name, "-"), Address.to_str(Call.caller))
+```
+
+That is why two different accounts can both create a collection called `WORDS` without colliding,
+and why a collection id is not portable between networks.
+
 The UI splits on `-ak_` to get the display name and then applies a label override, so what you see on
 a token page is not always the on-chain name:
 
@@ -49,6 +64,31 @@ a token page is not always the on-chain name:
 Any collection not in that override map is displayed under its own name. `WORDS` is the default the
 rest of the app assumes: it is what `preferredCollection` falls back to, and it is the collection
 the agent skill's `create` command always uses.
+
+## The live collections
+
+The Superhero backend carries its supported collections as configuration rather than discovering
+them from the chain — `superhero-api/src/configs/contracts.ts`, under `BCL_FACTORY`. Four are
+configured on mainnet:
+
+| Collection | Max name length | Allowed characters |
+| --- | --- | --- |
+| `WORDS` | 20 | `-`, `0`–`9`, `A`–`Z` — code points 45, 48–57, 65–90 |
+| `CHINESE` | 20 | `-` and CJK ideographs U+4E00–U+9FFF — code points 45, 19968–40959 |
+| `ARABIC` | 20 | `-` and Arabic letters U+0621–U+064A — code points 45, 1569–1610 |
+| `RUSSIAN` | 20 | `-`, `Ё` and `А`–`Я` — code points 45, 1025, 1040–1071 |
+
+None of the three non-Latin collections admits digits or Latin letters, and `RUSSIAN` admits only
+uppercase Cyrillic. All four cap names at 20 characters, which is why the create form's hardcoded
+`maxLength` of 20 happens to be right for every collection that exists today.
+
+The full ids, including the `-ak_` suffix, are in that file for both networks; `WORDS` was deployed
+from a different account than the other three on mainnet, so its suffix differs.
+
+Two caveats about treating this as the registry:
+
+- It is an **allowlist, not a mirror.** The file's own comment: "Define the collections you want the api to support for each network. If no collections are defined, the api will support all collections." A collection that exists on-chain but is absent here is simply not indexed.
+- The authoritative list is on-chain, in `CommunityFactory.state.collection_registry`, and there is no entrypoint that enumerates it — `require_collection` only looks one up by name. Discovering collections from the chain alone means replaying `CreateCollection(string, address)` events.
 
 The API returns the resolved collection on a token as `collection` (the full id) and
 `collection_info`, which carries `id`, `name`, `description` and `allowed_name_length`.
@@ -102,18 +142,54 @@ chip is just a label.
 
 The cap comes from the collection, not from the app: `allowed_name_length(collection_name)`, exposed
 on the API as `collection_info.allowed_name_length`. The create form hardcodes a 20-character
-`maxLength` on the input and shows a counter against 20, which matches the English collection's
-published length. A collection with a different limit would not be reflected in that counter.
+`maxLength` on the input and shows a counter against 20, which matches all four configured
+collections. A collection created with a different limit would not be reflected in that counter.
+
+The cap is in **characters, not bytes**: under FATE the Sophia standard library's string functions
+operate on unicode code points, so `String.length("汉字")` is 2 and the `CHINESE` collection really
+does allow 20 ideographs. The same applies to `String.to_list`, which is what feeds
+`Char.to_int` in the character check — which is why the collection rules can be expressed as code
+point ranges like `19968` to `40959` at all.
 
 ## Creating a collection
 
 `create_collection(collection_name, allowed_name_length, allowed_name_chars)` is a payable entrypoint
 on the factory and emits `CreateCollection(string, address)`. Calling it is what mints a new
-namespace such as a new language.
+namespace such as a new language. In full, from `bcl-contracts/contracts/CommunityFactory.aes`:
 
-Nothing in the ACI restricts who may call it, and no price is stated anywhere in the repositories —
-see Open questions. The web app has no UI for it; the agent skill has no command for it. In practice
-collections are created by the platform, and `WORDS` is the one virtually every token lives in.
+```sophia
+payable stateful entrypoint create_collection(collection_name : string, allowed_name_length : int, allowed_name_chars : list(allowedNameChars)) =
+  require(!Map.member(collection_name, state.collection_registry), "collection_ALREADY_EXISTS")
+  require(Call.value == 555 * (10 ^ 18), "COLLECTION_CREATION_DONATION_MISMATCH")
+  let collection_name = String.concat(String.concat(collection_name, "-"), Address.to_str(Call.caller))
+  put(state{ collection_registry[collection_name] = ... })
+  Chain.spend(ak_11111111111111111111111111111111273Yts, Call.value)
+  Chain.event(CreateCollection(collection_name, Call.caller))
+  collection_name
+```
+
+Three facts settle the questions people ask about it:
+
+| Question | Answer |
+| --- | --- |
+| Who may call it? | **Anyone.** There is no owner check, no allowlist and no moderator role. |
+| What does it cost? | **Exactly 555 AE**, and exactly — `Call.value == 555 * 10^18`. Attaching more aborts just as surely as attaching less. There is no refund path, because there is no surplus. |
+| Where does the 555 AE go? | `Chain.spend` to `ak_11111111111111111111111111111111273Yts`, the all-zero account. It is **burned**, not paid to the platform or to a treasury. |
+
+The creator also chooses the collection's rules outright — the name length cap and the whole
+character whitelist are arguments. Nothing validates that the character set is sensible, that the
+length is reasonable, or that the name is not confusingly similar to an existing collection. The only
+uniqueness check is `collection_ALREADY_EXISTS`, and since the id is suffixed with the caller's
+address, that only stops the *same account* creating the same name twice.
+
+The 555 AE matches the fee for opening a DAO proposal, and serves the same purpose: it makes
+namespace spam expensive. Note the difference in destination, though — a DAO proposal's 555 AE goes
+to the community treasury, while a collection's is destroyed.
+
+The web app has no UI for `create_collection` and the agent skill has no command for it, so in
+practice you would call it directly against the factory. And a new collection is not automatically
+useful: the Superhero backend only indexes collections listed in its own configuration, so tokens
+created in a collection it does not know about will not appear in the app.
 
 ## Checking a name yourself
 
@@ -143,8 +219,8 @@ token index instead, which is faster but can lag a very recent creation by a few
 - [Factory and contracts API](/api-reference/factory-and-contracts) — `GET /api/factory`, the schema the app reads collections from
 - [Create a token on superhero.com](https://superhero.com/trends/create) — the form that performs this derivation live
 - [Trending tokens](https://superhero.com/trends/tokens) — filterable by collection, to see what exists in each
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) — `String.length`, `String.to_list` and `Char.to_int`, the three functions the name check is built from
 
 ## Open questions
 
-- **The live set of collections on mainnet is unverified.** `WORDS` (English), `CHINESE`, `RUSSIAN` and `ARABIC` appear in the app's label-override map, which is strong evidence they exist, but the map is a display convenience and not a registry. `GET /api/factory` returns the authoritative `collections` object with each id, name, description and `allowed_name_length`; it was not reachable from the authoring environment.
-- **Who may call `create_collection`, and what it costs.** The entrypoint is payable, which implies a fee, but no amount is documented in the app, the whitepaper or the agent skill, and the ACI does not express access control. Reading the deployed `CommunityFactory.aes` source, or inspecting a past `CreateCollection` event and its transaction value on aeScan, would answer both.
+- **Whether any collection exists on-chain beyond the four the backend indexes.** `CommunityFactory` has no entrypoint that enumerates `collection_registry`, so the only way to find out is to replay `CreateCollection(string, address)` events from the factory at `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` and compare the result against the `BCL_FACTORY` mainnet configuration. Any extra collection would be tradable on-chain but invisible in the app.

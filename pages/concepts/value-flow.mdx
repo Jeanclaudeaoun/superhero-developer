@@ -53,6 +53,29 @@ sell price is 1%", and the app's own estimator implements it literally as
 `calculateBuyPriceWithAffiliationFee = calculateBuyPrice * 1.005`
 (`superhero/src/utils/bondingCurve.ts`).
 
+**`price(count)` is the all-in figure, fee included.** This matters, because it is the number you
+quote against. In `bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`:
+
+```sophia
+entrypoint price(count : int) : int =
+  require(count > 0, "COUNT_NOT_POSITIVE")
+  let bonding_curve_price = state.bonding_curve.calculate_buy_price(state.token_contract.total_supply(), count)
+  let affiliation_amount = affiliation_amount(bonding_curve_price)
+  bonding_curve_price + affiliation_amount
+```
+
+So `price(n)` already equals `1.005 * C` and you must **not** multiply it by 1.005 again. The app's
+`calculateBuyPriceWithAffiliationFee` is not doing that — it reimplements the bare curve integral
+client-side and then adds the fee itself, arriving at the same number `price(n)` returns. `buy` uses
+the identical arithmetic and requires `Call.value >= total_price`, refunding any excess with
+`Chain.spend(Call.caller, overpaid_refund)` — which is why the agent CLI can safely attach
+`price * 1.03` and get the difference back.
+
+The fee rate itself is not a constant in the sale contract: `affiliation_amount()` reads
+`get_affiliation_fee_percentage()` and `get_affiliation_fee_precision()` off the treasury at call
+time. In `bcl-contracts/contracts/AffiliationTreasury.aes` those are `500` and `10^5`, so
+500 / 100,000 = 0.5%.
+
 So the buyer's gross is `1.005 * C`, and it splits exactly:
 
 | Destination | Amount | Share of what the buyer pays |
@@ -66,7 +89,32 @@ So the buyer's gross is `1.005 * C`, and it splits exactly:
 split rounded to one decimal place.
 
 The four affiliation levels are percentages **of the transaction value**, not of the fee, which is
-why they sum to the 0.5% rather than to 100%.
+why they sum to the 0.5% rather than to 100%. The transaction value the treasury is handed is `C`,
+the bare curve price — `record_sale_transaction(..., bonding_curve_price)` — so 0.300% of `C`, not
+of `1.005 * C`.
+
+### How the split is actually executed
+
+`buy_with_affiliation_inner` in `AffiliationBondingCurveTokenSale.aes` moves the money in this
+order, and nothing else in the contract touches the balance:
+
+| Step | Call | Amount |
+| --- | --- | --- |
+| 1 | `affiliation_treasury.record_sale_transaction(...)` | `affiliation_amount` = `0.005 * C` |
+| 2 | `Chain.spend(Call.caller, overpaid_refund)` | whatever you attached above `1.005 * C` |
+| 3 | `token_contract.mint(Call.caller, count)` | your tokens |
+| 4 | `factory.mint_protocol_dao_token(Call.value - overpaid_refund, Call.caller)` | ProtocolDAO tokens |
+| 5 | `dao_contract.record_sale_transaction(...)` | `Call.value - overpaid_refund - affiliation_amount - reserve` |
+
+Step 5 is where the DAO's cut is defined, and it is defined as a **residual**, not as a percentage.
+`reserve` is `calculate_sell_return(total_supply_after_mint, count)`, which is `0.995 * C` — the
+exact amount a seller of that same slice could immediately redeem. Subtracting it plus the
+affiliation fee from `1.005 * C` leaves `0.005 * C` for the DAO. Whatever the curve does, the sale
+contract keeps precisely the sell-side obligation and forwards the rest, which is what makes the
+solvency guarantee structural rather than a matter of parameter choice.
+
+Both treasury calls are made with `protected = true`, so a failure in the DAO or the affiliation
+treasury cannot block a buy — the contract comments say so explicitly.
 
 ## The sell side
 
@@ -116,7 +164,23 @@ necessary funds are maintained in reserve."
 "Minted on buy, burned on sell via bonding curve", and the web app confirms it by reading the token
 contract's `Burn` event out of the sell receipt to display the amount you sold.
 
-**Evidence for this accounting.** The sell-side entrypoint surface in
+**Evidence for this accounting.** `sell` in
+`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes` does exactly five things, in order:
+
+1. Reads `total_supply` and the current unit price.
+2. `return = bonding_curve.calculate_sell_return(total_supply, count)`.
+3. `require(return >= minimal_return_required, "MINIMAL_RETURN_NOT_MEET")`.
+4. `token_contract.transfer_allowance(Call.caller, Contract.address, count)` then
+   `token_contract.burn(count)`.
+5. `Chain.spend(Call.caller, return)`, then emits `PriceChange` and `Sell`.
+
+There is no call to the DAO, no call to the affiliation treasury, and no call to the factory — so no
+treasury credit, no referral accrual and no ProtocolDAO mint can occur on a sell. Note also that
+unlike `buy` and `price`, `sell` carries no `require(count > 0)`; the guard is one level down, where
+`calculate_price` enforces `count >= minimum_count` (10^12 aettos, or 10^-6 tokens) in
+`BondingCurveExponential.aes`.
+
+The entrypoint surface, as it appears in both the source and in
 `AffiliationBondingCurveTokenSale.aci.json` — the ACI shipped with the agent skill, and the basis of
 [the contract reference](/contracts/token-sale) — is:
 
@@ -134,9 +198,24 @@ the only factory entrypoint the sale can reach is
 `ICommunityFactory.mint_protocol_dao_token(int, address)`, and the whitepaper scopes its use to
 buys — "The factory issues protocol DAO tokens during buy transactions."
 
-The sale contract emits `Buy(int, int, int)`, `Sell(int, int)` and `PriceChange(int, int)`. The web
-app reads `Sell` argument 0 as the AE returned to the seller, and the token contract's `Burn`
-argument 1 as the token count destroyed.
+### Event arguments
+
+The sale contract's `datatype event` declaration names every argument, so a receipt can be decoded
+without guessing:
+
+| Event | Argument 0 | Argument 1 | Argument 2 |
+| --- | --- | --- | --- |
+| `Buy` | `total_price` — all-in AE, fee included | `affiliation_amount` | `total_supply` **before** the mint |
+| `Sell` | `return` — AE paid to the seller | `total_supply` **before** the burn | — |
+| `PriceChange` | `previous_price` | `next_price` | — |
+
+Both `Buy` and `Sell` omit `count`; the source comment says it "can be read from call args", so take
+the token amount from the decoded call arguments, not the event. Both unit prices in `PriceChange`
+come from `calculate_unit_price()`, which is `price(10^18)` — the all-in cost of one whole token at
+that moment, affiliation fee included.
+
+The web app reads `Sell` argument 0 as the AE returned to the seller, and the token contract's
+`Burn` argument 1 as the token count destroyed; both match the declaration above.
 
 ## A worked example
 
@@ -218,12 +297,47 @@ fees from unaffiliated purchases are burned", and the security section explains 
 unaffiliated fees burned rather than accumulated, eliminating extraction vectors for unclaimed
 funds."
 
-Functionally, that means the 0.5% is **not** redirected to the DAO, **not** kept by the operator,
-and **not** parked in the treasury for some future claimant. Nobody can withdraw it. The
-`AffiliationTreasury` accrues rewards per payout period per address and pays them out through
-`withdraw()`; an unaffiliated buyer has no entry in the affiliation tree, so no address ever becomes
-entitled to that amount. The precise on-chain mechanism is not visible in the ACI — see the open
-questions.
+Mechanically it is **retention in a contract with no withdrawal path**, not a transfer to an
+unspendable address. `AffiliationTreasury.aes` makes this explicit, and it is worth reading closely
+because "burned" is doing a lot of work in that sentence.
+
+The sale contract forwards the fee as `Call.value` on `record_sale_transaction`, so the AE lands in
+the treasury's balance. `update_inviters` then walks the affiliation tree upward, crediting
+`payout_periods[period][inviter]` at 300, 125, 50 and 25 parts in 100,000 for levels 1 to 4. When a
+level does not exist, `get_direct_inviter` returns `None` and the recursion simply stops:
+
+```sophia
+switch(get_direct_inviter(invitee))
+  None => ()
+  Some(inviter) =>
+    update_inviter_balance(inviter, (transaction_value * affiliation_percentage) / affiliation_fee_precision)
+    update_inviters(inviter, buyer, transaction_value, remaining_affiliation_fee_percentages)
+```
+
+No entry is credited, and nothing sweeps the shortfall. The only way AE leaves the treasury is
+`withdraw()`, which pays `get_accumulated_rewards(Call.caller)` — a sum of that caller's own ledger
+entries. There is no owner, no admin entrypoint and no sweep, so the uncredited AE is stranded in
+the contract balance permanently. That is the burn. (The codebase does use a real burn address
+elsewhere — `CommunityFactory.create_collection` sends its 555 AE donation to
+`ak_11111111111111111111111111111111273Yts` — so the choice here is deliberate, not an oversight.)
+
+**Two further amounts burn the same way, and the whitepaper does not mention either.** Both are
+consequences of `withdraw()`:
+
+- **Rewards older than two payout periods.** `get_accumulated_rewards` sums only the current period
+  and the one before it. A payout period is `Chain.timestamp / 2592000000` — 30 days in
+  milliseconds — so anything credited more than roughly 30 to 60 days ago is unreachable. The
+  contract says so in a comment: "reward that hasn't or couldn't been withdrawn in the respective
+  periods can never be withdrawn again, thus be considered burned."
+- **Rewards belonging to an inviter who never qualifies.** `withdraw()` opens with
+  `require(state.unique_invitees[...] == ThresholdReached, "MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED")`.
+  Reaching that state needs `unique_invitee_count_threshold` = 4 distinct invitees who have each
+  bought at least `unique_invitee_buy_amount_threshold` = 10 AE (`10 * 10^18` aettos), counted
+  cumulatively per invitee. An inviter with three qualifying invitees accrues rewards they can never
+  claim, and those rewards expire on the 30-day clock regardless.
+
+So "unaffiliated fees are burned" is accurate but incomplete: **unclaimed and unqualified fees burn
+too**, and the qualification bar is a real one.
 
 ## ProtocolDAO tokens
 
@@ -232,18 +346,36 @@ community token you bought. The whitepaper specifies **1,000× the AE value of t
 the buyer's address at the time of purchase, with governance functionality explicitly "not yet
 implemented."
 
-You can see them in a buy receipt: the transaction carries two `Mint` events, one on the community
-token and one on a different contract address, and the app labels the second as your protocol
-reward.
+The contract agrees, and is precise about which AE figure it multiplies.
+`bcl-contracts/contracts/CommunityFactory.aes` holds the multiplier as a single constant:
 
-Note a discrepancy worth knowing before you reconcile a number: the app's trade confirmation screen
-does **not** display 1,000× the AE amount. It displays
+```sophia
+// mints protocol DAO tokens at a rate of 1000 times the buy value.
+let protocol_dao_token_multiplier = 1000
+
+stateful entrypoint mint_protocol_dao_token(buy_value : int, receiver : address) =
+  require(Set.member(Call.caller, state.known_token_sales), "NOT_KNOWN_TOKEN_SALE")
+  state.protocol_dao_token.mint(receiver, buy_value * protocol_dao_token_multiplier)
+```
+
+The sale contract passes `Call.value - overpaid_refund` as `buy_value` — the **all-in** amount
+debited, `1.005 * C`, affiliation fee included. So a buy whose curve cost is 10 AE costs 10.05 AE
+and mints 10,050 ProtocolDAO tokens, not 10,000. The `require` on `known_token_sales` means only a
+sale the factory itself deployed can mint, and the sale contract guards the initial buy with
+`if (Call.caller != state.factory.address)` to avoid re-entering the factory during
+`create_community` — in that path the factory mints directly instead, at the same 1,000× rate.
+
+You can see the result in a buy receipt: the transaction carries two `Mint` events, one on the
+community token and one on the ProtocolDAO token contract.
+
+**The app under-states this by 5%.** The trade card and the confirmation modal both display
 `(1 - PROTOCOL_DAO_AFFILIATION_FEE) * PROTOCOL_DAO_TOKEN_AE_RATIO * aeValue`, with
 `PROTOCOL_DAO_AFFILIATION_FEE = 0.05` and `PROTOCOL_DAO_TOKEN_AE_RATIO = 1000`
-(`superhero/src/utils/constants.ts`) — that is **950× the AE amount**. For a 10 AE buy the
-whitepaper implies 10,000 ProtocolDAO tokens and the confirmation screen shows 9,500. The
-authoritative number is whatever the factory actually mints, visible as the second `Mint` event on
-your own transaction.
+(`superhero/src/utils/constants.ts`, used in `features/trending/hooks/useTokenTrade.ts` and
+`components/modals/TransactionConfirmModal.tsx`) — that is **950×**. No 5% figure appears anywhere
+in the contracts, and the affiliation fee the constant is named after is 0.5%, not 5%. Treat the
+displayed figure as a conservative client-side estimate; the minted amount is 1,000× the AE
+debited, and the `Mint` event on your own transaction is the record.
 
 ## Read more
 
@@ -257,22 +389,8 @@ your own transaction.
 
 ## Open questions
 
-- **Does the contract's `price(count)` entrypoint already include the 0.5% affiliation fee, or is it
-  the bare curve integral?** The app's client-side estimator keeps them separate and multiplies by
-  1.005 itself; the agent CLI sends `price * 1.03`, which covers the fee either way, so neither
-  client disambiguates it. The ACI gives signatures, not bodies. Reading `AffiliationBondingCurveTokenSale.aes`
-  or comparing `price(n)` against the AE actually debited on a mainnet buy would settle it.
-- **How is an unaffiliated buyer's 0.5% burned, mechanically?** The whitepaper states the outcome,
-  but no entrypoint in `AffiliationTreasury.aci.json` corresponds to a burn and AE is not an AEX-9
-  token. Whether it is sent to an unspendable address, retained by a contract with no withdrawal
-  path, or simply never transferred out of the sale contract is not determinable from the ACIs.
-- **Why does the app show 950× rather than 1,000× for ProtocolDAO rewards?** The constant is named
-  `PROTOCOL_DAO_AFFILIATION_FEE` and set to `0.05` (5%), which matches neither the 0.5% affiliation
-  fee nor the 1% total spread. Settling this needs the factory's `mint_protocol_dao_token`
-  implementation or a decoded `Mint` event from a real buy.
-- **What are the real gas costs of a buy, a sell and a token creation?** Neither repository states
-  one. Each is visible as the transaction fee on an individual transaction in
-  [æScan](https://aescan.io), but no representative figure can be quoted from these sources.
-- **What are the exact argument orders of `Buy(int, int, int)` and `Sell(int, int)`?** The ACI gives
-  types only. The web app reads `Buy` argument 0 and `Sell` argument 0 as AE amounts; the meaning of
-  the remaining arguments is not established anywhere in these repositories.
+- **What are the real gas costs of a buy, a sell and a token creation?** No repository states one,
+  and the contracts do not determine it — gas depends on the deployed bytecode and the network's gas
+  price at execution. Each is visible as the transaction fee on an individual transaction in
+  [æScan](https://aescan.io); closing this means submitting one of each on mainnet and recording
+  `gasUsed` and `gasPrice` against a known block height.

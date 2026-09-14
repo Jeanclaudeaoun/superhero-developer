@@ -202,6 +202,39 @@ The rule the signer enforces, with no fast path around it:
 There is no cached unlock and no session-cached seed. The SDK-facing adapter even reloads the vault
 record from storage on every signature, so adding or removing a factor takes effect immediately.
 
+### The PRF challenge is random, not bound to the payload
+
+`inline-signer.ts` documents a requirement on the unlock provider: the passkey provider "SHOULD make
+this binding cryptographic (WebAuthn PRF challenge = H(payload, networkId)) so a KEK obtained for
+payload A cannot sign payload B." **As shipped, it does not.** Both WebAuthn ceremonies in
+`src/features/wallet/webauthn.ts` — `evaluatePrf` for a known credential and `discoverPrf` for a
+discoverable one — pass `challenge: bs(randomChallenge())`, where `randomChallenge()` is
+`crypto.getRandomValues(new Uint8Array(32))`. Nothing derives the challenge from the transaction or
+the network id.
+
+What that does and does not cost you:
+
+- **It does not weaken the per-signature rule.** A ceremony still runs for every signature, with
+  `userVerification: 'required'`, and the prompt still shows the decoded transaction.
+- **It does mean the ceremony is not a signature over the payload.** The authenticator attests that
+  you were present, not that you approved *this* transaction. The binding between what you saw in
+  the prompt and what gets signed is enforced by the in-page code path alone, so a compromise of the
+  page's JavaScript sits inside that boundary rather than outside it.
+
+Treat this as a known gap the code names against itself rather than as a defect nobody noticed —
+but do not describe the PRF ceremony as payload-bound, because it is not.
+
+### The chat identity is the one cached key
+
+The "no cached unlock" rule has a single documented exception, and it is not the signing key. The
+Nostr chat identity is derived once and then cached for a **rolling 30-minute idle window**:
+`DEFAULT_NOSTR_IDLE_TIMEOUT_MS = 30 * 60 * 1000` in
+`src/features/chat/identity/nostr-session.ts`. Chat activity calls `touch()`, which resets the
+timer; when it expires the session locks with reason `idle` and the key is dropped, as it also is on
+an explicit lock or teardown. The unlock prompt tells you this is happening — `inline-signer.ts`
+passes a `{ kind: 'chat-session'; idleMinutes: number }` purpose so the ceremony can say what it is
+caching and for how long. Nothing else in the wallet caches a derived key.
+
 The bridge between the React-free signer and the prompt UI is a small broker with two properties
 worth knowing as a user: if no prompt is mounted it **rejects immediately** rather than hanging — a
 signature is never produced without someone seeing it — and it renders **one prompt at a time**, so
@@ -301,12 +334,15 @@ screen, and takes two taps because for a passkey wallet it is unrecoverable.
 
 ## Open questions
 
-- Is there a plan for a user-verification-gated **phrase reveal** for passkey-created wallets? Today
-  a device-bound passkey is the only copy of that seed and the app offers no export. The comments in
-  `wallet-lifecycle.ts` name this as the intended fix but not a shipped one.
-- Does the passkey unlock provider yet bind the WebAuthn PRF challenge to a hash of the payload and
-  network id? `inline-signer.ts` records this as a requirement on the provider ("so a KEK obtained
-  for payload A cannot sign payload B") rather than as implemented behaviour.
-- What is the exact rolling idle window for the cached chat identity? The prompt is passed an
-  `idleMinutes` value by the caller; the concrete number lives in the chat session module, which was
-  not read for this page.
+Two facts that used to be open are now settled in the body above: the PRF challenge is random
+rather than payload-bound, and the cached chat identity's idle window is 30 minutes. What remains is
+a roadmap question.
+
+- **Is a user-verification-gated phrase reveal planned, or merely wished for?** That there is no
+  reveal today is certain — three separate modules say so in comments
+  (`wallet-lifecycle.ts`: "there is no reveal or … copy. A UV-gated phrase reveal is the fix; until
+  it exists, do not describe the passkey as a backup"; `passkey-seed.ts`: "there is no export/reveal
+  screen today"; `WalletOnboarding.tsx`: "There is no reveal screen"), and no component implements
+  one. What is not established is whether it is scheduled: no repository contains a roadmap, an
+  issue reference or a design note beyond those comments. Superhero would have to say — and until
+  they do, a device-bound passkey remains the single copy of a passkey-created seed.

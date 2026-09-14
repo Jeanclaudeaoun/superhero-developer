@@ -21,9 +21,60 @@ sell(x) = buy(x) · 0.995
 ```
 
 The sale contract mints against `buy` and redeems against `sell`. The 0.5% difference accrues to the
-community's DAO treasury and is realised only when someone sells. On top of that, the affiliation
-token sale contract charges a further **0.5% affiliation fee on buys**, which is why the whitepaper
-describes the total spread between buy and sell price as **1%**.
+community's DAO treasury. On top of that, the affiliation token sale contract charges a further
+**0.5% affiliation fee on buys**, which is why the whitepaper describes the total spread between buy
+and sell price as **1%**.
+
+### `price()` already includes the affiliation fee
+
+This is settled in `bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`:
+
+```sophia
+entrypoint price(count : int) : int =
+  require(count > 0, "COUNT_NOT_POSITIVE")
+  let bonding_curve_price = state.bonding_curve.calculate_buy_price(state.token_contract.total_supply(), count)
+  let affiliation_amount = affiliation_amount(bonding_curve_price)
+  bonding_curve_price + affiliation_amount
+
+function affiliation_amount(bonding_curve_price : int) =
+  let affiliation_percentage = state.affiliation_treasury.get_affiliation_fee_percentage()
+  (bonding_curve_price * affiliation_percentage) / state.affiliation_treasury.get_affiliation_fee_precision()
+```
+
+So:
+
+| Call | What it returns |
+| --- | --- |
+| `BondingCurve.calculate_buy_price(supply, count)` | The bare curve integral |
+| `TokenSale.price(count)` | The curve integral **plus** the 0.5% affiliation fee |
+| `TokenSale.sell_return(count)` | `BondingCurve.calculate_sell_return(supply, count)` verbatim — no fee added or removed |
+
+**Attach exactly `price(count)` and you are fully covered.** Do not multiply it by 1.005 again. The
+web app's `calculateBuyPriceWithAffiliationFee` helper applies the 1.005 to the *curve* figure it
+computed off-chain, not to `price()`; the CLI sends `price()` plus a slippage buffer and nothing
+else. Both are correct, and neither double-charges.
+
+The fee percentage is not hardcoded in the sale — it is read live from the affiliation treasury on
+every call. `AffiliationTreasury.get_affiliation_fee_percentage()` returns `500` and
+`get_affiliation_fee_precision()` returns `10^5`, so the fee is `500 / 100000 = 0.5%`. The treasury
+comments note that `500` is "hardcoded for performance, sum of `affiliation_fee_percentages`" —
+`[300, 125, 50, 25]`, which do indeed sum to 500.
+
+### Surplus AE is refunded
+
+`buy` requires `Call.value >= total_price` rather than equality, then returns the difference:
+
+```sophia
+require(Call.value >= total_price, "AE_AMOUNT_NOT_SUFFICIENT")
+...
+let overpaid_refund = Call.value - total_price
+if (overpaid_refund > 0) Chain.spend(Call.caller, overpaid_refund) else ()
+```
+
+`CommunityFactory.create_community` does the same thing before it forwards the initial buy. So a
+slippage buffer costs you nothing when the price does not move — you get the unused portion back in
+the same transaction. The only cost of a generous buffer is that the AE has to be in your wallet
+when you sign.
 
 ### Where each AE goes
 
@@ -42,13 +93,61 @@ Buyer also receives:
   └── ProtocolDAO Tokens = 1,000 × AE value
 ```
 
-Unclaimed affiliation fees are **burned**, not accumulated. That is deliberate: it removes the pot of
-unclaimed funds that would otherwise be an extraction target.
+The four-level split is not paid out of a pool — it is credited per level as the treasury walks up
+the affiliation tree. `AffiliationTreasury.record_sale_transaction(buyer, transaction_value)` calls
+`update_inviters`, which recurses through `get_direct_inviter` crediting `300`, then `125`, then
+`50`, then `25` hundred-thousandths of the transaction value. The recursion stops as soon as an
+account has no inviter recorded.
+
+**"Burned" means stranded in the treasury contract, not sent to a burn address.** The sale always
+forwards the full 0.5% to `AffiliationTreasury` as `Call.value`. Whatever `update_inviters` does not
+credit to somebody stays as contract balance, and the only way AE ever leaves that contract is
+`withdraw()`, which pays out `get_accumulated_rewards(Call.caller)` — recorded credits only. No
+entrypoint can reach the uncredited remainder. It is unspendable by anyone, permanently. A buyer
+with no inviter at all therefore burns the whole 0.5%; a buyer whose chain is two deep burns the
+`50 + 25` that levels three and four would have taken.
+
+Two further ways affiliation AE is burned in the same sense:
+
+- **Rewards expire.** `get_accumulated_rewards` sums only the current payout period and the one
+  before it, where a period is 30 days (`payout_period_interval = 2592000000` milliseconds). The
+  contract's own comment: "reward that hasn't or couldn't been withdrawn in the respective periods
+  can never be withdrawn again, thus be considered burned."
+- **`withdraw()` is gated.** It aborts with `MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED` unless the
+  caller has reached `ThresholdReached` — four unique invitees who have each bought at least 10 AE
+  (`unique_invitee_count_threshold = 4`, `unique_invitee_buy_amount_threshold = 10 * 10^18`). An
+  inviter below that bar accrues rewards they cannot claim, and they expire on the same two-period
+  clock.
+
+That design removes the pot of unclaimed funds that would otherwise be an extraction target. It also
+means the affiliation system pays out considerably less than 0.5% of all volume in practice. See
+[Affiliation rewards](/rewards/affiliation).
 
 The live percentages are readable on-chain rather than being constants you have to trust:
 `fee_percentage()` and `fee_precision()` on the factory, and
 `get_affiliation_fee_percentage()`, `get_affiliation_fee_precision()` and
 `get_affiliation_fee_percentages()` on the affiliation treasury.
+
+### The DAO's half, exactly
+
+The 0.5% that reaches the community DAO is not a separate transfer computed from a percentage. It is
+the residue after the reserve is set aside, in `buy_with_affiliation_inner`:
+
+```sophia
+let reserve = state.bonding_curve.calculate_sell_return(state.token_contract.total_supply(), count)
+state.dao_contract.record_sale_transaction(
+  value = Call.value - overpaid_refund - affiliation_amount - reserve, protected = true,
+  Call.caller, total_price)
+```
+
+`total_supply()` has already been incremented by the mint, so `reserve` is exactly
+`0.995 × bonding_curve_price` — the AE that would be owed if the buyer immediately sold back. The
+DAO gets `bonding_curve_price − reserve`, which is the remaining `0.5%`, and the sale contract keeps
+the reserve. That is the mechanism behind "the reserve is always solvent": the payout obligation is
+computed first and the treasury only receives what is left over.
+
+Both external calls use `protected = true`, so a misbehaving DAO or treasury cannot block a trade —
+the value stays in the sale contract instead of reverting the buy.
 
 ### What 1% costs you in practice
 
@@ -116,8 +215,11 @@ flag. To set your own precisely, call the contract directly, as shown in
 
 The guards behave asymmetrically, and it is worth knowing which way:
 
-- **On a buy**, the guard is an upper bound on spend. You attach more AE than the quote; you cannot be charged more than you attached. If the price moved further than your tolerance, the call reverts.
-- **On a sell**, the guard is `minimal_return_required` — a floor on the payout. Below it the call reverts and your tokens stay where they are.
+- **On a buy**, the guard is an upper bound on spend. You attach more AE than the quote; anything the trade does not need is refunded in the same transaction, and if the price moved further than your tolerance the call reverts with `AE_AMOUNT_NOT_SUFFICIENT`.
+- **On a sell**, the guard is `minimal_return_required` — a floor on the payout. Below it the call reverts with `MINIMAL_RETURN_NOT_MEET` and your tokens stay where they are.
+
+Because surplus is refunded, a buy buffer is close to free and a sell floor is a real decision. Size
+the sell floor carefully; be generous with the buy buffer.
 
 ## 4. Gas
 
@@ -145,9 +247,9 @@ For a buy of `n` tokens at supply `S`:
 ```text
 AE leaving your wallet
   = ∫ from S to S+n of buy(x) dx     ← the curve, including your own slippage
-  × 1.005                             ← the affiliation fee
+  × 1.005                             ← the affiliation fee; together, this is price(n)
   + network gas
-  ( + up to your slippage tolerance, if you attached a buffer )
+  ( any buffer you attached above price(n) is refunded in the same transaction )
 ```
 
 And for the matching sell later, at whatever supply `S'` prevails then:
@@ -175,5 +277,4 @@ fee for holding.
 
 ## Open questions
 
-- **Gas for a buy, a sell and a post is undocumented.** No figure appears in the web app, the whitepaper, the FAQ or the agent skill. Mining one of each and reading the fee off [aeScan](https://aescan.io) would produce real numbers; they will vary with the contract's gas usage, so a range is more honest than a point estimate.
-- Whether the 0.5% affiliation fee is included in `TokenSale.price(count)` or added by the caller is not settled by the ACI. The web app adds it explicitly for display; the CLI sends `price()` plus a 3% buffer and does not distinguish. This changes nothing about the total you pay, but it does change how you should compute a quote from `calculate_buy_price`.
+- **Gas for a buy, a sell and a post is undocumented.** No figure appears in the web app, the whitepaper, the FAQ, the agent skill or the contract repository. Mining one of each and reading the fee off [aeScan](https://aescan.io) would produce real numbers; they will vary with the contract's gas usage, so a range is more honest than a point estimate.

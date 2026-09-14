@@ -21,6 +21,16 @@ disconnect cleanly.
 The first two are external custody: the wallet holds the key and Superhero only ever receives a
 signed result. The third is documented separately in [The Built-In Wallet](/wallets/built-in-wallet).
 
+**None of them is WalletConnect.** The hook that drives all of this is called `useWalletConnect`
+(`src/hooks/useWalletConnect.ts`) and the name is a coincidence, not a protocol claim: its only
+transport imports are `BrowserWindowMessageConnection` and `walletDetector` from
+`@aeternity/aepp-sdk` — the AEX-2 `postMessage` RPC. There is no WalletConnect client, no project
+id, no pairing URI and no relay anywhere in the æternity connection path. The one place the real
+WalletConnect stack does appear is the Ethereum side of the **disabled** bridge and buy-with-ETH
+widgets, which are commented out of the route table and cannot be reached. If you are writing a
+wallet to connect to superhero.com, implement the AEX-2 side, not WalletConnect. See
+[Bridging from Ethereum](/defi/bridge) for why those widgets are still in the tree.
+
 ## The extension handshake
 
 Pressing **Connect** runs this sequence:
@@ -154,9 +164,8 @@ built-in wallet's vault from the device — that is a separate, deliberate erase
 
 ## Open questions
 
-- What is the exact permission set a Superhero Wallet connection returns? The app stores whatever
-  wallet info the SDK hands back and does not narrow it, so the authoritative list belongs to the
-  wallet implementation rather than to this repository.
-- Is WalletConnect supported for æternity accounts on superhero.com? The Superhero Wallet marketing
-  copy mentions WalletConnect readiness, but no WalletConnect transport appears in the web app's
-  connection code.
+- **What exact permission set does a Superhero Wallet connection return?** The app stores whatever
+  wallet info the SDK hands back and narrows nothing, so the authoritative list is the wallet's, not
+  this repository's. Read `superhero-com/superhero-wallet`'s AEX-2 responder — the object it returns
+  from its connect and subscribe handlers — or inspect a live `connect` response in the browser
+  console after pressing Connect.

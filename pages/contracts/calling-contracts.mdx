@@ -183,7 +183,13 @@ dry run exactly as it would on chain, but without costing a transaction fee.
 ## Gas estimation and gas limits
 
 `result.result.gasUsed` on a dry run is the measured consumption for that call against
-current state. Set an explicit `gasLimit` from it with a margin:
+current state. That path is stable across the SDK versions the Superhero ecosystem uses:
+the `bcl-contracts` test suite pins `@aeternity/aepp-sdk` at `^13.3.3` and reads exactly
+`applyVoteSubject.result.gasUsed` and `sell.result.gasUsed`, and SDK 14 puts it in the same
+place. Alongside it, `result.gasPrice` gives the price the call actually paid — the contract
+tests multiply the two to reconcile an account's balance change.
+
+Set an explicit `gasLimit` from it with a margin:
 
 ```javascript
 const dry = await sale.buy(count, { amount, callStatic: true });
@@ -197,9 +203,11 @@ Two caveats:
 - **State moves.** A buy that lands after several other buys in the same micro block touches
   different map entries and can use more gas than the dry run measured. The 30% margin above
   is a starting point, not a guarantee.
-- **`create_community` is expensive.** It deploys four contracts in one transaction. Do not
-  dry-run-and-trim its gas limit aggressively; let the SDK use its default unless you have
-  measured repeatedly.
+- **`create_community` is expensive.** It deploys four contracts in one transaction — a
+  `CommunityManagement`, a `DAO`, an `AffiliationBondingCurveTokenSale`, and the AEX-9 token
+  the sale creates in its own `init` — then makes three more cross-contract calls to wire them
+  together, and optionally performs an initial buy on top. Do not dry-run-and-trim its gas
+  limit aggressively; let the SDK use its default unless you have measured repeatedly.
 
 You can also set `gasPrice` explicitly. Leave it alone unless you are fighting for inclusion;
 the SDK's default tracks the node's minimum.
@@ -325,12 +333,13 @@ await factory.has_community(collectionId, 'MYTOKEN');
 
 ## Open questions
 
-- **Exact `gasUsed` field path across SDK minor versions.** The examples read
-  `result.result.gasUsed`, which is where SDK 14 puts it. The field has moved between major
-  versions; if it is `undefined`, log the whole `result` object once and adjust.
 - **Whether `callStatic` reports the same gas as a mined call for multi-contract
-  transactions.** `create_community` deploys four contracts through `Chain.create`; no
-  measurement comparing dry-run and mined gas for that call was available here.
+  transactions.** `create_community` deploys a `CommunityManagement`, a `DAO`, a sale and its
+  AEX-9 token through `Chain.create` in one call, and then optionally performs an initial buy
+  that reaches two more contracts. Whether a dry run's `gasUsed` covers all of that identically
+  to a mined call needs one measurement against a live node, which was not possible here: run
+  `create_community` with `callStatic: true`, note `result.gasUsed`, then mine the same call
+  and compare. Until someone does, keep the 30% margin the page recommends.
 
 ## Read more
 

@@ -112,8 +112,24 @@ exist yet — so genuine curve drift between quote and execution is zero for a c
 therefore generous in practice; it exists because the same pattern is reused for ordinary buys, where
 drift is real.
 
-It also means the AE you send is about 4.5% more than the tokens are worth. What happens to the
-remainder is not determinable from the contract interface — see Open questions.
+**The remainder comes back.** `CommunityFactory.create_community` requires
+`Call.value >= buy_price` rather than equality, then refunds the difference in the same transaction:
+
+```sophia
+let buy_price = bonding_curve_token_sale.price(initial_buy_count)
+require(Call.value >= buy_price, "VALUE_HAS_TO_BE_GREATER_THAN_BUY_PRICE")
+let overpaid_refund = Call.value - buy_price
+if (overpaid_refund > 0) Chain.spend(Call.caller, overpaid_refund) else ()
+```
+
+Note which quote it checks against: `price(initial_buy_count)` on the sale, which **already includes
+the 0.5% affiliation fee**, not the bare `calculate_buy_price` the script quoted. So the fee comes
+out of the buffer and the rest is returned. You end up having spent the real price plus gas.
+
+One thing does *not* come back: the ProtocolDAO tokens are minted on the net amount. The factory
+mints `(Call.value - overpaid_refund) * 1000`, so the refund reduces your ProtocolDAO reward in
+exactly the proportion you would expect — you are rewarded on what you spent, not on what you
+attached.
 
 ## Inspect afterwards
 
@@ -246,5 +262,4 @@ deployment, but a redeployment would leave a hardcoded address pointing at an ab
 
 ## Open questions
 
-- **Is unspent attached AE refunded?** The script attaches 5% more AE than the quoted price, and the sale contract's `buy` is payable, but nothing in the ACI says whether the surplus is returned to the caller or kept by the contract. Comparing an account balance before and after a creation with a known `buy_ae`, or decoding the `Buy(int, int, int)` event from the sale contract, would settle it.
-- The `check` subcommand reports `allowed_chars` as the fixed string `"A-Z, 0-9, - (dash)"` regardless of the collection it just looked up. The real rules are in the schema's `allowed_name_chars`; the script does not decode them.
+- The `check` subcommand reports `allowed_chars` as the fixed string `"A-Z, 0-9, - (dash)"` regardless of the collection it just looked up. That happens to describe the `WORDS` collection, which the script always uses, and is wrong for the other three — see [Collections & Naming Rules](/tokens/collections-and-naming) for the real character sets. The script does not decode the schema's `allowed_name_chars`.

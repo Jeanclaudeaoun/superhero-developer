@@ -101,9 +101,11 @@ why a wallet's `signMessage` reproduces steps 2 to 4 when you hand it the right 
 below). The framing is what stops a signature captured here from being replayed as a raw
 transaction signature.
 
-`Crypto.verify_sig(msg, pubkey, sig)` is the Sophia standard-library Ed25519 check. Compiler
-version 8 and later accept a message of any length; earlier versions require exactly 32 bytes,
-which is why the scheme hashes down to a digest first. The contract declares `@compiler >= 5`.
+`Crypto.verify_sig(msg, pubkey, sig)` is the Sophia standard-library Ed25519 check. The
+question of which compiler versions accept a message longer than 32 bytes does not arise
+here: the scheme hashes down to a 32-byte Blake2b digest before verifying, so the contract
+always passes a 32-byte message regardless of the compiler it was built with. `Tipping_v3.aes`
+declares `@compiler >= 5`.
 
 ## Building the author side
 

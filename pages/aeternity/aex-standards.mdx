@@ -76,6 +76,29 @@ Four things will bite you if you port ERC-20 assumptions directly:
 Also, as everywhere on æternity: amounts are integers scaled by the token's own `decimals` from
 `meta_info()`, which is not necessarily 18. See [AE & Gas](/aeternity/ae-and-gas).
 
+### Which extensions a Superhero community token needs
+
+You can infer the answer from the protocol rather than guessing. Every community token is created
+by the sale contract as a `FungibleTokenFull`
+(`Chain.create(name, decimals, symbol, None) : FungibleTokenFull` in
+`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`), and the ProtocolDAO token the same
+way in `CommunityFactory.init`. The reference implementation's "full" variant declares
+**`allowances`, `mintable` and `burnable`**, and Superhero's contracts exercise all three:
+
+| Extension | Where the protocol depends on it |
+| --- | --- |
+| `mintable` | `buy` calls `token_contract.mint(Call.caller, count)` |
+| `burnable` | `sell` calls `token_contract.burn(count)` |
+| `allowances` | `sell` calls `transfer_allowance`; `DAOVote.vote` locks tokens the same way |
+
+So a Superhero community token cannot be a minimal AEX-9 — remove any one of those three and buying,
+selling or voting stops working. Note that `decimals` is fixed at **18** for every community token:
+`CommunityFactory.decimals()` returns 18 and the sale contract's `init` enforces
+`decimals == bonding_curve.supported_decimals()`, which is also 18.
+
+Treat the three-item list as what the deployed tokens must support, not as a transcription of the
+string literal they return — see the open questions.
+
 ### Reading AEX-9 balances without a contract call
 
 The middleware indexes AEX-9 holdings, so a wallet view does not need one contract call per
@@ -112,9 +135,12 @@ lookups use `v3`. See [Networks & Endpoints](/aeternity/networks).
 
 ## Open questions
 
-- Which extensions Superhero's deployed community tokens actually advertise is not recorded in
-  these docs. The vendored ACI is `FungibleTokenFull`, which implements all of them, but the
-  authoritative answer is an `aex9_extensions()` call against a live sale's token contract.
-- AEX-9's status is listed as "Review" rather than "Final" in the AEXs repository. Whether that
-  has since changed, and whether any later proposal supersedes part of it, was not resolved from
-  the sources available here.
+- **The exact strings `aex9_extensions()` returns are not transcribed here.** Which extensions a
+  Superhero token must implement is settled above, but the returned list is a literal in
+  `fungible-token-full.aes` from `aeternity/aeternity-fungible-token`, which is pulled in as a
+  dependency and is not vendored in any Superhero repository. Either read that file, or make one
+  read-only `aex9_extensions()` call against a live token contract — both were out of reach from
+  this environment, where outbound HTTP is blocked.
+- **AEX-9's status is listed as "Review" rather than "Final"** in the AEXs repository. Whether that
+  has since changed, and whether any later proposal supersedes part of it, needs the current
+  [AEXs repository](https://github.com/aeternity/AEXs) index.

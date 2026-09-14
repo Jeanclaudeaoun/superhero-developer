@@ -26,8 +26,12 @@ in [Connecting a Wallet](/wallets/connecting).
 
 ## What you can do there
 
-It is the same wallet as the extension and the mobile app, served differently. That includes the
-things people most often go looking for:
+It is the same wallet as the extension and the mobile app, served differently — one codebase in
+[superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet), whose build
+targets the web version and both extensions from the same source, which is why the project describes
+the same multi-chain support (Bitcoin, Ethereum, BNB, Solana, Avalanche, Polygon, Dogecoin and
+æternity) without distinguishing between surfaces. That includes the things people most often go
+looking for:
 
 - Create a new wallet, or import one from a seed phrase.
 - Hold and send AE and AEX-9 tokens.
@@ -85,8 +89,16 @@ its storage does and does not survive in [The Built-In Wallet](/wallets/built-in
 
 ## Open questions
 
-- Does the web wallet support the full multi-chain feature set of the extension and native apps
-  (Bitcoin, Ethereum and the rest), or only æternity? The app treats it purely as a signing endpoint
-  and the repository says nothing about its feature parity.
-- Is AirGap cold signing available from the hosted web wallet, or extension- and app-only? The
-  wallet's FAQ copy describes AirGap pairing without naming the surfaces it works on.
+Both of these are questions about the wallet project, not about superhero.com, which treats
+`wallet.superhero.com` purely as a signing endpoint.
+
+- **Which features differ between the web build and the extension?** The three surfaces share one
+  codebase, so parity is the starting assumption — but a browser tab has no extension APIs, no
+  persistent background context and different storage guarantees, so some capabilities cannot be
+  identical. No feature matrix is published. Compare the build targets and any platform guards in
+  [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet), or test the
+  specific feature you need on the surface you will use it on.
+- **Is AirGap cold signing available from the hosted web wallet?** The wallet's FAQ copy describes
+  AirGap pairing without naming the surfaces it works on, and nothing in the Superhero web app
+  touches it. The wallet repository's AirGap integration and its platform conditions are where to
+  look; neither could be fetched from this environment.

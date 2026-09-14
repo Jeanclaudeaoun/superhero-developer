@@ -108,9 +108,12 @@ These are not exclusive, and mixing them is normal:
 
 ## Open questions
 
-- Does Superhero Wallet support a hardware wallet (Ledger) for æternity accounts specifically? The
-  wallet's own FAQ copy mentions importing accounts from a cold wallet or Ledger and cold signing via
-  AirGap, but neither was verified against the wallet's repository or tested on an æternity account.
-- Which browsers does the extension currently ship for? The app links Chrome Web Store and Firefox
-  Add-ons listings, and search results mention Brave and Opera; the authoritative current list belongs
-  to the wallet project rather than this repository.
+- **Does Superhero Wallet support a Ledger for æternity accounts specifically?** The wallet's own
+  FAQ copy mentions importing from a cold wallet or Ledger and cold signing via AirGap, and a
+  "Add ledger module" pull request exists on
+  [superhero-com/superhero-wallet](https://github.com/superhero-com/superhero-wallet) — but a pull
+  request is not a shipped feature, and æternity support is a separate question from support for the
+  wallet's other chains. Settle it in the wallet's
+  [releases](https://github.com/superhero-com/superhero-wallet/releases), or by connecting a Ledger
+  and checking whether an `ak_` account appears. **Do not assume it works before testing with a
+  small balance.**

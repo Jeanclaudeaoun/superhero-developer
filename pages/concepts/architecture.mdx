@@ -51,17 +51,50 @@ The factory's deployment sequence, from the whitepaper:
 
 ## Off-chain layer
 
-- **Indexer** — subscribes to contract events (for example `PostWithoutTipReceived`, `Buy`, `Sell`,
-  `PriceChange`) and builds the queryable index behind `api.superhero.com`.
-- **Backend relayer** — accepts signed messages and submits them, enabling gasless posting through
-  the contract's `post_without_tip_sig` entrypoint.
-- **Trendminer** — aggregates token activity into trending scores, charts and analytics. In the web
-  app this is a set of views (`/trends/*`) served from the same API.
+The service behind `api.superhero.com` is **open source**: it is
+[superhero-com/superhero-api](https://github.com/superhero-com/superhero-api), a NestJS application
+distributed under the ISC licence (copyright BCTSL). Its internal name is `wordcraft-api` and its
+Swagger document is titled "WORD CRAFT Scan", which is why several of its hostnames sit on
+`wordcraft.fun` rather than on `superhero.com`.
+
+It is one process doing several jobs:
+
+- **Indexer** (`src/mdw-sync/`) — a general-purpose chain indexer, not an event listener bolted onto
+  one contract. It stores key blocks, micro blocks and transactions in Postgres and runs two loops:
+  a **live indexer** (`live-indexer.service.ts`) fed by middleware WebSocket subscriptions for
+  transactions and key blocks, and a **backward/bulk indexer** (`indexer.service.ts`,
+  `block-sync.service.ts`) that backfills history, seeding its tip height from
+  `GET {MIDDLEWARE_URL}/v3/status` → `mdw_height`.
+- **Plugins** (`src/plugins/`) — all domain decoding. Each plugin declares a `startFromHeight()` and
+  a `filters()` list matching contract calls by contract id and entrypoint name (or spend
+  transactions by predicate), then receives `onTransactionsSaved(txs)`. The shipped set is `bcl`
+  (token sales), `bcl-affiliation`, `dex`, `governance`, `social` (posts), `social-tipping`,
+  `social-graph` and `address-links`. `src/mdw-sync/README.md` documents the plugin contract.
+- **Reorg handling** — `block-validation.service.ts` re-validates the chain every 10 minutes. On a
+  rollback, derived rows disappear automatically because plugin entities carry a foreign key to the
+  transaction with `onDelete: 'CASCADE'`; a plugin can also implement `onReorg(rollBackToHeight)`
+  for anything the cascade cannot express.
+- **Trendminer** — trending scores, charts and analytics, computed on a cron in `src/tokens/`
+  (`update-trending-tokens.service.ts`). In the web app this is a set of views (`/trends/*`) served
+  from the same API. The formula is documented in
+  [Attention Markets](/concepts/attention-markets).
 - **Attestation signer** — a backend key registered in `ProfileRegistry.aes` at deployment. It signs
   X-handle attestations that the contract verifies with `Crypto.verify_sig`; the client obtains one
   from `POST /api/profile/x/attestation`. See [Verifying Your X Account](/identity/x-verification).
 - **Clients** — the React/Vite web app, the React Native mobile apps, and the
   [agent skill](/agents) for AI agents.
+
+Two corrections to the picture the whitepaper paints:
+
+**There is no posting relayer.** The whitepaper describes a backend that accepts a signed message
+and submits it through `post_without_tip_sig`, but nothing in `superhero-api` signs or broadcasts a
+post on a user's behalf — the backend reads the chain, it does not write posts to it. The contract
+entrypoint is real and usable, and the sole reason posting is not gasless today is that no Superhero
+service calls it. See [Delegated & Gasless Posting](/social/delegated-posting).
+
+**The indexer reads the middleware, not the node directly.** Everything upstream of the plugins goes
+through `MIDDLEWARE_URL`, so the middleware's own lag is the floor on how fresh any API response can
+be.
 
 ## Publishing a post
 
@@ -69,8 +102,9 @@ The factory's deployment sequence, from the whitepaper:
 flowchart LR
   U["You: web app, mobile app<br/>or agent CLI"] -->|"1. sign post_without_tip"| N["æternity node"]
   N --> T["Tipping v3 contract"]
-  T -->|"2. PostWithoutTipReceived event"| IX["Indexer"]
-  IX --> DB[("Post index")]
+  T -->|"2. tx + PostWithoutTipReceived"| MW["æternity middleware"]
+  MW -->|"WebSocket + backfill"| IX["superhero-api indexer<br/>(mdw-sync)"]
+  IX -->|"social plugin decodes"| DB[("Post index")]
   DB --> API["api.superhero.com<br/>GET /api/posts"]
   API -->|"3. feed refresh"| U
 ```
@@ -94,10 +128,11 @@ flowchart LR
   S -.->|"reads curve"| BC["BondingCurveExponential"]
   U -->|"2. sign buy, send AE"| S
   S -->|"mint to you"| TK["Community AEX-9 token"]
-  S -->|"0.5% spread"| DAO["DAO treasury"]
-  S -->|"0.5% fee"| AT["AffiliationTreasury"]
+  S -->|"residual after reserve + fee"| DAO["DAO treasury"]
+  S -->|"0.5% of curve price"| AT["AffiliationTreasury"]
   S -->|"mint_protocol_dao_token"| F["CommunityFactory"]
-  S -->|"3. Buy + PriceChange events"| IX["Indexer"]
+  S -->|"3. Buy + PriceChange events"| MW["æternity middleware"]
+  MW --> IX["superhero-api indexer<br/>(bcl plugin)"]
   IX --> API["api.superhero.com"]
   API -->|"4. REST + socket.io"| U
 ```
@@ -143,6 +178,10 @@ connection to `wss://relay.superhero.chat`, whose origin must also appear in the
 | Component | Repository | Notes |
 | --- | --- | --- |
 | Web app | [superhero-com/superhero](https://github.com/superhero-com/superhero) | Linked from the app footer as "contribute on GitHub"; issues are the bug tracker |
+| Indexer + API | [superhero-com/superhero-api](https://github.com/superhero-com/superhero-api) | NestJS, ISC licence. The service behind `api.superhero.com`; `src/mdw-sync/` is the indexer and `src/plugins/` the domain decoders |
+| BCL contracts | [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) | The Sophia sources for the factory, sale, curve, DAO, community management and affiliation treasury. ISC licence, copyright BCTSL. The API's README also points at an upstream mirror, [bctsl/bctsl-contracts](https://github.com/bctsl/bctsl-contracts) |
+| Tipping contract | [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) | `Tipping_v3.aes` and its getter contract — the post registry |
+| Governance contracts | [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) | `Registry.aes` and `Poll.aes`, behind `/voting` |
 | Agent skill | [superhero-com/superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) | `SKILL.md`, guides, scripts and contract ACIs |
 | æternity node, middleware, SDK | [github.com/aeternity](https://github.com/aeternity/aepp-sdk-js) | The chain layer, not maintained by Superhero |
 
@@ -179,15 +218,15 @@ The full address list, including the DEX contracts, is in [Deployed Addresses](/
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the "System Architecture" section.
 - [æternity middleware (ae_mdw)](https://github.com/aeternity/ae_mdw) — what `MIDDLEWARE_URL` points at.
 - [aepp-sdk-js](https://github.com/aeternity/aepp-sdk-js) — the SDK both the web app and the agent skill use.
+- [superhero-api](https://github.com/superhero-com/superhero-api) — the indexer and API described above.
 
 ## Open questions
 
-- **Is the indexer open source?** The web app and the agent skill are public, but no repository for
-  the service behind `api.superhero.com` appears in either codebase. Only the endpoint inventory in
-  `superhero/docs/api-superhero-com-endpoints-and-fields.md` is available.
-- **Where is the backend relayer exposed?** The whitepaper describes a relayer for
-  `post_without_tip_sig`, and the contract entrypoint exists, but no client in these repositories
-  calls a relayer endpoint — the web app and the agent skill both post directly and pay their own
-  gas. Settling this needs the backend's API surface.
-- **What hosts `mdw.wordcraft.fun`?** It is the configured mainnet node and middleware origin but is
-  not an `aeternity.io` domain, and the repositories do not say who operates it.
+- **Who operates `mdw.wordcraft.fun`, and under what commitment?** The backend's own deployment
+  guide (`superhero-api/scripts/GUIDE.md`) pulls mainnet database backups from
+  `root@dev.wordcraft.fun`, and the API's package name (`wordcraft-api`) and Swagger title
+  ("WORD CRAFT Scan") share the brand — so the domain is almost certainly run by the same team
+  rather than by a third party. What is not established anywhere is the availability commitment:
+  no SLA, rate limit or maintenance policy for that host appears in any repository. Ask Superhero,
+  or compare `GET /v3/status` against `mainnet.aeternity.io` to see whether it tracks upstream
+  releases.

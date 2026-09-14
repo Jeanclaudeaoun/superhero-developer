@@ -20,7 +20,7 @@ In ACI order, which is also the variant tag order used on the wire:
 | --- | --- | --- | --- |
 | 0 | `VotePayout` | `address` | Disburse the **entire** DAO balance to that account |
 | 1 | `VotePayoutAmount` | `address`, `int` | Disburse a **specified amount** to that account |
-| 2 | `ChangeDAO` | `address` | Transfer ownership, token-sale beneficiary rights and accumulated funds to another DAO |
+| 2 | `ChangeDAO` | `address` | Transfer the treasury, the token sale's ownership and beneficiary rights, and ownership of community management to another DAO |
 | 3 | `ChangeMetaInfo` | `map(string, string)` | Replace the community's metadata map in community management |
 | 4 | `ChangeMinimumTokenThreshold` | `int` | Change the minimum token threshold for write access |
 | 5 | `AddModerator` | `address` | Appoint a moderator |
@@ -52,6 +52,29 @@ one is unrecoverable.
 `ChangeMinimumTokenThreshold`'s `int` is in the community token's smallest unit, so divide by
 `10^decimals` to compare it against a displayed balance.
 
+### Nothing checks a payout against the treasury
+
+Neither at proposal time nor at execution time is the amount compared to the DAO's balance.
+`add_vote` validates exactly two things — that `Call.value` is 555 AE and that the caller holds the
+minimum token threshold — and looks at `metadata` only to pass it to the new `DAOVote` contract.
+`apply_vote_subject` then executes the subject with a bare `Chain.spend(receiver, amount)`.
+
+So a `VotePayoutAmount` for more AE than the DAO holds is perfectly proposable, perfectly votable,
+and passes normally. It fails only when someone calls `apply_vote_subject` and the `Chain.spend`
+runs out of balance — which aborts the whole application, leaves the vote unapplied, and burns the
+caller's gas. If nobody manages a successful application inside the roughly two-day window, the
+proposal expires and the 555 AE is gone.
+
+Two practical consequences:
+
+- **Check the treasury before you propose an amount, and leave headroom.** The balance can fall between proposal and execution: another payout vote may apply first, and treasury income only arrives on buys.
+- **`VotePayout` cannot fail this way.** It spends `Contract.balance` — whatever is there at the moment of execution, including zero. If you want "pay this person everything", that is the safe subject; if you want "pay this person 100 AE", you are responsible for the DAO still having 100 AE two weeks later.
+
+There is also no uniqueness constraint on subjects. `votes` is keyed by a sequential id and
+`add_vote` never inspects the existing entries, so a community can have any number of proposals open
+at once, including conflicting ones. If two payout votes both pass, both can be applied — in
+whatever order people call `apply_vote_subject` — until the balance runs out, and the loser aborts.
+
 `ChangeMetaInfo` takes the whole metadata map and **replaces** it. The underlying
 `CommunityManagement.change_meta_info(meta_info)` takes a complete `map(string, string)`;
 there is no per-key update. A proposal that intends to change one field must carry every
@@ -59,20 +82,41 @@ other field unchanged, or they are lost.
 
 ## The `ChangeDAO` safeguard
 
-`ChangeDAO` hands over everything: ownership of the token sale, beneficiary rights to all
-future proceeds, and the accumulated treasury. Sending that to a wrong or malicious address
-would end the community.
+`ChangeDAO` hands over everything. The whole branch, from `DAO.apply_vote_subject`:
 
-The protocol's guard is a type check on the target. The new DAO contract must implement
-`is_dao()` returning `true`:
-
-```text
-ReplaceableDAO.is_dao() : bool
+```sophia
+VoteSubjects.ChangeDAO(new_dao_address) =>
+    let new_dao = Address.to_contract(new_dao_address) : ReplaceableDAO
+    require(new_dao.is_dao(), "NEW_DAO_INVALID")
+    Chain.spend(new_dao_address, Contract.balance)
+    get_token_sale().set_beneficiary(new_dao_address)
+    get_token_sale().set_owner(new_dao_address)
+    require(get_community_management() == new_dao.get_community_management(),
+            "NEW_DAO_HAS_TO_REFERENCE_SAME_COMMUNITY_MANAGEMENT")
+    call_community_management((community_management) => community_management.set_owner(new_dao_address))
 ```
 
-If the target does not answer `true` to `is_dao()`, the migration cannot be applied. That
-rules out the most common catastrophic mistakes — pasting an account address, a token
-address, or a random contract — because none of them will answer that call.
+Five effects, in one transaction: the treasury moves, the sale's beneficiary changes, the sale's
+owner changes, the target is checked to point at the same `CommunityManagement`, and that contract's
+ownership is transferred too. **Moderator appointments and threshold changes keep working after a
+migration** — the new DAO becomes the `owner` that `require_owner()` checks.
+
+There are two guards, not one.
+
+**`is_dao()` must return `true`.** If the target does not answer, the migration cannot be applied.
+That rules out the most common catastrophic mistakes — pasting an account address, a token address,
+or a random contract — because none of them will answer that call.
+
+**The target must already reference the same `CommunityManagement`.** A replacement DAO has to be
+deployed pointing at the existing community management contract before the vote can be applied;
+otherwise the whole application aborts with `NEW_DAO_HAS_TO_REFERENCE_SAME_COMMUNITY_MANAGEMENT`,
+after the balance has notionally been spent — so the transaction reverts and nothing moves. The
+contract's own comment is candid about the limit: "of course a custom dao can change this
+afterwards, just a check to not change everything initially."
+
+Note the order: `set_beneficiary` on the sale runs its own `verify_dao` probe against the new
+address, so a target whose `record_sale_transaction` is not payable fails there rather than silently
+breaking future sale proceeds.
 
 Be clear about what the safeguard does **not** do. It is a shape check, not a safety check.
 Any contract can implement `is_dao() = true`, including one written specifically to drain the
@@ -106,10 +150,16 @@ caution anywhere you surface it.
 ## Who may open which subject
 
 The contract makes no distinction between subjects. The same rule covers all seven: a holder
-who owns at least the community's `minimum_token_threshold` amount of tokens at that moment
-can open a vote by calling `DAO.add_vote(metadata)` with 555 AE attached. There is no
-moderator-only subject, no author privilege and no proposal whitelist — moderators are
-appointed by vote but hold no proposal rights of their own.
+who owns at least the community's `minimum_token_threshold` amount of tokens **at the moment of the
+call** can open a vote by calling `DAO.add_vote(metadata)` with exactly 555 AE attached. The balance
+is read live from the AEX-9 contract for `Call.caller` only; there is no snapshot, no holding period
+and no check that the caller still holds anything by the time the vote closes. There is no
+moderator-only subject, no author privilege and no proposal whitelist — moderators are appointed by
+vote but hold no proposal rights of their own.
+
+The one length limit the contract does enforce sits on the vote contract, not the DAO:
+`DAOVote.init` requires `String.length(metadata.description) =< 300`. Title and link are
+unconstrained — there is no title field at all.
 
 ## Opening a proposal
 
@@ -154,16 +204,6 @@ the selector shows. Until that is fixed, **treat the web form as a way to open a
 proposal only**, and open every other subject through the SDK or a direct contract call,
 where you control the variant you are constructing. Verify what you signed on the vote's
 detail page — it decodes and displays the real subject.
-
-## Open questions
-
-- We could not verify whether `add_vote` rejects a `VotePayoutAmount` whose amount exceeds
-  the current treasury balance at proposal time, at execution time, or not at all. The ACI
-  does not show it. Settle it from the `DAO.aes` source before relying on either behaviour.
-- Whether a community may have more than one vote open on the same subject simultaneously —
-  and what happens if two conflicting payouts both pass — is not visible in the ACI. The
-  `votes` map is keyed by sequential id with no uniqueness constraint on subjects, which
-  suggests concurrent votes are allowed, but that is an inference rather than a verified fact.
 
 ## Read more
 

@@ -10,17 +10,25 @@ converts the time periods into key-blocks. Link to this page to settle an argume
 
 ## The numbers
 
-| Rule | Value |
-| --- | --- |
-| Cost to open a vote | 555 AE, paid to the DAO, non-refundable |
-| Who can open a vote | A holder at or above the community's minimum token threshold |
-| Voting period | 2 weeks, measured in key-blocks |
-| Approval threshold | At least 55% of the voted stake in favour |
-| Participation (quorum) | At least 10% of the total token stake |
-| Execution window | Approximately 2 days after the vote closes |
-| Who can execute | Any account, or a script, via `DAO.apply_vote_subject(vote_seq_id)` |
-| Ballot | Binary — in favour or against |
-| Voting power | Linear in tokens staked; tokens are locked while the vote stands |
+| Rule | Value | In the source |
+| --- | --- | --- |
+| Cost to open a vote | Exactly 555 AE, paid to the DAO, non-refundable | `require(Call.value == 555 * (10 ^ 18), "ADD_VOTE_DAO_DONATION_MISSMATCH")` |
+| Who can open a vote | A holder at or above the community's minimum token threshold, measured at call time | `require(Option.default(0, token.balance(Call.caller)) >= minimum_token_threshold, …)` |
+| Default minimum token threshold | 1 token (`10^18`), until a vote changes it | `Chain.create(Call.caller, 10 ^ decimals(), …)` in `CommunityFactory` |
+| Voting period | 6,720 key-blocks, about 2 weeks | `close_height = Chain.block_height + (60 / 3) * 24 * 7 * 2` |
+| Approval threshold | At least 55% of the voted stake in favour | `DAO.apply_vote_subject`: `(vote_state[true] * 100) / total_vote_stake >= 55` |
+| Participation (quorum) | At least 10% of total supply **at execution time** | `DAO.apply_vote_subject`: `(total_vote_stake * 100) / token_total_supply >= 10` |
+| Execution window | 960 key-blocks after the close, about 2 days | `vote.close_height() + state.vote_timeout >= Chain.block_height` |
+| Who can execute | Any account, or a script, via `DAO.apply_vote_subject(vote_seq_id)` | No caller check |
+
+Note where the two thresholds live: **`DAOVote.aes` never evaluates them.** The vote contract only
+tallies — it has no notion of passing or failing, and `final_vote_state()` hands back the raw
+`map(bool, int)`. Both comparisons are made by `DAO.apply_vote_subject` at execution time, which is
+why a vote can look passed on a tally and still abort when someone tries to apply it.
+| Ballot | Binary — in favour or against | `vote_option = bool` |
+| Voting power | Linear in tokens staked; tokens are locked while the vote stands | `vote_state[option] + amount` |
+| Description length | At most 300 characters | `require(String.length(metadata.description) =< 300, …)` |
+| One vote per address | A second `vote` is rejected, not merged | `require(!Map.member(Call.caller, state.vote_accounts), "VOTER_ALREADY_VOTED")` |
 
 ## The two periods, in key-blocks
 
@@ -30,12 +38,13 @@ transactions and appear about every three seconds between them. Contract heights
 `DAOVote.close_height` and `DAO.vote_timeout` — are key-block heights, so the three-minute
 figure is the one to compute with.
 
+The contracts do the same arithmetic inline, which is why the `(60 / 3)` idiom appears in both:
+
 ```text
 key-blocks per hour  = 60 / 3        =     20
-key-blocks per day   = 20 * 24       =    480
 
-voting period        = 14 * 480      =  6,720 key-blocks
-execution window     =  2 * 480      =    960 key-blocks
+DAOVote.close_height = create_height + (60 / 3) * 24 * 7 * 2   =  6,720 key-blocks
+DAO.vote_timeout     =                (60 / 3) * 24 * 2        =    960 key-blocks
 ```
 
 So a proposal opened at key-block height `H` closes at roughly `H + 6720`, and must be
@@ -52,13 +61,13 @@ of sixty and will produce a close height sixty times too far out.
 ## Are these fixed, or per-community?
 
 **Fixed in the contract.** Every community deployed by the same factory gets the same
-constants. The evidence, from the contract ACI:
+constants, and the source confirms it:
 
-| Constant | Evidence |
+| Constant | Where it comes from |
 | --- | --- |
-| Voting period | `DAOVote.init(metadata, token, author)` takes no close height. `close_height` is state, computed at deployment from a contract constant. |
-| Execution window | `DAO.init(token_sale, factory_address)` takes no timeout. `vote_timeout` is state, set at deployment. |
-| 555 AE, 55%, 10% | Not init parameters, not state fields, and no entrypoint reads or writes them. They are compile-time constants in the Sophia source. |
+| Voting period | Computed inside `DAOVote.init` from a literal expression. Not a parameter. |
+| Execution window | Computed inside `DAO.init` from a literal expression and stored as `vote_timeout`. Not a parameter. |
+| 555 AE, 55%, 10% | Literals inside `add_vote` and `apply_vote_subject`. Not parameters, not state, and no entrypoint writes them. |
 
 There is also no governance path to change them. The vote-subject variant is a closed set of
 seven constructors, and none of them touches the cost, the period, the approval threshold or
@@ -74,9 +83,10 @@ Two qualifications:
   migration. See [Replaceable DAOs](/dao/replaceable-dao).
 
 The one number that genuinely is per-community is the **minimum token threshold** — it lives
-in `CommunityManagement.minimum_token_threshold`, is set at community creation, and is
-changed by a `ChangeMinimumTokenThreshold` vote. See
-[Moderators and Write Thresholds](/dao/moderators).
+in `CommunityManagement.minimum_token_threshold`, starts at `10^18` (one whole token) for every
+community the factory creates, and is changed by a `ChangeMinimumTokenThreshold` vote. Nothing
+constrains what a vote can set it to, including `0`, which would let anyone with 555 AE open a
+proposal. See [Moderators and Write Thresholds](/dao/moderators).
 
 ## How the two thresholds interact
 
@@ -86,6 +96,18 @@ They test different denominators, and both must pass.
 approval      = stake_in_favour / (stake_in_favour + stake_against)   >= 0.55
 participation = (stake_in_favour + stake_against) / total_supply      >= 0.10
 ```
+
+Both are integer comparisons in the contract — `(x * 100) / y >= 55` and `(x * 100) / y >= 10` — so
+the percentages are floored before comparison. The practical effect is that exactly 55.0% and
+exactly 10.0% both pass, and anything a fraction below either bar fails. Multiply before you divide
+if you are checking the outcome yourself; `55.9%` and `55.0%` are the same value to this test.
+
+The denominators are read at different times, which is the detail that catches people:
+`total_vote_stake` is the vote contract's final tally, fixed at the closing height, while
+`token_total_supply` is read from the AEX-9 contract **when `apply_vote_subject` runs**. Buys between
+the close and the execution mint new supply and dilute participation; sells burn supply and
+concentrate it. The contract acknowledges this in a comment and manages it by keeping the execution
+window short.
 
 A worked case. A token with 1,000,000 tokens in supply:
 

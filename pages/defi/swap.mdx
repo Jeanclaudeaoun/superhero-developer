@@ -70,6 +70,27 @@ What each one does at the contract boundary:
    it tries a two-hop path through WAE.
 5. **No path, no quote.** If all of that fails the quote errors with "No route found".
 
+**`synchronized` means "this pool has liquidity", not "the indexer is up to date".** The name
+invites the second reading; the code settles it. In
+`superhero-api/src/dex/controllers/swap-routes.controller.ts` the flag is computed per pair as:
+
+```ts
+synchronized: Number(reserve0) > 0 && Number(reserve1) > 0
+```
+
+Nothing about block height, sync state or staleness enters into it. An unsynchronized pair is an
+empty or one-sided pool that cannot be quoted at all, which is why the client filters routes
+containing one — a route through an empty pool is not a worse route, it is an impossible one.
+
+**Two pairs is the hard maximum, on both paths.** The indexer's route finder builds a graph of every
+pair and then returns only direct routes and routes through a single intermediate token
+(`src/dex/utils/paths.ts` — the reducer emits `[direct]` or `[first, second]` and nothing longer),
+and the controller documents itself as returning "every routing route (direct and single-hop)".
+There is no depth parameter and no deeper search to enable. The on-chain fallback has the same
+ceiling by construction: direct, or one hop through WAE. So if two tokens are only reachable through
+three pools, the swap form will tell you there is no route, and you have to make the intermediate
+swap yourself.
+
 ## How the number you see is produced
 
 Two different calculations run, and they are used for different things.
@@ -112,6 +133,13 @@ Superhero. æternity's documentation states the exchange has no platform fee bey
 liquidity-provider reward, capped at 0.3%. That fee is charged inside the pair contract and
 is already reflected in the router's `get_amounts_out` answer — it is not a separate line
 item you pay.
+
+Note where that figure does *not* come from. Neither the web app nor `superhero-api` contains a
+0.3% constant, a `997/1000` term, or any AMM output math at all — the app has no `getAmountOut`
+implementation and delegates every quote to the router contract, and the backend only sums and
+prices volumes it has already observed. The fee is entirely a property of the pair contract, so the
+æternity documentation and the pair source are the only places it can be checked. See the open
+questions.
 
 On top of it you pay the ordinary æternity transaction fee, plus a second transaction fee if
 an allowance approval is needed.
@@ -175,17 +203,13 @@ directly.
 
 ## Open questions
 
-- **What makes a route "synchronized"?** The indexer marks pairs with this flag and the
-  client prefers routes where every pair carries it, but the meaning — presumably that the
-  indexer's cached reserves match the chain at the current height — is defined by the DEX
-  backend, not by the app.
-- **Does the router support routes longer than two hops?** The on-chain fallback only ever
-  builds a direct or a WAE-mediated path, but the indexer can return arbitrary-length routes
-  and the app will use whichever one ends at the right token. How long a path the backend
-  will actually produce is its own policy.
-- **Is the 0.3% fee configurable per pair?** The æternity documentation describes it as
-  capped at 0.3%; whether individual pairs can deploy with a lower fee is a question for the
-  pair contract, not the front-end.
+- **Is the 0.3% fee fixed, or configurable per pair?** Nothing in the Superhero stack settles it:
+  neither the web app nor `superhero-api` contains the constant, because neither computes AMM
+  output. Read `AedexV2Pair.aes` in
+  [aeternity/dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) — specifically whether
+  the swap invariant hard-codes a `997/1000` term or reads a per-pair field, and whether the factory
+  carries a protocol-fee switch of the kind Uniswap V2 has. That repository is not vendored in any
+  Superhero repository and could not be fetched from this environment.
 
 ## Read more
 

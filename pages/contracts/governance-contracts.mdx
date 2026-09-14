@@ -11,7 +11,17 @@ polls are multiple-choice, votes are weighted off chain by AE balance rather tha
 tokens, and delegation exists.
 
 Superhero surfaces them at `https://superhero.com/voting`. The agent skill drives them with
-`superhero-governance.mjs`.
+`superhero-governance.mjs`. The sources are in
+`aepp-governance/governance-contracts/contracts/`, and the off-chain tally logic — which turns
+out to matter more than the contracts do — is in `aepp-governance/governance-server/src/`.
+
+Note that the repository carries two builds of each contract. `Poll.aes` and `Registry.aes` are
+the originals; `Poll_Iris.aes` and `Registry_Compiler_v6.aes` are the compiler-6-and-later
+rewrites, identical in logic and distinguished only by `version()` returning `2` instead of `1`.
+Only the newer pair compiles under compiler 8 — in the Superhero backend's
+`GovernanceBytecodeHashes.json` the entries for `Poll.aes` and `Registry.aes` are `null`, and
+only `Poll_Iris.aes` and `Registry_Compiler_v6.aes` carry bytecode. Everything below is true of
+both.
 
 | Contract | Mainnet | Testnet | ACI |
 | --- | --- | --- | --- |
@@ -62,6 +72,59 @@ registration.
 `is_listed` is a soft flag, not access control. An unlisted poll is still on chain, still
 readable, and still votable — it simply does not appear in the default listing.
 
+### `add_poll` is completely unpermissioned
+
+This is the whole entrypoint:
+
+```sophia
+stateful entrypoint add_poll(poll : Poll, is_listed : bool) : int =
+  let poll_seq_id = state.seq_id
+  let poll_data = { poll = poll, is_listed = is_listed,
+                    title = poll.title(), close_height = poll.close_height() }
+  put(state{ polls[state.seq_id] = poll_data, seq_id = state.seq_id + 1 })
+  Chain.event(AddPoll(poll, poll_seq_id))
+  poll_seq_id
+```
+
+No caller check, no fee, no authorship check, and — importantly — **no verification that the
+registered address is a real `Poll`**. The only constraint is structural: the call reads
+`poll.title()` and `poll.close_height()`, so the target must expose those two entrypoints with
+compatible types or the registration reverts. Anything that does is registrable, by anyone,
+including the same poll twice under two ids, and including a contract whose `title()` returns
+something other than what it later shows to voters. `is_listed` is chosen by whoever registers,
+not by the poll's author.
+
+Nor is there any way to change `is_listed` afterwards. The registry has no update entrypoint at
+all — `add_poll`, `delegate` and `revoke_delegation` are its only stateful calls — so a poll's
+listed flag is fixed at registration, by whoever registered it.
+
+Filtering registry spam is therefore entirely an off-chain job, and the governance backend does
+it by **bytecode hash**, not by trust in the registrar
+(`governance-server/src/aeternity.js`, `verifyPollContract`):
+
+```javascript
+const verifiedHashes = Object.values(byteCodeHashes)
+  .map(h => h["Poll.aes"]?.hash || h["Poll_Iris.aes"]?.hash)
+  .filter(Boolean);
+const contractCreateBytecode = await this.getContractCreateByteCode(pollAddress);
+const pollBytecodeHash = crypto.createHash('sha256')
+  .update(contractCreateBytecode).digest('hex');
+return verifiedHashes.includes(pollBytecodeHash);
+```
+
+Note the SHA-256 there, not Blake2b, and note that it hashes the bytecode from the **contract
+create transaction** rather than from `getContractByteCode` — the source explains that the
+node's stored bytecode is stripped of the `init` function and so would never match a
+pre-generated hash.
+
+The consequence for anyone deploying a poll: **stake-weighted results are only computed for a
+poll whose bytecode hash matches a known `Poll.aes` or `Poll_Iris.aes` build.** A poll compiled
+from modified source, or with a compiler whose hash is not in the table, registers fine, accepts
+votes fine, and simply never gets a weighted tally — `pollVotesState` throws
+`poll not verified`. Its ordering pass additionally filters on `is_listed`. Do not treat
+presence in `polls()` as evidence that a poll is genuine, and do not deploy a poll from bytecode
+you built yourself unless you have checked its hash against that table.
+
 ### Registry events
 
 ```sophia
@@ -71,9 +134,17 @@ datatype event =
   | RevokeDelegation(address)       // delegator
 ```
 
-The ACI is named `RegistryWithEvents` precisely because there is an older event-free Registry
-build. If you are indexing, confirm the deployed contract emits these — a registry without
-them forces you back to polling `polls()`.
+Both `Registry.aes` and `Registry_Compiler_v6.aes` declare this same event type, so the
+`RegistryWithEvents` name on the vendored ACI distinguishes it from an older build that is not
+in the repository rather than from either of the two that are. The Superhero backend's own
+`GovernanceRegistryACI.json` also carries the event variant, and its governance indexer
+subscribes to `add_poll`, `vote`, `revoke_vote`, `delegate` and `revoke_delegation` by function
+name (`superhero-api/src/plugins/governance/config/governance.config.ts`).
+
+The delegation events are more than a convenience: the governance backend reconstructs the
+delegation map by **replaying `Delegation` and `RevokeDelegation` events up to a target
+height**, rather than reading `delegations()`. See
+[Delegation and stake weighting](#delegation-and-stake-weighting).
 
 ## Poll
 
@@ -192,9 +263,17 @@ const pollId = await registry.add_poll(pollAddress, true).then((r) => r.decodedR
 `vote_options` must be a `Map`, keyed by integer. Options are indexed from zero and the index
 is what `vote()` takes.
 
-The limits the agent skill enforces are **client-side validation**, not contract constraints:
-title at most 50 characters, description at most 300, link must start with `http://` or
-`https://`, and at least two options. The contract itself imposes none of these.
+Two of the agent skill's four validations are **also enforced on chain**, in `Poll.init`:
+
+```sophia
+require(String.length(metadata.title) =< 50, "TITLE_STRING_TO_LONG")
+require(String.length(metadata.description) =< 300, "DESCRIPTION_STRING_TO_LONG")
+```
+
+(The abort strings really do read `TO_LONG`, not `TOO_LONG` — match on that spelling.) The other
+two are client-side only: nothing on chain checks that `link` is a URL, and nothing requires two
+or more options. A poll deployed with an empty `vote_options` map is legal and simply
+unvotable, because `vote` requires the index to be a member of it.
 
 A non-`None` close height must be in the future — the skill checks it against the top block
 height before deploying, because a poll deployed already-closed is unusable and unrecoverable.
@@ -209,11 +288,45 @@ await poll.revoke_vote();     // retract
 There is no stake, no allowance and no lock. A vote is a single map entry keyed by your
 address, and `revoke_vote` deletes it. Voting on a poll costs only gas.
 
+### `vote` is gated on close height; `revoke_vote` is not
+
+Both entrypoints are three lines, and the asymmetry between them is not an oversight you can
+ignore:
+
+```sophia
+stateful entrypoint vote(option : int) =
+  require(!is_closed(), "POLL_ALREADY_CLOSED")
+  require(Map.member(option, state.vote_options), "VOTE_OPTION_NOT_KNOWN")
+  put(state{ votes[Call.caller] = option})
+  Chain.event(Vote(Contract.address, Call.caller, option))
+
+stateful entrypoint revoke_vote() =
+  put(state{ votes = Map.delete(Call.caller, state.votes) })
+  Chain.event(RevokeVote(Contract.address, Call.caller))
+```
+
+- **`vote` after `close_height` reverts on chain**, with `POLL_ALREADY_CLOSED`. `is_closed()` is
+  `Chain.block_height >= close_height` for `Some(h)`, and — note this — **`false` for `None`**.
+  A poll with no close height is never closed and accepts votes forever.
+- **`revoke_vote` has no gate whatsoever.** Not on close height, not on whether you voted, not
+  on anything. **You can delete your vote from a poll that closed years ago**, and the
+  `Poll.votes` map will change to match. A tally read from `votes()` today is not a stable
+  historical record.
+- **`vote` has no "already voted" check.** It overwrites. Re-voting is a plain assignment, so
+  changing your mind before close needs one call, not a revoke-then-vote pair. This is the
+  opposite of `DAOVote`, which rejects a second vote with `VOTER_ALREADY_VOTED`.
+
+The practical consequence for anyone tallying a closed poll: read the result at the close
+height, from the event log or a historical state read, not from `votes()` now. The governance
+backend does exactly that — see below.
+
 ## Delegation and stake weighting
 
 The registry records delegation as a plain `map(address, address)`. `delegate(delegatee)`
 records you as delegating to that address; `revoke_delegation()` removes the entry.
-`delegatee(account)` reads one direction, `delegators(account)` the other.
+`delegatee(account)` reads one direction, `delegators(account)` the other. The one on-chain
+constraint is `require(Call.caller != delegatee, "CALLER_IS_DELEGATEE_DISALLOWED")` — you may
+not delegate to yourself. Longer cycles are not prevented.
 
 **The contracts do not compute weighted results.** This is the most important thing to
 understand about this system, and it surprises people:
@@ -225,32 +338,86 @@ understand about this system, and it surprises people:
 The weighted outcome is computed **off chain** by the governance backend
 (`https://governance-server-mainnet.prd.service.aepps.com/` on mainnet,
 `https://governance-server-testnet.prd.service.aepps.com/` on testnet, per
-`superhero/src/config.ts`). It reads the raw votes and delegations from chain, looks up each
-participating account's AE balance at the relevant height, follows delegation chains, and
-produces the tally that the UI shows.
+`superhero/src/config.ts`). Its source is `aepp-governance/governance-server/src/logic.js` and
+`delegation_logic.js`, and the rules it applies are these.
 
-Two consequences for anyone integrating:
+### The snapshot height
+
+One function decides it, and it has exactly two outcomes
+(`governance-server/src/aeternity.js`):
+
+```javascript
+getClosingHeightOrUndefined = async (pollCloseHeight) => {
+    const height = await this.height();
+    return pollCloseHeight ? pollCloseHeight <= height ? pollCloseHeight : undefined : undefined;
+};
+```
+
+| Poll | Snapshot height | Meaning |
+| --- | --- | --- |
+| Closed — `close_height` set and already reached | that `close_height` | a fixed historical snapshot |
+| Open — `close_height` set but still in the future | none | live, recomputed at every read |
+| Open-ended — `close_height = None` | none | live, forever |
+
+So a **closed poll's tally is frozen at its close height**: every balance is read with
+`getBalance(account, { height: close_height })`, and the delegation map is reconstructed at that
+same height. A poll that is still open, or that can never close, is tallied against **current**
+balances and the **current** delegation map — the displayed result moves whenever anyone's
+balance does.
+
+Two edge cases the code handles explicitly, both worth knowing:
+
+- An account that did not exist at the snapshot height contributes **zero**, not an error.
+- If the node cannot serve the requested height (`Height not available`), the backend silently
+  falls back to the current balance — the source calls this "a temporary result".
+
+### Delegation resolution
+
+Delegations are not read from `delegations()` for a closed poll. `findDelegationEvents` pulls
+the registry's `Delegation` and `RevokeDelegation` events, filters to `event.height <= height`,
+sorts by height then nonce, and replays them into a map — set on `Delegation`, delete on
+`RevokeDelegation`. That is what makes a historical snapshot possible at all, since the contract
+only ever stores the current map.
+
+Weighting then walks the tree **upward** from each voter — who delegated *to* them — and sums
+those accounts' balances recursively, so a chain `A -> B -> C` gives C both A's and B's stake.
+Three rules govern the walk (`logic.js`, `delegationTree`):
+
+| Rule | Effect |
+| --- | --- |
+| Skip the account the walk started from | a cycle back to the voter terminates instead of looping |
+| Skip any address already visited on this walk | longer cycles terminate too |
+| Skip any address in `ignoreAccounts`, which is the poll's own voter list | **a delegator who voted for themselves does not also count toward their delegatee** |
+
+That third rule is the on-chain comment "votes by delegator will overwrite delegation for one
+poll", implemented. Delegation is global and permanent until revoked; voting yourself overrides
+it for that one poll only.
+
+Final voting power for a voter is `balance at snapshot height + sum of delegators' balances at
+that height`, and `percentOfTotalSupply` divides the total against the AE supply at the same
+height.
+
+Three consequences for anyone integrating:
 
 1. **A tally you compute yourself from `Poll.votes()` is unweighted** — it counts addresses,
    not stake, and it ignores delegation entirely. It will not match what superhero.com shows.
 2. **The governance backend is a trusted component** for the result, even though the votes
-   themselves are trustless and independently verifiable. Anyone can recompute the tally from
-   chain data, but the contract does not do it for you.
+   themselves are trustless and independently verifiable. Everything above is reproducible from
+   chain data; the contract simply does not do it for you.
+3. **An open-ended poll has no final result at all.** With `close_height = None` there is no
+   snapshot, votes can still arrive, and existing votes can still be revoked. Treat such a poll
+   as a rolling signal, never as a decision.
 
 ## Open questions
 
-- **At which block height are balances snapshotted for weighting?** Close height, vote height,
-  or current height would each give a different result, and none of the three is documented in
-  either repository. For an open-ended poll with `close_height = None` the question is sharper
-  still. Read the governance backend's source, or compare a live tally against balances at
-  several heights.
-- **How delegation cycles and chains are resolved.** The registry stores a flat map, so
-  `A -> B -> C` chains and `A -> B -> A` cycles are both expressible on chain. The resolution
-  rule lives in the backend.
-- **Whether the deployed mainnet registry is the `RegistryWithEvents` build.** The vendored
-  ACI is named for it, but the deployed bytecode was not checked.
-- **Whether `add_poll` is permissioned.** The ACI shows no gating, implying anyone may register
-  any poll contract, including one they did not deploy.
+- **Is the mainnet registry the compiler-6 build, or the original?** Both declare the same
+  entrypoints and events, and they differ observably only in `version()` — `1` for
+  `Registry.aes`, `2` for `Registry_Compiler_v6.aes`. Call `version()` on
+  `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq`, or compare the deployed bytecode
+  against the `Registry_Compiler_v6.aes` hash
+  `3acd08e525abd0820eb3cb45cc3e5ea148338355e33fc4cbbe3417134441556e` in the backend's
+  `GovernanceBytecodeHashes.json`. No node was reachable while this page was written. The same
+  question applies to whichever `Poll` build `PollBytecode.json` carries.
 
 ## Read more
 
@@ -260,3 +427,4 @@ Two consequences for anyone integrating:
 - [DAOVote](/contracts/dao-vote) — the community DAO voting contract, which works quite differently
 - [Events](/contracts/events) — why the `Vote` name collision matters for indexers
 - [Vote on superhero.com](https://superhero.com/voting) — the live governance interface
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the contracts and the tally server quoted above

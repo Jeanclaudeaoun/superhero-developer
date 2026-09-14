@@ -63,6 +63,42 @@ Nothing is editable after deployment. There is no `change_metadata`, no way to a
 and no way to extend or shorten `close_height`. A poll with a typo in it stays that way; the
 only remedy is to create a new poll.
 
+The contract's only validation is on the metadata lengths, in `init`: the title must be at most 50
+characters and the description at most 300, aborting with `TITLE_STRING_TO_LONG` or
+`DESCRIPTION_STRING_TO_LONG`. Nothing validates the link, the `spec_ref`, the option labels, the
+number of options, or that `close_height` is in the future — a poll deployed with a close height
+already in the past is born closed.
+
+### Which `Poll` contract is deployed
+
+The `aepp-governance` repository carries two poll sources, and the distinction is a compiler-era
+one rather than a behavioural one:
+
+| Source | `version()` | Compiles with |
+| --- | --- | --- |
+| `Poll.aes` | 1 | aesophia 3.2.0 through 4.3.0 |
+| `Poll_Iris.aes` | 2 | aesophia 5.0.0 through 8.0.0 |
+
+`Poll_Iris.aes` is the Iris-hardfork port: it adds `@compiler >= 5` and `include "String.aes"`, and
+bumps `version()`. The entrypoints, the state record and the two `require` guards are identical. The
+registry has the same split — `Registry.aes` (version 1) for the old compilers,
+`Registry_Compiler_v6.aes` (version 2, `main contract` and `contract interface` syntax) from
+aesophia 6 onwards.
+
+**Both Superhero code paths deploy `Poll_Iris.aes`.** The brief comparison is:
+
+| Repository | Artifact | Compiler | Bytecode hash |
+| --- | --- | --- | --- |
+| Web app, `src/api/GovernanceBytecodeHashes.json` | `Poll_Iris.aes` | 8.0.0 | `51856aa1…c923d464` |
+| Agent skill, `contracts/PollBytecode.json` | `Poll_Iris.aes` | 7.0.1 | `eb364ab0…650a8540` |
+
+The two `cb_` payloads are **byte-identical except for the trailing compiler-version string** that
+aesophia embeds in the contract's metadata — `7.0.1` in one, `8.0.0` in the other. Every byte of
+FATE code is the same. The hashes differ because the hash covers that metadata.
+
+The app's hash file also records `Poll.aes: null` and `Registry.aes: null` under 8.0.0, which is the
+compiler refusing to build the pre-Iris sources at all — not a missing entry.
+
 ### On the registry
 
 The `Registry` stores a thin summary per poll so that listings do not require calling every

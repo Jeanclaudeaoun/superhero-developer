@@ -77,7 +77,12 @@ There is no published template, so this is the shape of the work rather than a t
 3. **Deploy it.** Deploy to the same network, and verify `is_dao()` answers `true` from an
    external call before proposing anything.
 4. **Fund nothing.** The treasury transfers with the migration; the target should start empty.
-5. **Publish the source and the bytecode hash** so voters can verify that the deployed
+5. **Point it at the existing `CommunityManagement` before you deploy.** `apply_vote_subject`
+   asserts `get_community_management() == new_dao.get_community_management()` and aborts the whole
+   migration with `NEW_DAO_HAS_TO_REFERENCE_SAME_COMMUNITY_MANAGEMENT` if they differ. The stock
+   `DAO.aes` derives it by asking its factory (`factory.get_community_management(token_sale)`), so a
+   replacement built the same way needs the factory address and the sale address at deployment.
+6. **Publish the source and the bytecode hash** so voters can verify that the deployed
    contract at the proposed address is the code they are being asked to approve. Without
    that, a `ChangeDAO` vote asks holders to approve an address, not a contract.
 
@@ -92,11 +97,34 @@ A `ChangeDAO` proposal is an ordinary DAO vote in every respect:
    participating.
 4. Within roughly two days of closing, somebody calls
    `DAO.apply_vote_subject(vote_seq_id)`.
-5. The old DAO verifies `is_dao()` on the target, then transfers ownership, beneficiary
-   rights and the treasury.
+5. The old DAO verifies `is_dao()` on the target, then transfers the treasury, the sale's
+   beneficiary and owner, and ownership of `CommunityManagement` — checking on the way that the
+   target already references the same community management contract.
 
 If nobody applies it inside the window, the vote expires and nothing moves. The 555 AE is
 gone and the proposal has to be reopened.
+
+### What the migration transfers
+
+| Thing | Transferred? | How |
+| --- | --- | --- |
+| The AE treasury | Yes, in full | `Chain.spend(new_dao_address, Contract.balance)` |
+| Token sale beneficiary | Yes | `get_token_sale().set_beneficiary(new_dao_address)` |
+| Token sale ownership | Yes | `get_token_sale().set_owner(new_dao_address)` |
+| `CommunityManagement` ownership | Yes | `community_management.set_owner(new_dao_address)` |
+| The moderator roster, mute list, threshold and metadata | Untouched | They live in `CommunityManagement`, which is not redeployed |
+| The AEX-9 token, its supply and its holders | Untouched | Not owned by the DAO |
+| The bonding curve and its reserve | Untouched | Held by the sale contract, which is not replaced |
+| The vote history | **Not transferred** | `DAO.votes` stays on the old contract, which keeps answering `votes()` |
+
+The fourth row is the one people get wrong. Because `CommunityManagement.set_owner` is called as part
+of the same transaction, **the `AddModerator`, `DeleteModerator`, `ChangeMinimumTokenThreshold` and
+`ChangeMetaInfo` subjects keep working after a migration** — provided the replacement DAO implements
+equivalents of `add_vote` and `apply_vote_subject` to reach them. If it does not, those actions
+become unreachable, because the old DAO is no longer the owner.
+
+The last row matters for auditing: a community's governance history after a migration is split
+across two contracts, and the new DAO's vote ids restart at zero.
 
 ## Risks, plainly
 
@@ -120,20 +148,6 @@ For voters, the practical checklist is: is the source published, does the byteco
 proposed address match it, does the replacement implement proposals and voting, and who
 controls it if it does not?
 
-## Open questions
-
-- We could not verify that any community has actually migrated its DAO on mainnet. A worked
-  example would need a `ChangeDAO` vote observed at `/trends/daos` or in an
-  `AppliedVoteSubject` event on a DAO contract.
-- Whether `apply_vote_subject` transfers ownership of `CommunityManagement` to the new DAO as
-  part of a `ChangeDAO`, or leaves the old DAO as its `owner`, is not visible in the ACI.
-  `CommunityManagement.set_owner` exists, so the transfer is possible, but whether the stock
-  `DAO.aes` calls it during migration would have to be settled from the source. If it does
-  not, the moderator and threshold subjects would stop working after a migration.
-- No reference implementation or template for a custom `ReplaceableDAO` appears in either the
-  contract ACIs or the agent skill. If one is published, it would be the right starting point
-  in place of the outline above.
-
 ## Read more
 
 - [Proposals and Vote Subjects](/dao/proposals) — `ChangeDAO` alongside the other six subjects, and the `is_dao()` guard in context.
@@ -141,4 +155,10 @@ controls it if it does not?
 - [How DAOs Work](/dao/overview) — the vote and execution steps a migration has to pass through.
 - [Quorum and Thresholds](/dao/quorum-and-thresholds) — why a replacement DAO can use different constants.
 - [DAO contract reference](/contracts/dao) — the stock implementation a replacement has to stand in for.
+- [Moderators and Write Thresholds](/dao/moderators) — the `CommunityManagement` contract whose ownership the migration moves.
 - [Sophia and FATE](/aeternity/sophia-and-fate) — the language and VM a replacement DAO is written for.
+
+## Open questions
+
+- **No community appears to have migrated its DAO on mainnet, and none has been verified here.** A worked example would need a `ChangeDAO` vote observed at `/trends/daos`, or an `AppliedVoteSubject` event carrying a `ChangeDAO` subject on a DAO contract, found through [æScan](https://aescan.io). Everything above is read from `bcl-contracts/contracts/DAO.aes` rather than from an executed migration.
+- **No reference implementation or template for a custom `ReplaceableDAO` is published.** The contract repository ships only the interface and the stock `DAO.aes`; there is nothing in the agent skill either. If one appears, it would be the right starting point in place of the outline above.

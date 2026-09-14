@@ -52,9 +52,11 @@ These are the literal constants in the public Sophia source
 | `k` | `1 * 10 ^ 10` | 10,000,000,000 |
 | `initial_price` | `1 * 10 ^ 11` | 100,000,000,000 |
 | `decimals` | `1 * 10 ^ 18` | 10^18 |
-| `minimum_count` | `1 * 10 ^ 12` | 10^12 |
+| `minimum_count` | `1 * 10 ^ 12` | 10^12 aettos, i.e. 10^-6 of a token |
 | `sell_return_percentage` | `9950` | 99.50% |
+| `sell_return_precision` | `10000` | the denominator of that percentage |
 | `curve_type()` | `"TAYLOR_EXPONENTIAL_V1"` | — |
+| `supported_decimals()` | `18` | — |
 
 The source carries the human-readable formula directly above them:
 
@@ -91,10 +93,65 @@ DAO's half of the spread. The affiliation contract adds the other 0.5% on top at
 layer, which is how the whitepaper gets to a 1% total spread while the curve itself only
 knows about 0.5%.
 
-`curve_type()` returning `TAYLOR_EXPONENTIAL_V1` is the other half of the story: the contract
-does not evaluate `e^x` directly — FATE has no floating point — but approximates it with a
-Taylor series over exact integer rationals. That is why `buy_curve` returns a `Frac.frac`
-rather than an integer.
+`curve_type()` returning `TAYLOR_EXPONENTIAL_V1` is the other half of the story, and it is
+literal: the contract never evaluates a true exponential. See the next section.
+
+## What the contract actually evaluates
+
+FATE has no floating point, so `BondingCurveExponential.aes` replaces `e^x` with a **bounded
+Maclaurin (Taylor) expansion in integer fixed point**. The closed form above is the idealised
+curve the contract approximates, not the arithmetic it performs.
+
+`calculate_price` is a difference of two expansions, not an integral evaluated symbolically:
+
+```sophia
+function calculate_price(total_supply : int, count : int) =
+  require(count >= minimum_count, "MINIMUM_TOKENS_REQUIRED")
+  let current_supply_exponent = (k * total_supply)
+  let next_supply_exponent    = (k * (total_supply + count))
+  (initial_price * count) / decimals
+    + ((a * (mc2(next_supply_exponent) - mc2(current_supply_exponent))) / (k * decimals))
+```
+
+`mc2(x)` is the Maclaurin series for `e^x` **starting at the quadratic term** — it deliberately
+omits the `1` and the `x` term, because those cancel in the difference and are folded into the
+`initial_price * count / decimals` term:
+
+```sophia
+function mc2(x : int) = exp_helper(x, x, 0, 2, decimals * decimals)
+
+function exp_helper(x : int, term : int, sum : int, i : int, scale : int) : int =
+  if (i > 100 || term < 1)
+    sum
+  else
+    let next_term = (term * x) / (i * scale)   // x^i / i!
+    exp_helper(x, next_term, sum + next_term, i + 1, scale)
+```
+
+Two things bound the series, and both matter:
+
+- **A hard cap of 100 iterations.** The recursion stops once `i > 100`, so at most 99 terms
+  (i = 2 through 100) are ever summed. This is a gas and non-termination guard.
+- **Integer truncation.** Every term is an integer division by `i * scale` with
+  `scale = decimals^2 = 10^36`. The series stops early as soon as `term < 1`, because a term
+  that truncates to zero makes every later term zero too. At realistic supplies the second
+  condition fires long before the iteration cap.
+
+The practical error is negligible. The published closed-form figures on
+[Bonding curve](/tokens/bonding-curve) were re-checked against an exact integer replica of this
+Sophia and agree to within 2e-16 AE at supply 0 and 1.4e-12 AE at supply
+10,000,000 — far below one aetto of a per-token price. Quote the closed form for explanation;
+quote `calculate_buy_price` for money.
+
+`calculate_price` also carries the only hard `require` on the curve: a `count` below
+`minimum_count` (10^12 aettos) aborts with `MINIMUM_TOKENS_REQUIRED`. That applies to
+`calculate_buy_price` and `calculate_sell_return` alike, because both route through it.
+
+`buy_curve` and `sell_curve` are a separate code path. They call `exp_helper` directly with a
+different seeding (`exp_helper(x_exponent, decimals, decimals, 1, decimals)` — the full series
+from `i = 1`, including the constant term) and return a `Frac.frac` rather than an integer.
+They give you the instantaneous curve value for charting; they are not what a trade is priced
+from.
 
 ## The `Frac.frac` type
 
@@ -152,20 +209,35 @@ console.log({
 });
 ```
 
-### A caution about `get_sell_return_precision`
+### `get_sell_return_precision` returns the wrong constant
 
-In the public Sophia source both accessors are bound to the same variable:
+This is a real bug in `BondingCurveExponential.aes`, and it is worth understanding precisely
+because its blast radius is narrower than it first looks. Both accessors are bound to the same
+`let`:
 
-```text
-entrypoint get_sell_return_percentage() = sell_return_percentage
-entrypoint get_sell_return_precision()  = sell_return_percentage
+```sophia
+entrypoint get_sell_return_percentage() = sell_return_percentage  // 9950
+entrypoint get_sell_return_precision()  = sell_return_percentage  // also 9950; should be
+                                                                  // sell_return_precision (10000)
 ```
 
-If the deployed bytecode matches that source, `get_sell_return_percentage()` and
-`get_sell_return_precision()` both return `9950`, and dividing one by the other yields `1`
-rather than `0.995`. **Do not compute the sell factor as `percentage / precision`.** Use
-`9950 / 10000`, or better, call `calculate_sell_return` and let the chain do the arithmetic.
-Confirm the behaviour against the deployed contract before relying on either accessor.
+**On-chain sell math is not affected.** `calculate_sell_return` and `sell_curve` use the
+let-bound constants directly, never the getters:
+
+```sophia
+entrypoint calculate_sell_return(total_supply : int, sell_tokens : int) : int =
+  let price = calculate_price(total_supply - sell_tokens, sell_tokens)
+  (price * sell_return_percentage) / sell_return_precision   // 9950 / 10000 = 0.995
+```
+
+So every sell that actually settles on chain returns 99.5% of the curve price, exactly as
+designed. The bug only bites **off-chain callers that derive the ratio from the two getters**:
+`9950 / 9950 = 1.0`, which overestimates sell returns — and therefore understates the spread —
+by 0.5%.
+
+**Do not compute the sell factor as `percentage / precision`.** Hard-code `9950 / 10000`, or
+better, call `calculate_sell_return` and let the chain do the arithmetic. Treat
+`get_sell_return_precision()` as unusable.
 
 ## Practical notes
 
@@ -179,16 +251,13 @@ Confirm the behaviour against the deployed contract before relying on either acc
 
 ## Open questions
 
-- **The live on-chain values of `get_k`, `get_initial_price` and `get_minimum_count`.** The
-  values in the table above come from the public Sophia source, not from a call to the
-  deployed contract — no node was reachable while this page was written. Run the snippet above
-  against mainnet to confirm the deployed instance matches.
-- **The exact Taylor series truncation.** `curve_type()` identifies the method but the number
-  of terms, and therefore the worst-case approximation error against the ideal exponential,
-  was not read from source.
-- **Whether `get_sell_return_precision` is fixed in the deployed bytecode.** The public source
-  shows both accessors bound to the same variable; whether mainnet carries that same build was
-  not verified.
+- **Does the deployed bytecode match this source?** Every constant, the 100-iteration cap and
+  the `get_sell_return_precision` bug above are read from
+  `bcl-contracts/contracts/BondingCurveExponential.aes`. Confirming that mainnet carries that
+  same build means compiling the source and comparing against
+  `bcl-contracts/generated/bytecode_hashes.json`, then against the bytecode the node returns
+  for the address `factory.bonding_curve()` resolves to. No node was reachable while this page
+  was written, so that comparison has not been made.
 
 ## Read more
 

@@ -10,9 +10,14 @@ cross-contract catalogue: the event names, their argument types, the Blake2b top
 middleware indexes them by, and how to read them from a call, from the middleware, or from a
 live subscription.
 
-Unless noted, every declaration here is taken from a `datatype event` block in a vendored ACI
-or in the public Sophia source. The one exception is the ProfileRegistry group, which comes
-from whitepaper prose — see the note in that section.
+Every declaration here except the ProfileRegistry group has been checked against a
+`datatype event` block in the Sophia source or, for `FungibleTokenFull` and `AddressLink`, a
+vendored ACI. The sources are `bcl-contracts/contracts/`,
+`tipping-contract/contracts/v3/Tipping_v3.aes`,
+`aepp-governance/governance-contracts/contracts/`,
+`superhero-agent-skill/contracts/FungibleTokenFull.aci.json` and
+`superhero-api/src/plugins/address-links/aci/AddressLink.aci.json`. Every topic hash below was
+recomputed from the verified constructor name.
 
 ## How an æternity event is encoded
 
@@ -51,9 +56,10 @@ def event_topic(name):
     return int.from_bytes(hashlib.blake2b(name.encode(), digest_size=32).digest(), 'big')
 ```
 
-Every hash in the tables below was computed this way. Four of them are independently
-confirmed: `superhero-com/superhero-api` hardcodes `BUY_TOPIC`, `SELL_TOPIC`, `MINT_TOPIC` and
-a fourth constant that matches `PriceChange` exactly, and all four agree with the values here.
+Every hash in the tables below was computed this way, from a constructor name read out of the
+source. Four of them are independently confirmed a second way:
+`superhero-com/superhero-api` hardcodes `BUY_TOPIC`, `SELL_TOPIC`, `MINT_TOPIC` and a fourth
+constant that matches `PriceChange` exactly, and all four agree with the values here.
 
 ## The catalogue
 
@@ -189,9 +195,9 @@ datatype event =
   | RewardAdded(address, int)                      // user, added amount
   | Withdrawn(address, int)                        // user, reward amount
   | InvitationRegistered(address, address, int)    // caller, invitation_address, amount
-  | InvitationRedeemed(address, address, address)
-  | InvitationRevoked(address, address)
-  | RecordSaleTransaction(address, int)
+  | InvitationRedeemed(address, address, address)  // invitee_address, inviter_address, caller
+  | InvitationRevoked(address, address)            // invitation_address, inviter_address
+  | RecordSaleTransaction(address, int)            // buyer, amount
 ```
 
 | Event | Topic hash |
@@ -204,9 +210,17 @@ datatype event =
 | `InvitationRevoked` | `44587635821633064715474581091143067134350953963411449550976976484602513073608` |
 | `RecordSaleTransaction` | `77117783428530384567038756067996288780218798482299224958129404253908571047664` |
 
-The argument comments for the first four are from the Sophia source. The last three have no
-source comment that was read — infer their meanings from the corresponding entrypoints with
-care.
+All seven argument comments above are the source's own, so the address orderings are exact.
+Two of them are easy to transpose: `InvitationRedeemed` leads with the **invitee**, while
+`InvitationRevoked` leads with the **invite address**. The third address on
+`InvitationRedeemed` is the caller, which for a redemption is the invite address itself.
+
+`UserInvited` fires only from `register_invitation`. An invite claimed through a code emits
+`InvitationRedeemed` instead, even though both write the same affiliation-tree entry — an
+indexer watching only `UserInvited` will miss every link-based invite.
+
+`RewardAdded` fires once per credited level, so one buy under a four-deep referral chain emits
+four of them alongside a single `RecordSaleTransaction`.
 
 ### Registry (governance)
 
@@ -236,12 +250,60 @@ datatype event =
 | `Vote` | `3422073428777010606992960824915966491300503610863485918227821198825793135961` |
 | `RevokeVote` | `83222614123280176911522716292168996389183038060406855328029912685286369361264` |
 
-### ProfileRegistry (unverified)
+### AddressLink
+
+The identity contract that replaced ProfileRegistry in the Superhero backend. Its ACI is
+committed at `superhero-api/src/plugins/address-links/aci/AddressLink.aci.json`, so these
+declarations are verified; the deployed address is supplied at runtime through
+`ADDRESS_LINK_CONTRACT_ADDRESS` and is not in any repository.
+
+```sophia
+datatype event =
+    ProviderRegistered(address, string)   // provider owner, provider id
+  | Link(address, string)
+  | Unlink(address, string)
+  | PrincipalLink(address, string)
+  | PrincipalUnlink(address, string)
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `ProviderRegistered` | `64729158502882831771288642490316090295255081040123544514787258821424028854588` |
+| `Link` | `24916428400870038197952107974381846470686467121874627127390813018326892251825` |
+| `Unlink` | `52744121487300572517612118090938392289474454451430582807723645180269836157157` |
+| `PrincipalLink` | `33734067034041800501097175880685404869663974342910460138405033266635271063644` |
+| `PrincipalUnlink` | `65650841556643744410284701498125626234659108343589856439166449381677919258575` |
+
+Every one carries an `address` topic and a `string` in `data`. The `Link` / `Unlink` pair covers
+account links; the `Principal` pair covers links made against an AENS name.
+
+**The `data` string on a link event is `provider:value`, colon-joined.** The backend's sync
+service splits it on the first colon and validates the provider against `/^[a-z]{1,10}$/`
+(`address-links-plugin-sync.service.ts`), so a value containing a colon is safe but a provider
+id containing one is not. `prefaens` is the provider id for a preferred AENS name.
+
+### Tipping v4
+
+Not part of Superhero's social layer, which runs v3, but in the same contract family:
+
+```sophia
+datatype event = PostViaBurnReceived(tip_id, address, string, TokenContract)
+```
+
+| Event | Topic hash |
+| --- | --- |
+| `PostViaBurnReceived` | `82774704438961085039490474074506978272280842136924042967135740228700002403902` |
+
+### ProfileRegistry (unverified, and probably retired)
 
 These six come from whitepaper prose, not from a `datatype event` declaration — the
 ProfileRegistry ACI is not vendored and the source is not public. The **names** are quoted
 directly, so the topic hashes are correct if the names are; the argument types are not
 confirmed.
+
+Treat this group as historical. The Superhero backend's ProfileRegistry indexer was deleted
+when profile linkage moved to `AddressLink`, and nothing in `superhero-api` subscribes to these
+topics any more — see [ProfileRegistry](/contracts/profile-registry).
 
 ```text
 ProfileUpdated(address, string)
@@ -336,6 +398,41 @@ for (const log of mints) {
 }
 ```
 
+### The middleware's own `event_hash`, and how it is encoded
+
+A middleware log entry carries more than `topics` and `data`. It also has `event_hash` and,
+when the middleware can resolve the contract's ACI, a decoded `event_name` and an `args` array.
+The Superhero backend matches on either:
+
+```javascript
+const eventHash = log.event_hash;
+const eventName = log.event_name;       // may be absent
+const addressTopic = log.args?.[0];     // decoded topic arguments
+const payload = log.data;
+```
+
+`event_hash` is the **same 32-byte Blake2b-256 digest as `topics[0]`, encoded as padded
+base32hex** — RFC 4648's extended-hex alphabet, not standard base32. That is verifiable
+offline against the constants the backend hardcodes:
+
+```python
+import hashlib, base64
+def event_hash(name):
+    return base64.b32hexencode(hashlib.blake2b(name.encode(), digest_size=32).digest()).decode()
+
+event_hash('Link')    # '6SB35NM6QMV5IG8BGTLL5O77IU72C5E3OC63PB4KHNDNSS83HAOG===='
+event_hash('Unlink')  # 'EIE1QPIL7TJBARSE513J05U144N3D9Q0MB4PQ69VATC40VROO3IG===='
+```
+
+Both of those match `LINK_EVENT_HASH` and `UNLINK_EVENT_HASH` in
+`superhero-api/src/plugins/address-links/address-links-plugin-sync.service.ts` exactly. Use
+standard base32 and every comparison silently fails, because the two alphabets produce
+different strings for the same bytes.
+
+Match on `event_hash` when you want a stable identifier, and on `event_name` only as a
+convenience — it is present only when the middleware has the contract's ACI, so it can be
+absent for a contract the middleware has never seen.
+
 Two operational notes, both learned the hard way in the Superhero backend:
 
 - **Paginate.** The response carries a `next` field with a relative path. Follow it until it
@@ -348,28 +445,58 @@ Two operational notes, both learned the hard way in the Superhero backend:
 
 ## Live subscriptions
 
-The middleware exposes a WebSocket interface for subscribing to chain activity — key blocks,
-micro blocks, and objects such as a particular contract — so an indexer does not have to poll
-`/v3/contracts/logs`. The Superhero API in turn republishes decoded activity on its own
-WebSocket channels (`token-created`, `token-updated`, `token-transaction`, `token-history`),
-which is usually the easier integration if you only care about tokens.
+The middleware exposes a WebSocket interface for subscribing to chain activity, so an indexer
+does not have to poll `/v3/contracts/logs`.
+
+| Network | WebSocket URL |
+| --- | --- |
+| Mainnet | `wss://mainnet.aeternity.io/mdw/v2/websocket` |
+| Testnet | `wss://testnet.aeternity.io/mdw/v2/websocket` |
+
+The subscribe message is a JSON object with up to four fields. This is the shape the Superhero
+backend sends in production (`superhero-api/src/ae/websocket.service.ts`, with the type in
+`src/utils/types.ts`):
+
+```json
+{ "op": "Subscribe", "payload": "Transactions", "source": "mdw" }
+```
+
+| Field | Values |
+| --- | --- |
+| `op` | `Subscribe` or `Unsubscribe` |
+| `payload` | the channel: `Transactions`, `MicroBlocks`, `KeyBlocks`, or `Object` |
+| `target` | optional — the object to watch, for the `Object` channel |
+| `source` | optional — `mdw` or `node` |
+
+Unsubscribing sends the identical object with `op` flipped to `Unsubscribe`. The Superhero
+backend sends the unsubscribe once per source value rather than tracking which one it
+subscribed with, and reconnects after a 20-second timeout when the socket drops — worth copying,
+since a dropped socket is silent and the gap is otherwise invisible.
+
+The Superhero API in turn republishes decoded activity on its own WebSocket channels
+(`token-created`, `token-updated`, `token-transaction`, `token-history`), which is usually the
+easier integration if you only care about tokens.
 
 ## Open questions
 
-- **The exact middleware query parameter for filtering by event name.** The æternity protocol
-  documentation states that the middleware accepts a base32hex-encoded Blake2b hash of the
-  event constructor name as an event filter, but the parameter name and encoding were not
-  confirmed against a live middleware. The `contract_id` + `tx_hash` form above is verified
-  from working Superhero backend code; client-side filtering on `topics[0]` always works.
-- **The exact middleware WebSocket subscribe payload.** The interface is documented as
-  supporting key blocks, micro blocks and object subscriptions, but the precise JSON message
-  shape was not read. See the
-  [ae_mdw repository](https://github.com/aeternity/ae_mdw) for the current WebSocket docs.
-- **Argument meanings for `InvitationRedeemed`, `InvitationRevoked` and
-  `RecordSaleTransaction`.** Types are known from the ACI; no source comment naming the
-  arguments was read.
+- **The query parameter name for server-side event filtering.** The encoding is now settled —
+  padded base32hex of the Blake2b digest, as shown above — but the Superhero backend never
+  passes it as a filter; it fetches by `contract_id` (plus `tx_hash`) and matches `event_hash`
+  client-side. Whether `/v3/contracts/logs` accepts an `event_hash=` or similar parameter, and
+  what it is called, would be settled by the middleware's own OpenAPI document at
+  `{middlewareUrl}/v3/api`, which was unreachable while this page was written. Client-side
+  filtering on `topics[0]` or `event_hash` always works regardless.
+- **What `target` accepts on the `Object` channel.** The subscribe message shape is now
+  settled from the Superhero backend's own client, but that client only ever subscribes to
+  `Transactions`, `MicroBlocks` and `KeyBlocks` — it declares the `Object` channel and never
+  uses it, so nothing in the repository shows what a `target` looks like or whether a contract
+  address is a valid one. The [ae_mdw repository](https://github.com/aeternity/ae_mdw) is the
+  place to settle it.
 - **Whether the ProfileRegistry event names are exactly as the whitepaper spells them.** The
-  hashes above are only correct if they are. No ACI or source was available to confirm.
+  six hashes in that section are correct only if the names are, and neither an ACI nor a source
+  file for `ProfileRegistry.aes` exists in any repository available here. The contract now
+  looks retired, so this may never be settleable — and may not be worth settling. What would
+  close it: the `ProfileRegistry.aes` source, or the deployed address plus a decompile.
 
 ## Read more
 

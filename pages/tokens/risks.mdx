@@ -116,15 +116,33 @@ global state, which narrows the surface for reentrancy and state-corruption bugs
 is solvent by construction: the sell curve sits strictly below the buy curve at every supply, so the
 reserve can always redeem the entire supply.
 
-**No completed security audit of the Superhero contract suite could be found.** The whitepaper's
-security section says the protocol's contract suite is "designed for independent audit and formal
-verification" — which describes an intention, not a result. No audit report, auditor name or date
-appears in the whitepaper, the application repository, the FAQ or the agent skill. If an audit exists,
-it is not published where this documentation could find it. Treat the contracts as unaudited until
-you see a report, and see [Contract security](/contracts/security) for what is known about the
-security model.
+**The contracts say, in their own source, that they are not audited.** Every one of the ten BCL
+Sophia files opens with the same banner, directly above the `@compiler` pragma:
 
-That said, the specific risks worth weighing are:
+```text
+// THIS IS NOT SECURITY AUDITED
+// DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST
+```
+
+The same notice appears at the top of the æternity governance `Poll.aes` and `Registry.aes`. Each
+BCL file also carries an explicit liability disclaimer: "Under no circumstances, whether in tort
+(including negligence), contract, or otherwise, unless required by applicable law, shall BCTSL be
+liable for damages… arising out of the deployment or use of this smart contract."
+
+This is not an inference from silence. The deployed code is annotated as unaudited by the people who
+wrote it, and the whitepaper's claim that the suite is "designed for independent audit and formal
+verification" describes an intention rather than a result. No audit report, auditor name or date
+appears in the contract repository, the whitepaper, the application repository, the FAQ or the agent
+skill. See [Contract security](/contracts/security) for what is known about the security model.
+
+One known defect, for calibration of what "unaudited" means in practice:
+`BondingCurveExponential.get_sell_return_precision()` returns the wrong constant, so an off-chain
+caller deriving the sell factor from the two getters overestimates sell returns by 0.5%. The
+on-chain math is unaffected because it uses the constants directly — but a getter shipped returning
+the wrong variable is the kind of thing a review catches. See
+[Curve Parameters & Units](/tokens/curve-parameters).
+
+The specific risks worth weighing:
 
 - **Bugs in the sale, curve, DAO or factory contracts.** These are immutable once deployed. A `ChangeDAO` vote can migrate a community's DAO, but the token and sale contracts are fixed.
 - **Upgrade and governance paths.** The `ChangeDAO` vote subject transfers ownership, beneficiary rights and accumulated funds to another DAO contract. It requires 55% approval and 10% participation, but in a community where one holder controls a majority of the supply, that is one holder's decision.
@@ -176,5 +194,5 @@ same platform and worth knowing if rewards are part of your reasoning. See
 
 ## Open questions
 
-- **Has the contract suite been audited?** No report, auditor or date appears in any repository or published page consulted for this documentation, and the whitepaper describes the suite as designed *for* audit rather than as audited. If an audit has since been completed, this page should name the auditor, the scope, the date and the resolution of any findings.
+- **Whether an audit has been completed since deployment.** The contract sources are explicitly marked unaudited, but those banners date from the code as written and would not be updated by an audit performed afterwards. No report, auditor or date appears in any repository or published page consulted for this documentation. If one exists, this page should name the auditor, the scope, the date and the resolution of any findings.
 - The gas cost of a buy, a sell and a post is undocumented, so the friction figures above count the 1% spread only. Real round-trip friction is the spread plus three transaction fees, since a sell is two transactions.

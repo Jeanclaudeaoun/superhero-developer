@@ -129,6 +129,32 @@ For the built-in wallet specifically, storage is part of your security model:
   a reason not to.
 - Do not use a shared or public computer for a wallet you intend to keep.
 
+## The contracts are not audited
+
+State this plainly, because the whitepaper's phrasing is softer than the code's. The whitepaper says
+the contract suite is "designed for independent audit and formal verification." Every one of the ten
+BCL Sophia sources opens with the opposite claim, in capitals:
+
+```text
+// THIS IS NOT SECURITY AUDITED
+// DO NEVER USE THIS WITHOUT SECURITY AUDIT FIRST
+```
+
+followed by a clause disclaiming all liability by BCTSL, the copyright holder, "arising out of the
+deployment or use of this smart contract." These headers are on the contracts that hold the bonding
+curve reserve, the DAO treasuries and the affiliation treasury — that is, on the code holding the
+money.
+
+At least one defect is already known and in the deployed code: `get_sell_return_precision()` in
+`BondingCurveExponential.aes` returns `sell_return_percentage` (9950) instead of
+`sell_return_precision` (10000). On-chain sell math is unaffected because `calculate_sell_return`
+uses the constants directly rather than the getters, but an off-chain caller that derives the ratio
+from those two getters computes 1.0 and overstates sell returns by 0.5%. The point is not that this
+particular bug is dangerous — it is that a getter shipped wrong and nobody caught it.
+
+Size your exposure accordingly, and note that the DEX contracts are a separate matter: those were
+audited by QuviQ in April 2022 and are not part of the BCL suite.
+
 ## Read more
 
 - [Backup & Recovery](/wallets/backup-and-recovery) — the other half of this page: what survives when something goes wrong.
@@ -140,8 +166,14 @@ For the built-in wallet specifically, storage is part of your security model:
 
 ## Open questions
 
-- Does Superhero publish a security contact or a vulnerability disclosure policy? No
-  `SECURITY.md` or disclosure address was found in the app or agent-skill repositories; the FAQ
-  points only at "official channels listed in the app".
-- Have the community token sale, DAO and affiliation contracts been externally audited, and are
-  those reports public? The whitepaper describes the security model but names no audit.
+- **Does Superhero publish a security contact or a vulnerability disclosure policy?** No. Six
+  repositories were checked — the web app, `superhero-api`, the agent skill, `bcl-contracts`,
+  `tipping-contract` and `aepp-governance` — and none contains a `SECURITY.md`, a security address
+  or a bounty programme. The only address any of them gives is `superherowallet@protonmail.com`,
+  which the terms and privacy policy name for legal and data-protection questions rather than for
+  security reports. Closing this means Superhero publishing a `SECURITY.md` or a disclosure
+  address. Until then see [Support](/resources/support) for how to report privately anyway.
+- **Will the BCL contracts be audited?** The headers say they have not been, and no report exists in
+  any repository. A published audit naming a firm, a date and a commit hash would close this;
+  nothing weaker should. Ask on
+  [the issue tracker](https://github.com/superhero-com/superhero/issues).

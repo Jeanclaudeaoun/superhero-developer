@@ -108,18 +108,74 @@ guarantee. The loop runs in both directions.
 
 `trending_score` is the momentum signal the product exposes. It is a field on every token returned
 by `GET /api/tokens`, it is the default sort (`order_by=trending_score&order_direction=DESC`), and
-there is a per-token endpoint at `GET /api/tokens/[address]/score`. Trending *tags* — which may not
-have tokens yet — carry their own `score` on `GET /api/trending-tags`, alongside a `source` or
-`platform` field indicating where the tag was observed.
+there is a per-token endpoint at `GET /api/tokens/[address]/score`.
 
-The agent skill treats it as a two-sided signal: "a rising trending score means buying pressure is
-accelerating — this is your entry signal. A falling score means momentum is fading — this is your
-exit signal."
+It is computed off-chain by the backend, and the formula is in
+`superhero-api/src/tokens/tokens.service.ts` with every constant in
+`src/configs/constants.ts` under `TRENDING_SCORE_CONFIG`. The shape is:
 
-Note the ordering carefully. The trending score is computed off-chain by the indexer from on-chain
-activity. It is a *derived* number, not a protocol quantity: no contract reads it, no vote depends
-on it, and it can be recomputed or reweighted server-side without any chain event. Treat it as a
-ranking aid, not as ground truth. See [The Trending Score](/tokens/trending-score).
+```text
+score = (0.35 * trading_score + 0.65 * social_score) * freshness_decay
+```
+
+**Every input is a count over a rolling 24-hour window**, capped and then log-normalised:
+
+```text
+normalized(raw, cap) = ln(1 + min(raw, cap)) / ln(1 + cap)
+```
+
+Capping before the logarithm means a signal stops helping entirely once it saturates — the 5,001st
+AE of 24-hour volume adds nothing — and the logarithm means the first few units of any signal are
+worth far more than the next few. Both work against brute-force manufacturing of a score.
+
+| Group | Signal | Weight in group | Cap (24h) |
+| --- | --- | --- | --- |
+| Trading (0.35) | Active wallets | 0.40 | 25 |
+| Trading | Buy count | 0.20 | 40 |
+| Trading | Sell count | 0.20 | 40 |
+| Trading | Volume in AE | 0.20 | 5,000 |
+| Social (0.65) | Posts mentioning the symbol | 0.32 | 15 |
+| Social | Comments mentioning the symbol | 0.32 | 50 |
+| Social | Unique authors mentioning it | 0.22 | 20 |
+| Social | Tips on mentioning posts | 0.05 | 15 |
+| Social | Tip amount in AE | 0.03 | 250 |
+| Social | Reads of mentioning posts | 0.06 | 200 |
+
+Two consequences are worth internalising before you use the number. **Social activity is weighted
+almost twice as heavily as trading** — the config comment says so outright: "Trading remains
+important, but community activity should dominate ranking." And **buys and sells count equally**, at
+0.20 each. A token being dumped trends exactly as hard as a token being accumulated. The score
+measures activity, not direction.
+
+The decay term is a Hacker-News-style gravity function on time since the *most recent* activity of
+any kind, trading or social:
+
+```text
+freshness_decay = 1 / (1 + age_hours / 2) ^ 1.15
+```
+
+At two hours idle a token keeps about half its pre-decay score; at a day, about a twentieth. Scores
+are refreshed on a cron — every two hours for tokens with recent activity, every six for a stale
+backfill — so a score you read may be up to two hours behind the window it describes. Tokens flagged
+`unlisted` are skipped entirely.
+
+Trending *tags* are a different mechanism that happens to share a word. They may not have tokens at
+all, and their `score` and `source` are **pushed in by external providers** through
+`POST /api/trending-tags` behind an API-key guard, not computed from Superhero activity. `source` is
+a free-form string naming the provider platform; the entity comment gives `x`, `facebook` and
+`github` as examples, and because it is an ordinary text column with no enum, the live set is
+whatever providers Superhero has configured rather than anything fixed in code.
+
+The agent skill treats the token score as a two-sided signal: "a rising trending score means buying
+pressure is accelerating — this is your entry signal. A falling score means momentum is fading —
+this is your exit signal." Given the weights above, read that as a claim about attention, not about
+price.
+
+Note the ordering carefully. The trending score is a *derived* number, not a protocol quantity: no
+contract reads it, no vote depends on it, and it can be recomputed or reweighted server-side without
+any chain event — the weights above are constants in a file that ships with the backend, and a
+deploy can change them. Treat it as a ranking aid, not as ground truth. See
+[The Trending Score](/tokens/trending-score).
 
 ## Failure modes
 
@@ -135,7 +191,10 @@ direction.
 token to manufacture volume and price movement. It costs them roughly 1% per round trip plus gas,
 which is cheap relative to the attention a moving chart buys. Holder counts and transaction lists
 are public on every token page precisely so you can check for this. See
-[Reading a Token Page](/tokens/token-page).
+[Reading a Token Page](/tokens/token-page). The trending score's caps blunt this without removing
+it: a single wallet cycling trades saturates the buy and sell counts at 40 each and contributes 1 to
+a 25-cap active-wallet count, so the trading half of the score tops out well short of its ceiling.
+The price and the market cap have no such ceiling.
 
 **Abandoned tokens.** Creating a token is cheap and permanent. Most tokens will end up with a thin
 supply, a near-zero DAO treasury and no activity. Rank and market cap sort them down the list but
@@ -162,13 +221,4 @@ FAQ answers "Any risks I should know?" with "Volatility and smart-contract risk 
 - [Risks](/tokens/risks) — the trading risks stated plainly, with the mitigations that exist.
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live market, sorted by market cap.
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the "Exponential Bonding Curve" section, which defines the formula above.
-
-## Open questions
-
-- **How is `trending_score` computed?** The value is served by `api.superhero.com` and no formula,
-  weighting or time window appears anywhere in the web app or the agent skill — both only read the
-  field. Settling this needs the indexer source or a published API specification for
-  `GET /api/tokens/[address]/score`.
-- **What does `source` / `platform` on `/api/trending-tags` enumerate?** The app reads the field but
-  never branches on its values, so the set of possible sources (and whether any are off-platform) is
-  not determinable from these repositories.
+- [superhero-api](https://github.com/superhero-com/superhero-api) — the backend that computes the trending score; the constants are in `src/configs/constants.ts`.

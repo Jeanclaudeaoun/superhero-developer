@@ -12,7 +12,10 @@ token sale calls into it on every buy.
 Mainnet `ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNxY7KdGAKUNsrLqutNxZ`, testnet
 `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK`. Better: resolve it at runtime with
 `factory.affiliation_treasury()`, which is what the agent skill's `superhero-invite.mjs`
-does. The ACI lives inside `superhero-agent-skill/contracts/CommunityFactory.aci.json`.
+does. Both addresses are also in the backend's `superhero-api/src/configs/contracts.ts` as
+`affiliation_address`. The ACI lives inside
+`superhero-agent-skill/contracts/CommunityFactory.aci.json`; the source is
+`bcl-contracts/contracts/AffiliationTreasury.aes`.
 
 ## Entrypoints
 
@@ -108,16 +111,64 @@ update_inviters(buyer, buyer, transaction_value, affiliation_fee_percentages)
 `update_inviters` then walks up the `affiliation_tree` from the buyer, crediting each level
 its share. Rewards accumulate in the contract; they are not spent out on each buy.
 
-### The burn path for unaffiliated buys
+### `record_sale_transaction` is not permissioned
 
-When a buy comes through the plain `buy(count)` entrypoint, no affiliation rewardee is
-supplied and the treasury is not credited. The 0.5% is burned rather than accumulated. The
-whitepaper is explicit that this is a security property, not an oversight: there is no pool of
-unclaimed affiliation AE for anyone to contest, extract, or govern.
+There is no check on `Call.caller`. Any account may call it, with any `buyer` and any
+`transaction_value`, as long as it attaches at least 0.5% of the value it claims. The source
+says so in a comment directly above the entrypoint:
 
-The burn itself happens at the sale layer, not in the treasury — the treasury only ever sees
-fees that have a referral chain attached. The exact burn call in
-`AffiliationBondingCurveTokenSale.aes` was not read line by line; see Open questions.
+```text
+// this is not intended to return overpaid, the check for >= value is to avoid unintended abortion
+// this is not intended for external use, there is no harm from calling it publicly
+// (i.e. donating to the invitation system)
+// intended use is only via the buy function in token sale contracts
+```
+
+The accounting is self-consistent — the four level percentages sum to exactly the `required_fee`
+you had to attach, so no AE is created — but two side effects are worth knowing:
+
+- **An overpayment is kept, not refunded.** The check is `>=`, and nothing returns the
+  difference. Attach exactly `required_fee`.
+- **The caller chooses `transaction_value`, and it also advances the unique-invitee counter.**
+  `record_sale_transaction` calls `update_unique_invitees(buyer, transaction_value)` with the
+  same attacker-supplied number, so a direct call claiming 10 AE — costing 0.05 AE of attached
+  fee — marks that buyer as having cleared the 10 AE threshold described
+  [below](#unique-invitees-and-the-payout-threshold), without any token ever being bought. The
+  contract's own test suite drives exactly this path from a plain account. Treat the
+  four-invitee gate as a speed bump, not an anti-sybil guarantee.
+
+### What happens to an unaffiliated buy's 0.5%
+
+The sale contract sends the affiliation share on **every** buy, affiliated or not — there is no
+conditional in `AffiliationBondingCurveTokenSale.buy_with_affiliation_inner`:
+
+```sophia
+state.affiliation_treasury.record_sale_transaction(
+  value = affiliation_amount, protected = true, affiliation_rewardee, bonding_curve_price)
+```
+
+So the burn does not happen at the sale layer, and it is not a `Chain.spend` to the zero
+address. It happens by omission inside the treasury. `update_inviters` looks the buyer up in
+`affiliation_tree`; if there is no entry it returns `()` and credits nobody:
+
+```sophia
+update_inviters(invitee, buyer, transaction_value, percentage :: rest) =
+  switch(get_direct_inviter(invitee))
+    None => ()
+    Some(inviter) => ...
+```
+
+The AE has already arrived in the treasury's balance. Nothing ever attributes it to an account,
+and `withdraw()` only pays out what `payout_periods` records — so it is unreachable by anyone,
+permanently. "Burned" here means *stranded in the treasury contract*, not destroyed.
+
+The same applies **partially** to shallow chains. The percentage list has four entries, but the
+recursion stops the moment a level has no inviter. A buyer whose chain is only two deep strands
+the level-3 and level-4 shares (0.05% + 0.025%) the same way. Only a buyer with a full
+four-deep chain sees the whole 0.5% credited.
+
+Practically, this means the treasury's AE balance is always larger than the sum of all
+withdrawable rewards, and the gap only grows.
 
 ## Invite codes
 
@@ -164,9 +215,57 @@ The redemption fee cover exists because a brand-new invitee has no AE and cannot
 own redemption transaction. The source notes the real cost is around `2.01e14` aettos and the
 minimum is deliberately set several times higher.
 
-`revoke_invitation_code(invitation_address)` reclaims an unredeemed invite's funds.
-`redeem_invitation_code(invitee_address)` is what the invitee's client calls, signing with the
-secret key from the link, to claim the gift and record the inviter relationship.
+### Revoking does not return the redemption fee cover
+
+`revoke_invitation_code(invitation_address)` refunds **only the `invitation_amount`**:
+
+```sophia
+require(!is_redeemed, "ALREADY_REDEEMED")
+require(Call.caller == inviter_address, "CALLER_NOT_INVITER")
+Chain.spend(Call.caller, invitation_amount)
+```
+
+The `redemption_fee_cover` is gone before revocation can touch it. `register_invitation_code`
+spends it straight out to the invite address at registration time
+(`Chain.spend(invitation_address, redemption_fee_cover)`), so by the time you revoke, it is
+sitting in the throwaway account, not in the treasury. Revoking 100 unused invites at the
+0.001 AE minimum leaves 0.1 AE scattered across 100 empty accounts.
+
+You are not out of pocket if you kept the keys: you generated those keypairs, so you can sweep
+each invite address yourself with a plain spend. The contract will not do it for you.
+
+Two more conditions on revocation: only the original inviter may call it
+(`CALLER_NOT_INVITER`), and only before redemption (`ALREADY_REDEEMED`). On success the entry
+is deleted from `invitation_codes` entirely, so the same address could in principle be
+registered again.
+
+### Redeeming
+
+`redeem_invitation_code(invitee_address)` is called **by the invite address itself** — the
+invitee's client signs with the secret key from the link, and the contract looks the code up by
+`Call.caller`. It marks the code redeemed, spends the gift to `invitee_address`, and writes
+`affiliation_tree[invitee_address] = inviter_address`.
+
+It aborts on `INVITER_EQUAL_INVITEE` if you try to invite yourself, and on
+`INVITEE_ALREADY_REGISTERED` if that address already has an inviter. An account can be adopted
+into the tree exactly once, and never re-parented.
+
+### `register_invitation` needs no code at all
+
+```sophia
+stateful entrypoint register_invitation(inviter_address: address) =
+  require(!Map.member(Call.caller, state.affiliation_tree), "INVITEE_ALREADY_REGISTERED")
+  put(state { affiliation_tree[Call.caller] = inviter_address })
+  Chain.event(UserInvited(Call.caller, inviter_address))
+```
+
+That is the whole entrypoint. Any account may name any other account as its inviter, with no
+invite code, no signature from the inviter, no payment, and no consent. The inviter is not
+consulted and cannot decline. The only constraint is the one-inviter-ever rule.
+
+It also means the tree is not acyclic: A can name B and B can name A. That is harmless in
+practice only because `update_inviters` recurses exactly as many times as there are entries in
+`affiliation_fee_percentages` — four — and then stops regardless of what the tree looks like.
 
 ## Unique invitees and the payout threshold
 
@@ -210,20 +309,64 @@ entrypoint get_payout_period() : int = Chain.timestamp / payout_period_interval
 ```
 
 The period is a **30-day bucket derived from the chain clock**, not a per-account timer.
-`get_payout_period()` returns the current bucket index — the number of 30-day windows since
-the Unix epoch. `payout_periods` maps each bucket index to a map of account to amount, so the
-contract keeps reward accounting segmented by month.
+`payout_period_interval` is in milliseconds, matching `Chain.timestamp`, and the bucket index is
+a plain integer division — so a period is 30 days of wall-clock time and what advances it is
+simply the clock passing the next multiple of 2,592,000,000 ms since the Unix epoch. Nothing
+advances it per account, per community, or per transaction. Every account in the system rolls
+over to the next bucket at the same instant.
 
-`withdraw()` pays out the caller's accumulated rewards. `get_accumulated_rewards(account)`
-reads the balance available. The precise interaction between the period buckets, the
-`ThresholdReached` state and what `withdraw` releases was not read from source — see Open
-questions before building anything that predicts a payout.
+`payout_periods` maps each bucket index to a map of account to amount, so reward accounting is
+segmented by that 30-day window.
 
-The treasury's own test suite patches `payout_period_interval` from `2592000000` down to
-`25920` — about 30 seconds — so tests can cross a period boundary. That confirms the period
-boundary is the thing that gates a payout.
+### What `withdraw()` checks, and what it pays
+
+```sophia
+stateful entrypoint withdraw() =
+  require(state.unique_invitees[Call.caller = WaitingForInvitations(Set.new(), {})]
+            == ThresholdReached, "MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED")
+  let reward = get_accumulated_rewards(Call.caller)
+  Chain.spend(Call.caller, reward)
+  put(state { payout_periods[get_payout_period() = {}]     @ p = p{ [Call.caller] = 0 }})
+  put(state { payout_periods[get_payout_period() - 1 = {}] @ p = p{ [Call.caller] = 0 }})
+  Chain.event(Withdrawn(Call.caller, reward))
+```
+
+One gate and one formula:
+
+- **The gate is the four-invitee threshold, nothing else.** `MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED`
+  is the only abort. There is no per-period cooldown, no minimum amount, and no limit on how
+  often you may call it. Calling it twice in a row is legal and the second call pays zero.
+- **The formula is a rolling two-bucket window.** `get_accumulated_rewards` is
+  `payout_periods[current][account] + payout_periods[current - 1][account]`, and `withdraw`
+  zeroes exactly those two buckets. Nothing else is ever read or reachable.
+
+### Rewards expire, and the expiry is a cliff
+
+Anything credited three or more buckets ago is permanently unwithdrawable. The source is blunt
+about it:
+
+```text
+// reward that hasn't or couldn't been withdrawn in the respecive periods
+// can never be withdrawn again, thus be considered burned
+```
+
+Because the buckets are absolute and not relative to when you earned, the real grace period is
+**between 30 and 60 days**, not a flat 60. A reward credited on the first day of a bucket
+survives that bucket plus the whole of the next one, close to 60 days. A reward credited on the
+last day of a bucket has a few hours of its own bucket plus 30 days, barely over 30. You cannot
+tell which from the reward alone — only from `get_payout_period()` at the time it was credited.
+
+The contract's own test asserts this schedule against a patched
+`payout_period_interval = 25920` (about 30 seconds), checking that a reward is still readable
+one period later and gone two periods later.
+
+Practical advice: withdraw at least once a month, and do not treat `get_accumulated_rewards()`
+as a running total — it is a window, and it silently shrinks.
 
 ## Events
+
+Every argument below is named by a comment in the source, so these are the real meanings, not
+inferences:
 
 ```sophia
 datatype event =
@@ -231,32 +374,35 @@ datatype event =
   | RewardAdded(address, int)                       // user, added amount
   | Withdrawn(address, int)                         // user, reward amount
   | InvitationRegistered(address, address, int)     // caller, invitation_address, amount
-  | InvitationRedeemed(address, address, address)
-  | InvitationRevoked(address, address)
-  | RecordSaleTransaction(address, int)
+  | InvitationRedeemed(address, address, address)   // invitee_address, inviter_address, caller
+  | InvitationRevoked(address, address)             // invitation_address, inviter_address
+  | RecordSaleTransaction(address, int)             // buyer, amount
 ```
 
-The argument comments for the first four are from the source. The argument meanings for
-`InvitationRedeemed`, `InvitationRevoked` and `RecordSaleTransaction` were not read; infer
-them from the corresponding entrypoint signatures with care.
+Two traps for indexers:
 
-## Open questions
+- **`InvitationRedeemed` and `InvitationRevoked` order their addresses differently.** Redeemed
+  is invitee-then-inviter; revoked is invite-address-then-inviter. The `caller` on
+  `InvitationRedeemed` is the invite address, since redemption is signed with the invite key.
+- **`UserInvited` fires only from `register_invitation`, never from
+  `redeem_invitation_code`.** A code-based invite emits `InvitationRedeemed` instead, even
+  though both write the same `affiliation_tree` entry. An indexer that watches only
+  `UserInvited` will miss every invite-link relationship.
 
-- **Exactly when `withdraw()` succeeds.** The 30-day payout period, the four-invitee
-  `ThresholdReached` state and `get_accumulated_rewards` are all verified, but the condition
-  `withdraw` itself checks — current period only, past periods only, or threshold-gated — was
-  not read from source. Read `withdraw` in
-  [`AffiliationTreasury.aes`](https://github.com/superhero-com/bcl-contracts) before relying
-  on a payout schedule.
-- **The burn call for unaffiliated fees.** The whitepaper and this page both state that the
-  0.5% is burned when no referrer exists, and the factory's collection fee is demonstrably
-  burned to `ak_11111111111111111111111111111111273Yts`. The specific burn in
-  `AffiliationBondingCurveTokenSale.aes` for the affiliation half was not read.
-- **Argument meanings for `InvitationRedeemed`, `InvitationRevoked` and
-  `RecordSaleTransaction`.** Three addresses and two addresses respectively, with no source
-  comment read.
-- **Whether the affiliation tree has a depth limit beyond four paid levels.** Rewards stop at
-  level four, but whether the tree itself is bounded was not verified.
+`RewardAdded` fires once per credited level, so a single buy under a four-deep chain emits four
+of them plus one `RecordSaleTransaction`.
+
+## Tree shape
+
+`affiliation_tree` is `map(address, address)` — one direct inviter per account, written once
+and never re-parented. There is **no depth limit on the tree itself**. What is bounded is the
+payout walk: `update_inviters` recurses once per entry in `affiliation_fee_percentages`, which
+has four entries, so it visits at most four ancestors regardless of how deep the chain goes.
+Level five and beyond exist in the data and earn nothing.
+
+Because `register_invitation` is unauthenticated, the graph can also contain cycles. The
+four-step bound is what keeps that from being a problem — there is no termination condition
+based on reaching a root.
 
 ## Read more
 

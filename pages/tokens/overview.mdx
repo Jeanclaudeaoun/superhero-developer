@@ -85,12 +85,15 @@ Documentation is the wrong place to be coy about this.
 | Price | Bonding curve | Not sold; issued only as a by-product of buying |
 | Utility today | Voting, write threshold, membership | None yet — issuance is live, governance is in development |
 
-The whitepaper puts ProtocolDAO issuance at **1,000× the AE value of each buy**. The web app's own
-estimate is slightly lower: `protocolTokenReward` in `useTokenTrade.ts` computes
-`(1 − 0.05) × 1000 × aeValue`, i.e. 950 tokens per AE spent, using a constant named
-`PROTOCOL_DAO_AFFILIATION_FEE = 0.05`. Treat the on-chain `Mint` event emitted by the protocol token
-contract on your buy as the authority — the app reads exactly that event to display what you
-actually received.
+**The chain mints 1,000×, not 950×.** `CommunityFactory.aes` declares
+`let protocol_dao_token_multiplier = 1000`, and `mint_protocol_dao_token` mints
+`buy_value * protocol_dao_token_multiplier` — where `buy_value` is the AE actually paid, affiliation
+fee included, after any surplus refund. The web app's pre-trade estimate is lower because
+`protocolTokenReward` computes `(1 − 0.05) × 1000 × aeValue` against a constant named
+`PROTOCOL_DAO_AFFILIATION_FEE = 0.05`, which is neither the affiliation fee (0.5%) nor applied the
+way the contract works. The estimate you are shown before confirming is about 5% low; the `Mint`
+event the app reads afterwards shows the real figure. See
+[The ProtocolDAO Token](/dao/protocol-dao).
 
 ## Read more
 
@@ -102,7 +105,3 @@ actually received.
 - [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live list of every community token
 - [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the fungible token specification these tokens implement
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the source for the deployment sequence and the token economics summary
-
-## Open questions
-
-- The 1,000× and 950× ProtocolDAO issuance figures above disagree. The whitepaper states 1,000× the AE value of the buy; the app's display constant nets off 5% first. Decoding a `Mint` event from the protocol token contract on any recent buy transaction — the address is on the factory as `protocol_dao_token()` — would settle which is the on-chain behaviour.

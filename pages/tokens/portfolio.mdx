@@ -51,7 +51,36 @@ position" — which the current script does not emit. Compute it yourself from `
 ## Portfolio history
 
 Backed by `GET /api/accounts/{address}/portfolio/history`, which accepts `startDate`, `endDate`,
-`interval`, `convertTo` and `include`. Pass `include=pnl-range` to get the PnL block.
+`interval`, `convertTo` and `include`. Pass `include=pnl` or `include=pnl-range` to get the PnL
+block — the two differ, and the difference matters; see below.
+
+### There are no stored snapshots
+
+"Snapshot" is the response's word, not a description of how it is produced. Nothing is recorded
+periodically. The backend takes your `startDate`, `endDate` and `interval`, generates the
+timestamps, maps each to a block height, and **reconstructs** holdings at that height by replaying
+your own transaction rows. The AE side is a historical `getBalance` against the node.
+
+Two consequences:
+
+- **Every interval returns real data**, not interpolation. There is no underlying sampling frequency to be finer than.
+- **The interval you ask for is a floor, not a promise.** The controller raises it based on how long a range you asked for:
+
+  | Range length | Minimum interval |
+  | --- | --- |
+  | Under 1 month | 1 hour |
+  | 1 to 3 months | 4 hours |
+  | 3 to 6 months | 1 day |
+  | 6 months or more | 1 week |
+  | No dates given at all | 1 day |
+
+  The effective interval is `max(your interval, that minimum)`; the default when you pass none is
+  86,400 seconds. Ask for 5-minute granularity over a year and you get weekly points, silently.
+
+One piece of real coarseness is worth knowing about: the AE balance lookup floors each block height
+to a multiple of 300 key blocks — roughly 15 hours — so snapshots inside the same bucket share one
+node call and therefore one AE balance. Token values are exact per snapshot; the liquid-AE line is
+stepped. Responses are cached for 10 minutes.
 
 Each snapshot:
 
@@ -68,14 +97,55 @@ And inside `total_pnl`:
 
 | Field | Meaning |
 | --- | --- |
-| `percentage` | Return over the range |
-| `invested` | Amount put in, as `ae` and `usd` |
-| `current_value` | Present value, as `ae` and `usd` |
-| `gain` | Difference, as `ae` and `usd` |
-| `range` | The `from` and `to` bounds the figures cover |
+| `percentage` | `gain.ae / invested.ae × 100`, or `0` when nothing was invested |
+| `invested` | Cost basis, as `ae` and `usd` — defined differently in the two modes, see below |
+| `current_value` | Market value of tokens still held, as `ae` and `usd`. Always cumulative |
+| `gain` | The profit figure, as `ae` and `usd` |
+| `range` | The `from` and `to` bounds — present **only** under `include=pnl-range` |
 
-The skill's guide also documents a `tokens_pnl` per-token breakdown. It is not listed in the app's
-API inventory, so request it and check before depending on it.
+### How PnL is actually computed
+
+Cost basis is **average cost, not FIFO**. There is no lot tracking anywhere in the backend: it sums
+what you spent and what you bought, and divides.
+
+`include=pnl` — cumulative mode, per token, summed across tokens:
+
+```text
+invested      = every AE you ever spent on this token       (all buy + create_community rows)
+current_value = tokens still held × current unit price
+gain          = proceeds from all your sells + current_value − invested
+```
+
+`include=pnl-range` — realised-only mode, per snapshot window:
+
+```text
+avg_cost      = (all-time AE spent) / (all-time volume bought)
+invested      = avg_cost × volume sold in this window
+gain          = sell proceeds in this window − invested
+```
+
+Range mode deliberately excludes unrealised gains, so a day only turns green or red when a trade is
+actually closed. It is what the app's PnL calendar and sparkline are built on. Cumulative mode is
+what you want for "how is this position doing".
+
+A partial sell is therefore attributed at the **all-time average purchase price**, blended across
+every buy you ever made in that token — including buys made after the sell, since the average is
+taken over your whole history rather than only the part preceding it. That keeps the arithmetic
+stable across a reindex, but it means a realised gain reported for a past day can change if you buy
+more of the same token later.
+
+Three details that decide whether a number looks right to you:
+
+- **The 0.5% affiliation fee is inside `invested`.** The cost basis comes from the transaction row's `amount`, which is decoded from the sale contract's `Buy` event — its first argument is `total_price`, the fee-inclusive AE you actually paid.
+- **Gas is not.** The æternity transaction fee never reaches the contract, so it appears in no row and in no cost basis. Your real cost is slightly higher than `invested` says.
+- **`current_unit_price` is the last trade's price, not a live quote.** It is the `buy_price.ae` of the most recent transaction at or before the snapshot height. On a token nobody has traded in a week, your position is valued at last week's price. It is also a *buy*-side unit price, which overstates an exit for the reason in the next section.
+
+The per-token breakdown does exist, on its own endpoint:
+`GET /api/accounts/{address}/portfolio/tokens/history` returns the same snapshot shape with a
+`tokens_pnl` map keyed by `sale_address`, each entry carrying `current_unit_price`, `percentage`,
+`invested`, `current_value` and `gain`. PnL is always included there. It is **not** available on
+`/portfolio/history` at any `include` value — that endpoint's own parameter documentation says so.
+The payload is large, so use it deliberately.
 
 The `history` command prints the newest and oldest snapshots, the count, the full array, and a
 period PnL it computes itself as `latest.total_value_ae − oldest.total_value_ae`. That is a
@@ -142,6 +212,4 @@ its own entry.
 
 ## Open questions
 
-- **How is `total_pnl` computed?** Specifically: the cost-basis method (FIFO, average cost, or something else), whether the 0.5% affiliation fee and gas are counted as part of `invested`, and how a partial sell is attributed. None of this is documented in the app, the API inventory or the agent skill.
-- **How often are portfolio snapshots taken?** `GET /api/accounts/{address}/portfolio/history` accepts an `interval` parameter, but the underlying snapshot frequency — and therefore the finest interval that returns real rather than interpolated data — is not stated.
-- **Does `tokens_pnl` exist on the current API?** The agent skill's portfolio guide documents it; the app's endpoint inventory does not list it. One request with `include=pnl-range` would settle it.
+- **Whether `balance_ae_value` was ever served, or is a documentation error in the skill's portfolio guide.** No field of that name appears in the backend's holdings response or in the current script's output. If you are writing against the guide rather than the API, compute it yourself from `balance` and a `sell_return(balance)` call — and mind the rectangle-versus-integral caveat above.

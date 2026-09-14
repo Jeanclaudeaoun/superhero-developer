@@ -15,8 +15,19 @@ curve; selling burns tokens and moves you down it. Because price is computed fro
 always a quote and always liquidity — no order book, no matching engine, no counterparty on the
 other side of your trade.
 
-Superhero uses an **exponential** curve, specified in `BondingCurveExponential.aes` and
-implementing the interface in `BondingCurve.aes`.
+Superhero uses an **exponential** curve, specified in
+`bcl-contracts/contracts/BondingCurveExponential.aes` and implementing the interface in
+`contracts/interfaces/BondingCurve.aes`.
+
+One thing to hold in mind throughout: **the closed form below is the idealised curve, and the
+contract approximates it.** `calculate_price` never evaluates `e^x` — it sums a bounded Maclaurin
+expansion of it in integer arithmetic, capped at 100 terms and at the point where a term floors to
+zero. That is what `curve_type()` means when it returns `"TAYLOR_EXPONENTIAL_V1"`. The approximation
+is extremely tight — the figures worked out below were re-checked against an exact integer replica
+of the Sophia and agree to within `4e-19 AE` at every supply on this page — so you can reason with
+the closed form and still be right. But the number the contract returns is the one you are charged,
+and [Curve Parameters & Units](/tokens/curve-parameters) has the integer replica if you need to
+reproduce it exactly.
 
 ## The formulas
 
@@ -29,11 +40,16 @@ sell(x) = buy(x) · 0.995
 `x` is the circulating supply in whole tokens; the result is the **instantaneous (spot) price in AE
 per token** at that supply. Three constants do all the work:
 
-| Constant | Value | Role |
-| --- | --- | --- |
-| `a` | 0.001 | Scale factor on the exponential |
-| `k` | 0.00000001 (1e-8) | Growth rate per token of supply |
-| `c` | 0.0009999 | Offset that pulls the launch price down to a near-zero number |
+| Constant | Value | Stored on-chain as | Role |
+| --- | --- | --- | --- |
+| `a` | 0.001 | `a = 10^15` | Scale factor on the exponential |
+| `k` | 0.00000001 (1e-8) | `k = 10^10` | Growth rate per token of supply |
+| `c` | 0.0009999 | not stored | Offset that pulls the launch price down to a near-zero number |
+
+The contract holds `a` and `k` scaled by `10^18`, plus `initial_price = 10^11` — the spot price at
+supply zero, `0.0000001 AE`. The offset `c` is never stored: it is `a − initial_price`, and the
+arithmetic reconstructs it. See [Curve Parameters & Units](/tokens/curve-parameters) for the full
+constant table.
 
 At supply 0 the spot price is `0.001 − 0.0009999 = 0.0000001 AE` — one ten-millionth of an AE per
 token. The curve is deliberately almost flat at the start and steep later.
@@ -246,19 +262,36 @@ curve.
 
 | Entrypoint | Returns |
 | --- | --- |
-| `buy_price(total_supply)` | Instantaneous buy price at a supply level |
-| `sell_price(total_supply)` | Instantaneous sell price at a supply level |
-| `calculate_buy_price(total_supply, count)` | Cost to buy `count` tokens from `total_supply` |
-| `calculate_sell_return(total_supply, sell_tokens)` | AE returned for selling `sell_tokens` |
-| `buy_curve(x)` / `sell_curve(x)` | The curve value as a `Frac.frac` rational |
-| `get_k()`, `get_initial_price()`, `get_minimum_count()` | Curve parameters |
-| `get_sell_return_percentage()`, `get_sell_return_precision()` | The 99.5% sell factor and its precision |
-| `curve_type()`, `supported_decimals()` | Curve identity and decimal handling |
+| `calculate_buy_price(total_supply, count)` | Cost to buy `count` tokens from `total_supply`, in aettos |
+| `calculate_sell_return(total_supply, sell_tokens)` | AE returned for selling `sell_tokens`, in aettos |
+| `buy_curve(x)` / `sell_curve(x)` | The spot curve value as a `Frac.frac` rational |
+| `buy_price(total_supply)` / `sell_price(total_supply)` | The same value rounded to an integer — see the warning below |
+| `get_k()`, `get_initial_price()`, `get_minimum_count()` | `10^10`, `10^11`, `10^12` |
+| `get_sell_return_percentage()` | `9950` |
+| `get_sell_return_precision()` | `9950` — a bug; the real precision is `10000` |
+| `curve_type()`, `supported_decimals()` | `"TAYLOR_EXPONENTIAL_V1"`, `18` |
 
 Every one of these takes and returns integers in the contract's own units. Before you call any of
 them, read [Curve Parameters & Units](/tokens/curve-parameters) — passing whole tokens where the
 contract expects 18-decimal units is the single most common way to get an answer that is wrong by a
 factor of 10^18.
+
+Two entrypoints need a health warning:
+
+- **`buy_price()` and `sell_price()` are not usable as prices.** They round a value like
+  `1.05e-4 AE` per token to an integer, so `buy_price()` returns `1` and `sell_price()` returns `0`
+  for every supply under roughly 690 million tokens. Use `calculate_buy_price` and
+  `calculate_sell_return`, or `buy_curve` if you want the spot value exactly.
+- **`get_sell_return_precision()` returns the wrong constant** — `9950` instead of `10000`. Deriving
+  the sell factor from the two getters gives `1.0` and overstates sell returns by 0.5%. The
+  contract's own `calculate_sell_return` uses the constants directly and is correct; only off-chain
+  code that trusts the getter pair is affected.
+
+`get_minimum_count()` returns `10^12`, and every pricing call begins with
+`require(count >= minimum_count, "MINIMUM_TOKENS_REQUIRED")`. Since counts are in 18-decimal units
+that floor is `10^-6` tokens — a guard against a trade rounding to zero inside the integer
+arithmetic, not a meaningful order minimum. In practice it fires only when a caller passes a
+whole-token count where the contract expected token decimal units.
 
 ## A discrepancy worth knowing about
 
@@ -289,8 +322,3 @@ curve (`price = k × supply²`); that copy does not describe the deployed contra
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the primary source for the formulas and the 1% spread
 - [Bonding Curves Explained](https://yos.io/2018/11/10/bonding-curves/) — background on the general mechanism if this is your first one
 - [Uniswap V2: how it works](https://docs.uniswap.org/contracts/v2/concepts/protocol-overview/how-uniswap-works) — the constant-product model this curve is compared against above
-
-## Open questions
-
-- The live on-chain values of `get_k()`, `get_initial_price()` and `get_minimum_count()` could not be read while writing this page (no node access). The formula constants above come from the whitepaper and from the two off-chain implementations that mirror the contract, not from the deployed integers. [Curve Parameters & Units](/tokens/curve-parameters) explains how to read them yourself.
-- `get_minimum_count()` implies a minimum purchase size enforced by the curve. Its value, and whether the UI surfaces a failure when you go below it, is unverified.

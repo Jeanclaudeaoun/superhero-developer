@@ -147,8 +147,34 @@ on top of one. Practical consequences:
 - **Native access to chain features.** AENS names and oracles are reachable from contract code
   as protocol primitives, not through a precompile.
 
-Superhero's ProfileRegistry targets Sophia compiler version 6 or later and Tipping version 5 or
-later, per the whitepaper.
+## Compiler versions, and where the sources live
+
+The `@compiler` pragma at the top of each `.aes` file is a **minimum**, not the version a contract
+was built with. Both matter, and they are recorded in different places.
+
+| Contract suite | Source repository | Pragma |
+| --- | --- | --- |
+| BCL: factory, sale, curve, DAO, DAO vote, community management, affiliation treasury, and the three interfaces | [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) | `@compiler >= 7` on all ten files |
+| Tipping v3 | [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) | `>= 5` on `Tipping_v3.aes`, `>= 6` on `Tipping_v3_Getter.aes` |
+| Governance | [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) | `>= 5` on `Poll_Iris.aes`, `>= 6` on `Registry_Compiler_v6.aes` |
+
+For the actual build version of the BCL suite there is a better record than a pragma. The backend
+ships its BCL ACI bundle alongside two provenance files
+(`superhero-api/src/plugins/bcl/contract/aci/`):
+
+| File | Contents |
+| --- | --- |
+| `source_hashes.json` | A base64 digest per `.aes` file, including the three interfaces — how you tell whether an ACI matches a given source tree |
+| `bytecode_hashes.json` | Keyed by compiler version — the only key present is **`8.0.0`** — with a `hash` and the full `cb_…` bytecode for each of the seven deployed contracts |
+
+So the deployed BCL contracts were compiled with **Sophia 8.0.0**, comfortably above their `>= 7`
+pragma. Neither file is read by any code in the repository; they are build artefacts kept for
+verification. To confirm a specific on-chain deployment, compare the `cb_…` string for that contract
+against the deployed contract's bytecode from the node, which is the check those files exist to make
+possible.
+
+The whitepaper's "compiler version ≥ 6" for ProfileRegistry and "≥ 5" for Tipping are pragmas
+quoted as versions — read them as floors.
 
 ## Read more
 
@@ -160,13 +186,12 @@ later, per the whitepaper.
 - [FATE VM](https://docs.aeternity.com/aeternity-core-concepts/protocol/fast-aeternity-transaction-engine-fate-vm) — the official description of the VM.
 - [ACI encoder documentation](https://github.com/aeternity/aesophia/blob/master/docs/aeso_aci.md) — the JSON contract-interface format.
 - [aesophia_cli](https://github.com/aeternity/aesophia_cli) — generating ACI from source locally.
+- [bcl-contracts](https://github.com/superhero-com/bcl-contracts) — the Sophia sources for the token sale, curve, DAO and treasury.
 
 ## Open questions
 
-- The exact Sophia compiler version each deployed Superhero contract was built with is not
-  recorded in either repository beyond the whitepaper's "compiler version ≥ 6" for
-  ProfileRegistry and "≥ 5" for Tipping. Recovering it would mean checking the deployed
-  bytecode's VM and ABI version fields on chain.
-- No Sophia source (`.aes`) is vendored in these repositories — only compiled ACI. Where the
-  canonical sources live, and whether the vendored ACI files are regenerated from them
-  automatically, is not documented.
+- **Which compiler built ProfileRegistry, Tipping v3 and the governance contracts?** The BCL suite
+  is settled at Sophia 8.0.0 by its own `bytecode_hashes.json`, but no equivalent artefact exists
+  for the others — their repositories record only a minimum pragma. Closing this means reading the
+  deployed contract's `vm_version` and `abi_version` from the node, or its bytecode, and matching it
+  against a local build; neither call could be made from this environment.

@@ -5,13 +5,14 @@ description: "The Socket.IO channels that push token updates, trades and price h
 
 # WebSocket API
 
-Superhero pushes live token data over **Socket.IO**, not a raw WebSocket. Four channels carry new
-token sales, token updates, trades and price-history ticks. The web app uses them to keep the
-trending table, the token page and the candlestick chart current without polling.
+Superhero pushes live token data over **Socket.IO**, not a raw WebSocket. Two events carry token
+updates and trades, and a second, authenticated namespace carries notifications. The web app uses
+them to keep the trending table, the token page and the candlestick chart current without polling.
 
-This page documents the client in `src/libs/WebSocketClient.ts` and the three hooks that consume
-it. It is a small, well-defined surface — and it has one important quirk, described under
-[There is no server-side subscription](#there-is-no-server-side-subscription).
+This page documents both gateways as the server implements them — `TokenWebsocketGateway` and
+`NotificationsGateway` in `superhero-api/src/` — and the client in
+`src/libs/WebSocketClient.ts` that consumes the first. It is a small surface with one important
+property: [the server accepts nothing from you](#the-server-ignores-everything-you-send).
 
 ## Connecting
 
@@ -32,103 +33,164 @@ socket.connect();
 
 `{ autoConnect: false }` is the only option the app passes, so everything else — the default
 `/socket.io/` path, the polling-then-upgrade transport sequence, and Socket.IO's own reconnection
-behaviour — is library default. The server's CSP allowlist includes `wss://api.superhero.com`,
-confirming the upgrade to a real WebSocket once polling has established the session.
+behaviour — is library default.
+
+The gateway is declared with no `namespace` and no `path`, so it lives on the default namespace
+at the default `/socket.io/` endpoint. Its CORS origin is the same value the REST API uses:
+every origin by default, an allow-list when the operator sets `ALLOWED_ORIGINS` — see
+[Conventions](/api-reference/conventions#cors).
 
 No authentication and no handshake beyond Socket.IO's own. There is no auth payload, no token and
 no `connect_error` handling in the client.
 
-## Channels
+**A plain WebSocket client cannot connect.** Socket.IO is a protocol layered on top of the
+Engine.IO transport, not a naming convention for WebSocket messages: a raw `wss://` client would
+have to perform the Engine.IO handshake, speak the packet framing and answer ping/pong itself.
+There is no separate raw-WebSocket endpoint on the API — the only `wss://` URLs anywhere in the
+configuration are the æternity middleware's (`wss://mainnet.aeternity.io/mdw/v2/websocket`) and
+the Nostr chat relays', neither of which is this. Use a Socket.IO client for your language.
 
-Four event names, defined in `src/utils/constants.ts`:
+## Events
 
-| Event | Fires when | Fan-out |
+The server emits exactly **two** events, both from `TokenWebsocketGateway`
+(`superhero-api/src/tokens/token-websocket.gateway.ts`):
+
+| Event | Fires when | Emitted by |
 | --- | --- | --- |
-| `token-created` | A new token sale is created | Global only |
-| `token-updated` | A token's state changes — price, market cap, supply | Per `sale_address` only |
-| `token-transaction` | A trade is recorded | Global **and** per `sale_address` |
-| `token-history` | A price-history tick | Global **and** per `sale_address` |
+| `token-updated` | A token's live price, supply, market cap or DAO balance has been re-read from chain and written back | `TokensService.syncTokenPrice`, and the BCL plugin's equivalent |
+| `token-history` | A buy, sell or token creation has been indexed **live** | `BclPluginSyncService.processTransaction` |
 
-Listen with `socket.on('token-updated', handler)` and so on. The web app then re-dispatches each
-message internally under a key of either the bare channel name or `channel::sale_address`, which
-is how a component can ask for "trades on this one token" versus "all trades".
+Both are broadcast with `server.emit(...)` — every connected client receives every event.
 
-Note that `token-updated` is dispatched **only** to per-token subscribers — there is no global
-token-updated stream in the client. If you want every token update, subscribe to the raw Socket.IO
-event rather than copying the app's routing.
+### `token-created` and `token-transaction` do not exist
+
+The web app's `WEB_SOCKET_CHANNELS` map in `src/utils/constants.ts` declares four names, and
+`WebSocketClient` registers listeners for all four. **Two of them never fire.** `server.emit` is
+called in exactly two places in the whole backend, for `token-updated` and `token-history`; there
+is no emit of `token-created` or `token-transaction` anywhere.
+
+So if you are looking for live trades, subscribe to **`token-history`**, not
+`token-transaction`. And there is no push for new token sales — poll
+`GET /api/tokens?order_by=created_at&order_direction=DESC` or read `GET /api/feed` instead.
+
+The app's internal routing adds a second layer on top: it re-dispatches each message under a key
+of either the bare event name or `event::sale_address`, which is how a component asks for "trades
+on this one token" versus "all trades". That is browser-side bookkeeping, not a wire protocol —
+`token-updated` in particular is re-dispatched **only** under the per-token key, so copying the
+app's routing loses the global stream.
 
 ## Payloads
 
-Every message is an envelope with the token's `sale_address` at the top level and the interesting
-part under `data`:
-
-```json
-{
-  "sale_address": "ct_...",
-  "token": {},
-  "data": {}
-}
-```
+Both events are an envelope with the token's `sale_address` at the top level and the payload
+under `data`.
 
 ### `token-updated`
 
-`data` is a **partial `TokenDto`**. The app merges it over the token it already holds rather than
-replacing it:
+```json
+{ "sale_address": "ct_...", "data": {} }
+```
+
+There is **no `token` key** on this event. `data` is the live-price read that was just written to
+the token row, and it is a fixed, known subset of `TokenDto` — not an arbitrary partial. The
+producer is `TokensService.getTokeLivePrice`, and it returns exactly these keys:
+
+| Key | Type | Unit |
+| --- | --- | --- |
+| `price` | string | AE |
+| `price_data` | `PriceDto` | AE |
+| `sell_price` | string | AE |
+| `sell_price_data` | `PriceDto` | AE |
+| `market_cap` | string | aettos |
+| `market_cap_data` | `PriceDto` | aettos |
+| `total_supply` | string | base units |
+| `circulating_supply` | string | base units |
+| `dao_balance` | string | aettos |
+| `address` | string | the AEX-9 contract |
+| `name`, `symbol` | string | from the sale contract's `metaInfo` |
+| `beneficiary_address`, `bonding_curve_address`, `owner_address` | string | from `metaInfo` |
+
+Nothing else is on it. In particular `rank`, `trending_score`, `holders_count`, `tx_count`,
+`collection_info`, `performance` and `created_at` are **never** pushed — those change on their own
+schedules, and the app refetches `/api/tokens/{address}/rankings` and the holders endpoint
+separately, throttled to at most once every 15 seconds per `sale_address` so that a burst of
+trades collapses into a single refetch.
+
+The BCL-plugin producer strips `undefined` values before broadcasting, so a field the chain read
+failed to return is absent rather than null. Merge, do not replace:
 
 ```js
 const newTokenData = { ...currentTokenData, ...message.data };
 ```
 
-So treat missing fields as unchanged, not as null. Ranking and holder counts are **not** in the
-push payload — the app refetches `/api/tokens/{address}/rankings` and the holders endpoint
-separately, throttled to at most once every 15 seconds per `sale_address`, so that a burst of
-trades collapses into a single refetch.
-
-### `token-transaction`
-
-`data` carries the trade fields and `token` carries the token. The app spreads them into one
-object and runs its usual transaction normalisation — see the field-alias note on
-[Transactions](/api-reference/transactions) — then prepends the row to its cached
-`GET /api/transactions` page and bumps `meta.totalItems`.
-
 ### `token-history`
 
-`data` carries the fields a chart needs:
+```json
+{ "sale_address": "ct_...", "data": {}, "token": {} }
+```
 
-| Field | Type | Meaning |
+This one **does** carry `token` — the full token row the trade belongs to. `data` is the
+transaction record that was just persisted, with exactly the fields of the row returned by
+`GET /api/transactions`:
+
+| Field | Type | Notes |
 | --- | --- | --- |
-| `buy_price` | `PriceDto` | Price at the tick, keyed by currency |
-| `volume` | string | Trade volume, parsed with `parseInt` and added to the current candle |
-| `market_cap` | `PriceDto` | Market cap at the tick, keyed by currency |
+| `sale_address` | string | repeats the envelope's |
+| `tx_type` | string | `buy`, `sell` or `create_community` |
+| `tx_hash` | string | `th_...` |
+| `block_height` | number | |
+| `address` | string | the trader's `ak_...` |
+| `volume` | string | **whole tokens** |
+| `protocol_reward` | string | whole tokens |
+| `amount` | `PriceDto` | **AE** |
+| `unit_price` | `PriceDto` | AE |
+| `previous_buy_price` | `PriceDto` | AE |
+| `buy_price` | `PriceDto` | AE |
+| `total_supply` | string | whole tokens |
+| `market_cap` | `PriceDto` | **AE**, not aettos |
+| `created_at` | string | ISO 8601 |
+| `verified` | boolean | |
+
+That list is `TransactionData` in
+`superhero-api/src/plugins/bcl/services/transaction-data.service.ts`. Note the unit trap: the
+`market_cap` here is in AE, while the `market_cap` on the same event's `token` object is in
+aettos.
 
 The candlestick chart reads `data.buy_price[convertTo]` and `data.market_cap[convertTo]`, using
 the same nine currency codes as the REST API. It updates the current candle when the tick is
-inside the active interval and opens a new one otherwise.
+inside the active interval and opens a new one otherwise. The live-trades list spreads `data` and
+`token` into one object, runs the usual transaction normalisation — see the field-alias note on
+[Transactions](/api-reference/transactions) — then prepends the row to its cached
+`GET /api/transactions` page and bumps `meta.totalItems`.
 
-### `token-created`
+**Only live-indexed trades are pushed.** The emit is gated on
+`syncDirection === SyncDirectionEnum.Live`, so backfill and reorg re-processing are silent. A
+historical gap you notice must be closed over REST.
 
-Fires with the same envelope when a new token sale appears. The app subscribes to it globally for
-its "new tokens" surface.
+## The server ignores everything you send
 
-## There is no server-side subscription
+The token gateway has **no `@SubscribeMessage` handlers at all**, and that is deliberate. The
+source says why:
 
-This is the quirk. The client holds a `subscribersQueue` and, on connect, emits each queued
-message as `socket.emit('message', { payload: channel, target: saleAddress })` — but **nothing in
-the current code ever pushes to that queue.** `subscribeForChannel()` only registers a local
-callback.
+> There are intentionally no `@SubscribeMessage` handlers here. Previously the gateway relayed
+> any client-sent message straight back to every connected client, which let anonymous callers
+> poison the UI with fabricated prices/events. All emissions must originate from server-side
+> services that have validated the payload.
 
-The practical consequence: the app never tells the server what it wants. The server pushes every
-event on all four channels to every connected client, and filtering by `sale_address` happens
-entirely in the browser.
+So the answer to the long-standing question about `socket.emit('message', { payload, target })` —
+the code path the web app carries but never exercises — is **no**. The server does not accept it,
+does not scope anything to it, and does not answer it. It is dropped. The client's
+`subscribersQueue` is dead code twice over: nothing pushes to it, and the server would ignore it
+if something did.
 
 Two things follow if you are building a client:
 
 - **You do not need to subscribe.** Connect and listen; events arrive.
-- **You will receive everything.** On a busy market that is a lot of traffic for one token's
-  worth of interest. Filter on `sale_address` yourself.
+- **You will receive everything.** Every token's updates and every live trade, to every client.
+  On a busy market that is a lot of traffic for one token's worth of interest. Filter on
+  `sale_address` yourself, in your own process.
 
-Whether the server honours a `message` emit of `{ payload, target }` is untested — the code path
-exists but is dead. See [Open questions](#open-questions).
+There is no way to reduce that fan-out from the client side today. If per-token scoping matters
+for your bandwidth, the alternative is to poll the REST endpoint for the one token instead.
 
 ## Reconnection and lifecycle
 
@@ -144,9 +206,26 @@ Socket.IO handles reconnection itself; the client adds almost nothing on top:
 - `disconnect()` tears down the socket and removes the listeners.
 
 There is no backpressure handling, no message buffering across a disconnect and no sequence
-number. **Events that occur while you are disconnected are lost.** After a reconnect, re-read the
-REST endpoint to resynchronise rather than assuming the stream is continuous — which is exactly
-what the app's throttled refetch does.
+number. **Events that occur while you are disconnected are lost.**
+
+### Delivery is at-most-once, by design
+
+This is not an inference from a missing feature. The notification gateway's own header states the
+contract in as many words:
+
+> Real-time delivery for the web feed. Best-effort by design: the persisted feed is the source of
+> truth, so a dropped emit (no open tab, or — once the app is scaled past one replica — a socket
+> on a different instance with no Redis adapter) is self-healing because the client re-lists the
+> feed on (re)connect.
+
+The token gateway works the same way and has less to fall back on: a plain `server.emit` to
+whoever happens to be connected, no acknowledgement, no persistence of the emit, no replay. The
+parenthetical about replicas matters for both — with more than one container and no Socket.IO
+Redis adapter, an event emitted on instance A never reaches a client connected to instance B.
+
+So: **treat the socket as a hint that something changed, and the REST API as the truth.** After
+any reconnect, re-read the endpoint rather than assuming the stream was continuous — which is
+exactly what the app's throttled refetch does.
 
 ## A minimal live-trades client
 
@@ -159,9 +238,10 @@ const socket = io('https://api.superhero.com', { autoConnect: false });
 socket.on('connect', () => console.log('connected'));
 socket.on('disconnect', () => console.log('disconnected — refetch on reconnect'));
 
-socket.on('token-transaction', (message) => {
+socket.on('token-history', (message) => {
   if (message.sale_address !== SALE_ADDRESS) return;
-  console.log('trade', message.data);
+  // data.amount and data.unit_price are already in AE; volume is in whole tokens
+  console.log('trade', message.data.tx_type, message.data.volume, 'for', message.data.amount.ae, 'AE');
 });
 
 socket.on('token-updated', (message) => {
@@ -196,7 +276,8 @@ transports: ['polling'] with upgrade: false
 | Authentication | None | Socket.IO `auth.token`, from the feed session flow |
 | Transport | Polling, upgrading to WebSocket | **Polling only**, upgrade explicitly disabled |
 | Reconnection | Library default | `reconnectionAttempts: 5`, plus the app's own recovery ladder |
-| Events | `token-created`, `token-updated`, `token-transaction`, `token-history` | `notification`, `unread-count` |
+| Events | `token-updated`, `token-history` | `notification`, `unread-count` |
+| Fan-out | Broadcast to everyone | Only to the proven address's own room |
 
 The upgrade is disabled deliberately. The source records the diagnosis: the browser's WebSocket
 to the backend opens at the engine level but never delivers the Socket.IO namespace CONNECT,
@@ -206,7 +287,39 @@ manager-level options that Socket.IO would otherwise ignore when reusing a manag
 
 The token comes from the feed session flow described in
 [Conventions](/api-reference/conventions#authentication): challenge, wallet signature, then a bearer token
-cached in `localStorage`. The REST side of the same subsystem:
+cached in `localStorage`.
+
+### What the server does with the handshake
+
+`NotificationsGateway.handleConnection` runs four checks, in order, and **disconnects the socket**
+rather than erroring on any failure:
+
+1. **Per-IP handshake cap.** At most 30 handshake attempts per source IP per rolling minute
+   (`NOTIF_SOCKET_MAX_HANDSHAKES_PER_IP_PER_MIN`), counted before any session lookup so a flood of
+   junk tokens costs nothing. The IP is resolved the same way Express resolves `req.ip`, honouring
+   `TRUST_PROXY`.
+2. **Token extraction.** `handshake.auth.token` first, then an `Authorization: Bearer` header. No
+   token means immediate disconnect.
+3. **Session resolution.** The token is an opaque 32-byte random hex string mapped to its owner
+   address in Redis, minted by `POST /api/notifications/{address}/feed/session` and valid for
+   **7 days** by default (`NOTIF_FEED_SESSION_TTL_MS`). It is not a JWT — it carries no claims and
+   is instantly revocable server-side, which is what `DELETE .../feed/session` does. An unknown or
+   expired token means disconnect.
+4. **Per-address connection cap.** At most 10 concurrent sockets per address
+   (`NOTIF_SOCKET_MAX_CONNS_PER_ADDRESS`).
+
+On success the socket joins a Socket.IO room named after the proven address, and every emit is
+addressed to that room — so one address's notifications can never reach another's sockets. Like
+the token gateway, this namespace has **no `@SubscribeMessage` handlers**: clients read history
+and mark items read over the authenticated REST endpoints, never over the socket.
+
+`emitToAddress` sends `notification` with a feed item; `emitUnreadCount` sends `unread-count` with
+`{ count }`.
+
+The persisted feed behind it is a convenience cache, not a system of record: rows are pruned after
+90 days and trimmed to the 500 most recent per address
+(`NOTIF_FEED_RETENTION_DAYS`, `NOTIF_FEED_MAX_ROWS_PER_ADDRESS`), and a feed page is capped at 50
+items. The REST side of the same subsystem:
 
 ```text
 POST /api/notifications/{address}/feed/challenge
@@ -229,7 +342,7 @@ by default), not on this socket. Chain events are also absent; for those, watch 
 
 ## Read more
 
-- [Transactions API](/api-reference/transactions) — the REST form of the `token-transaction` payload, and the field aliases to normalise
+- [Transactions API](/api-reference/transactions) — the REST form of the `token-history` payload, and the field aliases to normalise
 - [Tokens API](/api-reference/tokens) — the full `TokenDto` that `token-updated` sends partial updates for
 - [API Conventions](/api-reference/conventions) — base URLs, the `PriceDto` currency keys and the units rule
 - [Node & Middleware](/api-reference/node-and-middleware) — for chain-level events rather than Superhero events
@@ -238,14 +351,10 @@ by default), not on this socket. Chain events are also absent; for those, watch 
 
 ## Open questions
 
-- **Does the server accept a `message` emit of `{ payload, target }` to scope a subscription?**
-  The client has the code and never uses it. If the server does support it, a per-token
-  subscription would cut a lot of traffic. Emit one and see whether the global stream stops.
-- **What is the complete field list of each `data` payload?** Every consumer in the app reads a
-  handful of fields off an `any`. `token-updated` is a partial `TokenDto`, but which subset the
-  server actually sends is unverified.
-- **Is there a `wss://` endpoint that bypasses the Socket.IO polling handshake?** The CSP
-  allowlist implies the upgrade happens, but no source states whether a plain WebSocket client
-  can connect without Socket.IO's protocol framing. It almost certainly cannot.
-- **Are messages delivered at-least-once or at-most-once?** No sequence number, no acknowledgement
-  and no replay-on-reconnect exists in the client, so assume at-most-once and reconcile over REST.
+- **Is the deployed API more than one container, and does it run a Socket.IO Redis adapter?** The
+  gateways' own comments flag this as the case where an emit reaches only the clients connected to
+  the instance that produced it, and the connection and handshake caps are both documented in the
+  source as "single-container deploy" in-memory counters. Nothing in the repository says how
+  `api.superhero.com` is actually deployed. Only the API operators can answer it. If the answer is
+  "several replicas, no adapter", the at-most-once advice above becomes considerably more than a
+  formality.

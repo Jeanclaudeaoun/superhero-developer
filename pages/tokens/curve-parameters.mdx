@@ -12,7 +12,67 @@ AE. Mixing those three conventions is how implementations end up off by a factor
 pins each one down and gives a reference implementation that agrees with the deployed contract.
 
 Read [Bonding Curves](/tokens/bonding-curve) first for the formula itself. This page is about the
-units it is expressed in.
+units it is expressed in, the deployed integers behind them, and the integer arithmetic the
+contract actually performs.
+
+## The deployed constants
+
+Every number below is a `let`-bound constant at the top of
+`bcl-contracts/contracts/BondingCurveExponential.aes`. They are compile-time constants, not
+deployment parameters, so every curve deployed from this source carries the same values.
+
+| Constant | Integer | In curve terms |
+| --- | --- | --- |
+| `a` | `10^15` | `0.001` — the exponential's scale factor, in aettos |
+| `k` | `10^10` | `1e-8` — the growth rate per whole token of supply |
+| `initial_price` | `10^11` | `0.0000001 AE` — the spot price at supply zero |
+| `decimals` | `10^18` | The fixed-point scale, matching aettos and the token's own decimals |
+| `minimum_count` | `10^12` | The smallest tradable amount: `10^-6` tokens |
+| `sell_return_percentage` | `9950` | 99.50% |
+| `sell_return_precision` | `10000` | The denominator that `9950` is a percentage of |
+
+Two derived values are also entrypoints: `curve_type()` returns the string
+`"TAYLOR_EXPONENTIAL_V1"`, and `supported_decimals()` returns `18`.
+
+The scaling rule the contract is built on is stated in the repository's `Sophia-adaptation.md`:
+for a curve `f(x) = α·e^(β·x) − γ`, the constants are `a = α × 10^18`, `k = β × 10^18` and
+`initial_price = (α − γ) × 10^18`. With `α = 0.001`, `β = 1e-8` and `γ = 0.0009999` that gives
+exactly the three integers above. The `c = 0.0009999` offset never appears in the contract — it is
+`a − initial_price`, reconstructed by the arithmetic rather than stored.
+
+### `minimum_count` is smaller than it looks
+
+`calculate_price` opens with `require(count >= minimum_count, "MINIMUM_TOKENS_REQUIRED")`. Because
+`minimum_count` is `10^12` **aettos of token**, and a token has 18 decimals, the floor is
+`10^12 / 10^18 = 10^-6` tokens — one millionth of a token. It exists to keep a trade from rounding
+to zero inside the integer arithmetic, not to impose a meaningful minimum order size. Any trade a
+person would actually make clears it by many orders of magnitude.
+
+It does bite in one place: passing a **whole-token** count where the contract expects token decimal
+units. Ask for 5 tokens by sending `5` instead of `5000000000000000000` and the call aborts with
+`MINIMUM_TOKENS_REQUIRED` rather than silently buying five attotokens.
+
+### The sell factor, and one broken getter
+
+`calculate_sell_return` multiplies the curve integral by `sell_return_percentage` and divides by
+`sell_return_precision` — `9950 / 10000`, that is `0.995`. It reads the two `let`-bound constants
+directly, so **the on-chain sell math is correct**.
+
+The getters are not. `BondingCurveExponential.aes` declares:
+
+```sophia
+entrypoint get_sell_return_percentage() = sell_return_percentage  // 9950
+entrypoint get_sell_return_precision()  = sell_return_percentage  // 9950 — should be sell_return_precision
+```
+
+`get_sell_return_precision()` returns the *percentage* constant. An off-chain caller that derives
+the sell factor as `get_sell_return_percentage() / get_sell_return_precision()` computes
+`9950 / 9950 = 1.0` and overestimates every sell return by 0.5%. Nothing on-chain reads those
+getters, so no contract behaviour is affected and no funds are at risk — the blast radius is
+entirely off-chain code that trusts the pair.
+
+**Hardcode `10000` as the precision, or read the value from `sell_return()` on the sale contract
+instead of reconstructing it.**
 
 ## The three unit systems
 
@@ -36,11 +96,18 @@ There are two decimal figures, and they are read from two different contracts:
 | The bonding curve | `supported_decimals()` | The scale the curve's own arithmetic expects |
 | The AEX-9 token | `meta_info().decimals` | The scale of balances, transfers and allowances |
 
-In practice both are 18, matching AE itself, and the two code paths pick different sources for the
-same value — `superhero-token-create.mjs` reads `supported_decimals()` from the curve,
+They cannot disagree. `AffiliationBondingCurveTokenSale.init` asserts
+`require(decimals == bonding_curve.supported_decimals(), "BONDING_CURVE_SUPPORTED_DECIMALS_MISSMATCH")`,
+so a sale whose token decimals differ from its curve's cannot be deployed at all. Both are 18 for
+every token the deployed factory creates: `CommunityFactory.create_community` passes a hardcoded
+`decimals() = 18` to the sale, and `BondingCurveExponential.supported_decimals()` returns `18`.
+
+The two code paths still pick different sources for the same value —
+`superhero-token-create.mjs` reads `supported_decimals()` from the curve,
 `superhero-token-swap.mjs` reads `meta_info().decimals` from the token contract. **Read one of them
-rather than hardcoding 18.** A collection deployed with a different token decimals value would break
-any code that assumes it.
+rather than hardcoding 18.** A future curve implementation with a different `supported_decimals()`
+would break any code that assumes it, and the `init` check would let such a pair deploy quite
+happily.
 
 `GET /api/tokens/{address}` also returns `decimals` (as a string) alongside `total_supply`. Note that
 `total_supply` from the API is already in token decimal units — the web app divides it by 10^18
@@ -52,7 +119,8 @@ Everything below takes and returns plain integers. Nothing is a float.
 
 | Call | Arguments | Returns |
 | --- | --- | --- |
-| `BondingCurve.buy_price(total_supply)` | supply in token decimal units | spot price, aettos per token |
+| `BondingCurve.buy_price(total_supply)` | supply in token decimal units | `Frac.ceil(buy_curve(supply))` — see the warning below |
+| `BondingCurve.sell_price(total_supply)` | supply in token decimal units | `Frac.floor(sell_curve(supply))` — see the warning below |
 | `BondingCurve.calculate_buy_price(total_supply, count)` | both in token decimal units | total cost, aettos |
 | `BondingCurve.calculate_sell_return(total_supply, sell_tokens)` | both in token decimal units | total return, aettos |
 | `BondingCurve.buy_curve(x)` | supply in token decimal units | `Frac.frac` |
@@ -79,8 +147,28 @@ const countTokenDecimals = toTokenDecimals(5, 0n, 18n);
 ```
 
 `denominationDecimals` is the scale of the number you are holding (0 for a whole-token count) and
-`decimals` is the scale the contract wants. Passing `5` where `5000000000000000000` was expected
-buys five *attotokens*, costs a rounding error's worth of AE, and looks like a silently failed trade.
+`decimals` is the scale the contract wants. Passing `5` where `5000000000000000000` was expected is
+below `minimum_count`, so the call aborts with `MINIMUM_TOKENS_REQUIRED` rather than buying five
+attotokens.
+
+### Do not use `buy_price()` or `sell_price()` as a price
+
+`buy_price(total_supply)` is `Frac.ceil(buy_curve(total_supply))` and `sell_price(total_supply)` is
+`Frac.floor(sell_curve(total_supply))`. `buy_curve` returns AE per whole token — equivalently,
+aettos per attotoken — and rounding that ratio to an integer destroys it:
+
+| Supply (tokens) | `buy_curve` value | `buy_price()` returns | `sell_price()` returns |
+| --- | --- | --- | --- |
+| 0 | 1.0e-7 | 1 | 0 |
+| 1,000,000 | 1.015017e-5 | 1 | 0 |
+| 10,000,000 | 1.052709e-4 | 1 | 0 |
+| 690,000,000 | 0.99127 | 1 | 0 |
+| 700,000,000 | 1.09563 | 2 | 1 |
+
+`buy_price()` stays at `1` until the curve value passes `1 AE` per token, which needs a supply of
+roughly `6.9e8` tokens; `sell_price()` floors to `0` below that. For any real quote use
+`calculate_buy_price` / `calculate_sell_return` on the curve, or `price` / `sell_return` on the sale
+contract. Use `buy_curve(x)` if you want the spot value as an exact rational.
 
 ## `Frac.frac`
 
@@ -122,10 +210,105 @@ Three rules from the Sophia standard library carry over to anything you write ag
 For pricing a trade you rarely need `buy_curve` at all: `calculate_buy_price` and
 `calculate_sell_return` already do the integration and hand you aettos.
 
-## Reference implementation
+## What the contract actually computes
 
-This computes the same number the contract does, using the exact antiderivative rather than a
-numerical integration. Supply and count go in as whole tokens; the result comes out as aettos.
+`calculate_price` does **not** evaluate `e^x`. It evaluates a bounded Maclaurin expansion of it in
+integer arithmetic, and the closed form on [Bonding Curves](/tokens/bonding-curve) is the idealised
+curve that expansion approximates. The whole of the pricing logic is five lines:
+
+```sophia
+function calculate_price(total_supply : int, count : int) =
+  require(count >= minimum_count, "MINIMUM_TOKENS_REQUIRED")
+  let current_supply_exponent = (k * total_supply)
+  let next_supply_exponent    = (k * (total_supply + count))
+  (initial_price * count) / decimals
+    + ((a * (mc2(next_supply_exponent) - mc2(current_supply_exponent))) / (k * decimals))
+
+// Maclaurin expansion of e^x starting at the quadratic term
+function mc2(x : int) = exp_helper(x, x, 0, 2, decimals * decimals)
+
+function exp_helper(x : int, term : int, sum : int, i : int, scale : int) : int =
+  if (i > 100 || term < 1)
+    sum
+  else
+    let next_term = (term * x) / (i * scale)   // x^i / i!
+    exp_helper(x, next_term, sum + next_term, i + 1, scale)
+```
+
+Three properties follow, and each one matters if you are reimplementing this:
+
+1. **The series is truncated twice.** It stops at `i > 100`, and it stops as soon as a term floors
+   to `0` under integer division. In the supply range these tokens trade in, the second bound always
+   fires first — the terms collapse long before the hundredth.
+2. **`mc2` starts at the quadratic term.** It returns `scale · (e^z − 1 − z)` rather than
+   `scale · e^z`, where `z = k·supply / 10^18` is the curve exponent. The missing linear term is
+   what the `(initial_price * count) / decimals` summand restores; that is where the `−0.0009999`
+   offset of the closed form comes from.
+3. **Every division floors, and the order is load-bearing.** `(term * x) / (i * scale)` divides once,
+   after both multiplications. Splitting it into `term * x / i / scale` or pre-scaling `x` changes
+   the truncation and the answers drift apart.
+
+`sell_price` is not a separate curve evaluation: `calculate_sell_return(supply, n)` is
+`calculate_price(supply − n, n) × 9950 / 10000`, floored.
+
+## Reference implementation — exact
+
+This is a line-for-line replica in `BigInt`. It returns the same integer the contract returns, not
+an approximation of it, because it performs the same floor divisions in the same order. `BigInt`
+division truncates toward zero, which matches Sophia's `/` for the non-negative values used here.
+
+```js
+const A                      = 10n ** 15n;
+const K                      = 10n ** 10n;
+const INITIAL_PRICE          = 10n ** 11n;
+const DECIMALS               = 10n ** 18n;
+const MINIMUM_COUNT          = 10n ** 12n;
+const SELL_RETURN_PERCENTAGE = 9950n;
+const SELL_RETURN_PRECISION  = 10000n;   // NOT get_sell_return_precision(), which is broken
+const SCALE                  = DECIMALS * DECIMALS;
+
+function expHelper(x, term, sum, i, scale) {
+  while (i <= 100n && term >= 1n) {
+    term = (term * x) / (i * scale);     // one division, after both multiplications
+    sum += term;
+    i += 1n;
+  }
+  return sum;
+}
+
+const mc2 = (x) => expHelper(x, x, 0n, 2n, SCALE);
+
+/** Aettos to buy `count` (token decimal units) from `totalSupply` (token decimal units). */
+export function calculateBuyPrice(totalSupply, count) {
+  if (count < MINIMUM_COUNT) throw new Error('MINIMUM_TOKENS_REQUIRED');
+  const current = K * totalSupply;
+  const next    = K * (totalSupply + count);
+  return (INITIAL_PRICE * count) / DECIMALS
+       + (A * (mc2(next) - mc2(current))) / (K * DECIMALS);
+}
+
+/** Aettos returned for burning `sellTokens` down from `totalSupply`. */
+export function calculateSellReturn(totalSupply, sellTokens) {
+  return (calculateBuyPrice(totalSupply - sellTokens, sellTokens)
+          * SELL_RETURN_PERCENTAGE) / SELL_RETURN_PRECISION;
+}
+
+const T = 10n ** 18n;  // one whole token
+calculateBuyPrice(0n, 1000n * T);                  // 105000016666708n
+calculateBuyPrice(10_000_000n * T, 1000n * T);     // 105276443948657564n
+calculateSellReturn(10_001_000n * T, 1000n * T);   // 104750061728914276n
+```
+
+Note the last line: a sell is quoted against the supply that exists **after** your buy, so the
+round trip of 1,000 tokens at supply 10,000,000 costs `105276443948657564` aettos of curve value and
+returns `104750061728914276` — the 0.5% sell spread, before the affiliation fee on the way in. See
+[Fees & Slippage](/tokens/fees-and-slippage).
+
+## Reference implementation — floating point
+
+If you only need an estimate — a chart, a slider, a sanity check — the closed form is faster and
+easier to read. It is not exact at the aettos level and cannot be. Supply and count go in as whole
+tokens; the result comes out as aettos.
 
 The antiderivative of `buy(x) = A·e^(K·x) − C` is `F(x) = (A/K)·e^(K·x) − C·x`, so the cost of
 minting `n` tokens from supply `S` is `F(S + n) − F(S)`. Written that way it is numerically terrible:
@@ -158,13 +341,17 @@ export function sellReturnAettos(supply, count) {
   return new BigNumber(costAe(supply - count, count) * SELL_FACTOR).multipliedBy(DECIMALS);
 }
 
-// Worked examples from the bonding curve page:
-costAe(0, 1000);           // 0.000105000016666912   (exact: 0.000105000016666708)
-costAe(10_000_000, 1000);  // 0.105276443948658      (exact: 0.105276443948658)
+// Worked examples, against the contract's own integer result:
+costAe(0, 1000);           // 0.000105000016666912   (contract: 0.000105000016666708)
+costAe(10_000_000, 1000);  // 0.105276443948658      (contract: 0.105276443948657564)
 
-buyPriceAettos(0, 1000).toFixed(0);          // "105000016666912" aettos
-buyPriceAettos(10_000_000, 1000).toFixed(0); // "105276443948657760" aettos
+buyPriceAettos(0, 1000).toFixed(0);          // "105000016666912"    vs 105000016666708
+buyPriceAettos(10_000_000, 1000).toFixed(0); // "105276443948657760" vs 105276443948657564
 ```
+
+The residual — a couple of hundred aettos on each — is double rounding, not a difference in the
+model. The contract's own truncated Taylor series tracks the ideal closed form to within `4e-19 AE`
+across this range, so the disagreement above is entirely the JavaScript double.
 
 The naive `F(S + n) − F(S)` formulation returns `0.00010500001371838152` for the first of those —
 correct to only seven significant figures, because of exactly the cancellation described above.
@@ -205,9 +392,10 @@ exactly that: it uses the client-side bisection only to pick a token count, then
 
 ## Reading the constants yourself
 
-`get_k()`, `get_initial_price()` and `get_minimum_count()` return the deployed integers behind
-`k`, the launch price and the minimum purchase size. They are plain read-only entrypoints, so a
-dry-run call costs nothing:
+The constants documented at the top of this page come from
+`bcl-contracts/contracts/BondingCurveExponential.aes`. To confirm that the curve a particular token
+points at is that source rather than a different deployment, read them back. They are plain
+read-only entrypoints, so a dry-run call costs nothing:
 
 ```js
 import { AeSdk, Node, Contract } from '@aeternity/aepp-sdk';
@@ -237,9 +425,11 @@ console.log({
 });
 ```
 
-`get_sell_return_percentage()` and `get_sell_return_precision()` are a pair: the sell factor is
-`percentage / precision`, which the whitepaper states as 0.995. Expect something like 995 and 1000,
-but read both and divide rather than assuming the precision.
+Against the deployed source that returns `curve_type() == "TAYLOR_EXPONENTIAL_V1"` you should get
+`k = 10000000000`, `initial_price = 100000000000`, `minimum_count = 1000000000000`,
+`supported_decimals = 18`, and **`9950` from both sell-return getters** — the second of which is the
+bug described above, not a curve with a different precision. Anything else means you are reading a
+different curve contract, and every figure on this page needs re-deriving for it.
 
 You can also read them without any code from [aeScan](https://aescan.io) by opening the contract at
 `bonding_curve_address` and calling the read-only entrypoints there.
@@ -251,10 +441,6 @@ You can also read them without any code from [aeScan](https://aescan.io) by open
 - [Calling contracts](/contracts/calling-contracts) — SDK setup, ACIs and dry-run calls in general
 - [Bonding curve contract](/contracts/bonding-curve) — entrypoint-level reference
 - [AEX-9 tokens](/contracts/aex9) — the token standard whose `decimals` you are reading
+- [Fees & Slippage](/tokens/fees-and-slippage) — what `price()` adds on top of the curve integral computed here
 - [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) — the authoritative description of the `Frac` namespace
 - [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/) — `Contract.initialize`, ACI use and dry-run calls
-
-## Open questions
-
-- **The live values of `get_k()`, `get_initial_price()` and `get_minimum_count()` are unverified.** They could not be read while writing this page: no æternity node was reachable from the authoring environment. The formula constants documented here (`a = 0.001`, `k = 1e-8`, `c = 0.0009999`, sell factor `0.995`) come from the whitepaper and from the two off-chain implementations that mirror the contract. To settle them, run the snippet above against `https://mainnet.aeternity.io`, or open the curve contract on aeScan and call the entrypoints there. Publish the integers together with the precision constant they are scaled by — `get_k()` in particular must be a scaled integer, since `k = 1e-8` is not representable as one.
-- Whether `TokenSale.price(count)` already includes the 0.5% affiliation fee, or returns the bare curve integral, is not settled by the ACI alone. The web app adds the fee itself for display (`calculateBuyPriceWithAffiliationFee` multiplies by 1.005, with the percentage read from the factory's `fee_percentage()` / `fee_precision()`), while `superhero-token-swap.mjs` sends `price()` plus a 3% slippage buffer and lets the contract sort it out. Reading `fee_percentage()` and `fee_precision()` off the factory and comparing `price(n)` with `calculate_buy_price(supply, n)` for the same token would answer it in one call each.

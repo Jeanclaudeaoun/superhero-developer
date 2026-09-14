@@ -14,7 +14,19 @@ There is no single address. Community tokens are deployed by the factory and res
 token is at `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` on mainnet, or from
 `factory.protocol_dao_token()`.
 
-The ACI is `superhero-agent-skill/contracts/FungibleTokenFull.aci.json`.
+The ACI is `superhero-agent-skill/contracts/FungibleTokenFull.aci.json`. This is the one
+contract in the Superhero suite whose Sophia source is not vendored anywhere — it is pulled in
+as a dependency. `bcl-contracts/package.json` pins it exactly:
+
+```text
+"aeternity-fungible-token": "git+https://git@github.com/aeternity/aeternity-fungible-token#v2.2.0"
+```
+
+and the BCL contracts include it by path, as
+`include "../node_modules/aeternity-fungible-token/contracts/fungible-token-full.aes"`. So the
+authoritative text for anything the ACI does not answer is
+`contracts/fungible-token-full.aes` at tag **v2.2.0** of that repository. The `tipping-contract`
+repository pins the same tag.
 
 ## Entrypoints
 
@@ -98,6 +110,35 @@ Superhero app passes `18n` explicitly when converting an initial buy count
 
 So one whole token is `1000000000000000000` base units, the same scale as AE itself. Every
 `value`, `count` and `amount` in these contracts is in base units.
+
+The 18 is also enforced in two places on chain. `CommunityFactory` hardcodes it —
+`function decimals() = 18` — and passes it to every token it creates, and the sale contract
+refuses a curve calibrated for anything else:
+
+```sophia
+require(decimals == bonding_curve.supported_decimals(),
+        "BONDING_CURVE_SUPPORTED_DECIMALS_MISSMATCH")
+```
+
+`BondingCurveExponential.supported_decimals()` returns `18`.
+
+## How a community token is constructed
+
+The sale contract creates it, in its own `init`:
+
+```sophia
+token_contract = Chain.create(name, decimals, symbol, None) : FungibleTokenFull
+```
+
+Three consequences worth knowing before you integrate:
+
+- **The `owner` is the sale contract**, because `Chain.create` runs inside it. That is what
+  authorises `mint` on a buy and `burn` on a sell, and it is why nobody else can mint.
+- **`initial_owner_balance` is `None`**, so a new community token starts at zero total supply.
+  Every token in existence was minted by a buy.
+- **The name and the symbol are the same string.** `CommunityFactory.create_community` passes
+  its `name` argument to both positions. Do not expect `meta_info().name` and
+  `meta_info().symbol` to differ for a community token.
 
 Do not hardcode it anyway. Read `meta_info()` and use the `decimals` field — the ProtocolDAO
 token and any future collection could differ:
@@ -193,17 +234,28 @@ in one response.
 
 ## Open questions
 
-- **Which extensions `aex9_extensions()` actually reports.** The ACI shows the swap
-  entrypoints are present, but the returned list was not read from a deployed contract.
-- **Whether `swap` is used in production.** No Superhero token migration was found in either
-  repository. Check `swapped()` on a deployed community token; a non-empty map means it was
-  used.
-- **Whether `change_allowance` reverts on a negative result.** The ACI allows a negative
-  `value_change`; what happens when the delta would drive the allowance below zero was not
-  read from source.
+All four of these are answerable from one file that is not present here:
+`contracts/fungible-token-full.aes` at tag **v2.2.0** of
+[aeternity/aeternity-fungible-token](https://github.com/aeternity/aeternity-fungible-token),
+which is the exact revision `bcl-contracts` pins. Read that, and all four close at once.
+
+- **Which extensions `aex9_extensions()` actually reports.** The entrypoint exists in the ACI
+  and the presence of `swap`, `mint`, `burn` and the allowance family implies
+  `["allowances", "mintable", "burnable", "swappable"]`, but the literal list is in the source,
+  not the ACI, and was not read.
+- **Whether `change_allowance` reverts on a negative result.** The ACI types `value_change` as a
+  plain `int`, so a negative delta is well-typed. What happens when it would drive the allowance
+  below zero — abort, or clamp — is in the source.
 - **Whether `create_allowance` aborts when an allowance already exists.** The agent skill
-  branches on existence and calls `change_allowance` instead, which implies it does, but the
-  `require` itself was not read. The branch above is correct either way.
+  branches on existence and calls `change_allowance` instead, which strongly implies it does.
+  The allowance example above is correct either way.
+
+One of the original four is now settled negatively: **`swap` is not used anywhere in
+Superhero.** A search across `superhero-api/src` and `superhero/src` for `swap()`, `swapped()`
+and `check_swap` returns no call site in either — every `swap` hit in the backend belongs to the
+DEX, which is unrelated. The AEX-9 migration mechanism exists in the implementation and
+Superhero has never exercised it. If you want to be certain for a particular token, call
+`swapped()` on it; a non-empty map would mean otherwise.
 
 ## Read more
 

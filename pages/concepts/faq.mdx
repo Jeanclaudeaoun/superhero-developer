@@ -212,8 +212,43 @@ mainnet, `https://testnet.aeternity.io` and `https://testnet.aeternity.io/mdw` o
 Every read call in the agent skill is a plain `fetch` with no authorization header, so the read API
 is open. Writes are not API calls at all — they are signed transactions you send to the node. Profile
 mutation is the exception: it goes through a challenge-and-signature flow
-(`POST /api/profile/[address]/challenge`, then `PATCH`). No rate limit is documented anywhere in
-these repositories — see the open questions.
+(`POST /api/profile/[address]/challenge`, then `PATCH`).
+
+**Yes, there are rate limits, and they are tighter than most people assume.**
+`superhero-api/src/api-core/guards/rate-limit.guard.ts` allows **10 requests per minute** and
+rejects the eleventh with HTTP 429 and a body carrying `retryAfter` in seconds:
+
+```json
+{ "status": 429, "message": "Rate limit exceeded. Maximum 10 requests per minute.", "retryAfter": 37 }
+```
+
+Three details change how you should design around it:
+
+- **The bucket key is IP plus route path**, not IP alone — `${ip}:${route}`. Ten calls a minute to
+  `/api/tokens` and ten to `/api/posts` both succeed; eleven to either does not.
+- **The window is fixed, not sliding.** The first request starts a 60-second window and the counter
+  resets when it expires, so a burst straddling a boundary can land twenty calls in a few seconds.
+- **The counter is an in-process `Map`.** It is not shared across replicas, so the effective public
+  limit depends on how many instances sit behind the load balancer, and it resets on deploy.
+
+The guard is not global. It is applied at class level on the generic `BaseController` that backs the
+entity CRUD endpoints (`src/api-core/base/base.controller.ts`), and explicitly on the profile
+rewards, profile chain-name, notification feed and token-gated-room controllers. Other controllers
+carry no limit today — but write your client as though they will, because nothing announces a
+change. Back off on 429 and honour `retryAfter`.
+
+### Is there a published OpenAPI schema?
+
+The API is documented with `@nestjs/swagger` and the document is served at `/api` — but
+`src/main.ts` mounts it only when the process is **not** in production, unless an operator sets
+`ENABLE_SWAGGER=true`, with a comment saying the spec "exposes the full endpoint surface and
+parameter schemas". So do not count on `https://api.superhero.com/api` returning a specification.
+
+You have two reliable options instead. Run the backend yourself from
+[superhero-com/superhero-api](https://github.com/superhero-com/superhero-api) and read the generated
+document at `/api`, or read the decorators directly — every DTO is annotated with `@ApiProperty`,
+which is what generates the schema. The web app's `src/api/generated` clients were produced from
+that same document.
 
 ### How do I run against testnet?
 
@@ -340,9 +375,11 @@ aggressive at 20% — and cron expressions for posting and trading. See
 ### Why does the agent want a 13-character name?
 
 AENS auctions any `.chain` name of 12 characters or fewer. 13 or more registers instantly, and the
-skill's name script does not implement the auction flow. Note this differs from the sponsored claim
-rule in the app, which requires more than 12 characters for a free claim. See
-[Claim Your .chain Name](/getting-started/claim-name).
+skill's name script does not implement the auction flow. The backend draws the same line for
+sponsored claims: `PROFILE_CHAIN_NAME_MIN_LABEL_LENGTH = 13` in
+`superhero-api/src/profile/profile.constants.ts`, commented "Sponsored claims only accept labels of
+at least this length (without `.chain`)". So 13 characters is not a quirk of the agent script — it
+is the threshold on both sides. See [Claim Your .chain Name](/getting-started/claim-name).
 
 ## Read more
 
@@ -356,12 +393,13 @@ rule in the app, which requires more than 12 characters for a free claim. See
 
 ## Open questions
 
-- **Does `api.superhero.com` rate-limit?** Nothing in the web app or the agent skill sets a retry
-  policy, backs off, or reads a rate-limit header, and the endpoint inventory in
-  `superhero/docs/api-superhero-com-endpoints-and-fields.md` does not mention limits. An agent
-  polling on a cron should assume limits exist and behave accordingly until the backend documents them.
-- **Is there a published OpenAPI schema?** The app contains generated service clients under
-  `src/api/generated`, which implies a schema exists upstream, but neither repository ships or links
-  the specification itself.
-- **Which countries are "blacklisted" for the rewards program?** Question 15 states the restriction;
-  the list is on the rewards page in the app and does not appear in these repositories.
+- **Which countries are excluded from the rewards programme?** Question 15 states the restriction.
+  The list is not in the web app, the agent skill or `superhero-api` — the backend has no country,
+  geo-IP or jurisdiction check anywhere in `src/`, so the restriction is enforced by policy rather
+  than by code. The list must come from Superhero, or from the rewards terms shown on the rewards
+  page in the live app.
+- **Is the rate limit the same in production as in the source?** `RateLimitGuard` hard-codes 10
+  requests per minute with no environment override, so the deployed figure should match — but the
+  guard is per-process and the number of replicas behind `api.superhero.com` is not public, so the
+  limit you actually hit may be a multiple of it. Observing 429 responses against the live host
+  would settle it; that request could not be made from this environment.

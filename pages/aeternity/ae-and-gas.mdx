@@ -141,6 +141,30 @@ attached to cover the invitee's redemption gas (`REDEMPTION_FEE_COVER` in
 `superhero-invite.mjs`), so the cost of an invite batch is
 `(amount_ae + 0.001) × count`, plus gas.
 
+That 0.001 AE figure has a counterpart in the contract, and the contract's is larger.
+`AffiliationTreasury.register_invitation_code` enforces its own floor:
+
+```sophia
+let minimum_redemption_fee_cover = 10 ^ 15 // minimal amount to cover redemption tx fees is ~2.01e14 (overpaid by few times to be sure)
+require(redemption_fee_cover >= minimum_redemption_fee_cover, "MINIMUM_REDEMPTION_AND_FEE_NOT_MEET")
+```
+
+`10^15` aettos is **0.001 AE**, so the CLI is sending exactly the minimum the contract will accept.
+More usefully, the comment states a measured number for one real operation: **redeeming an
+invitation costs about 2.01 × 10^14 aettos, or 0.000201 AE**, and the contract deliberately
+over-provisions it about fivefold. It is the only gas figure anywhere in the Superhero stack that
+comes from a measurement rather than an estimate — treat it as your anchor for the order of
+magnitude of a simple stateful contract call.
+
+**Superhero does not override the SDK's gas defaults.** No æternity contract call in the web app
+sets `gasPrice` or `gasLimit`: the only occurrences of those names in `src/` are Ethereum fee
+lookups inside the disabled bridge and buy-with-ETH widgets, a `gas` field on a generated
+`MicroBlock` model, and the display-only reads in `src/features/wallet/tx-summary.ts`. So the
+defaults documented in
+[SDK transaction options](https://github.com/aeternity/aepp-sdk-js/blob/develop/docs/transaction-options.md)
+are what you actually get, and a call that runs out of gas in the app will do so at the SDK's
+default limit.
+
 ## Getting AE
 
 Superhero links its own on-ramp at [superhero.com/get-ae](https://superhero.com/get-ae). For
@@ -157,11 +181,10 @@ testnet, see [Testnet](/getting-started/testnet).
 
 ## Open questions
 
-- The per-action costs above are the agent skill authors' observations, not measurements taken
-  against a known block height and gas price. Measuring a buy and a sell — the two actions with
-  no figure at all — means submitting one of each and reading `gasUsed` and `gasPrice` from the
-  transaction on [æScan](/aeternity/explorers).
-- Whether Superhero ever overrides the SDK's default `gasPrice` or `gasLimit` for its own
-  contract calls is not settled here. `src/features/wallet/tx-summary.ts` only reads the values
-  off a transaction it is asked to display; the call sites that build those transactions would
-  need auditing to answer it.
+- **The per-action costs above are estimates, not measurements.** They are the agent skill authors'
+  observations, without a block height or gas price attached, and no contract determines them — gas
+  depends on the deployed bytecode and the network gas price at execution. Buy and sell have no
+  figure at all. Closing this means submitting one transaction of each kind on mainnet and reading
+  `gasUsed` and `gasPrice` off it in [æScan](/aeternity/explorers), recording the block height
+  alongside. The contract comment quoted above (~0.000201 AE for an invitation redemption) is the
+  only measured number available, and it covers one call shape.

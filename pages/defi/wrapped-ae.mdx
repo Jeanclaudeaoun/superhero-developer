@@ -96,9 +96,12 @@ router allowance up front, or to interact with a pair contract directly.
 
 ## Open questions
 
-- **What is `withdraw`'s second argument for?** The client always passes `null` as
-  `referrer`. Whether the WAE contract can route a referral share on unwrap, and to whom, is
-  defined in `WAE.aes` in `dex-contracts-v2` rather than in anything the app reveals.
+- **What is `withdraw`'s second argument for?** The client always passes `null` as `referrer`, and
+  nothing else in the Superhero stack touches it: `superhero-api` has no WAE module and its only
+  reference to the contract is the address in `src/dex/config/dex-contracts.config.ts`. The answer
+  is in `WAE.aes` in [aeternity/dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) —
+  read `withdraw`'s body for whether a non-`null` referrer diverts any part of the unwrapped amount,
+  and to whom. That repository is not vendored here and could not be fetched from this environment.
 
 ## Read more
 

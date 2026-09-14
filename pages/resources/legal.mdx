@@ -96,15 +96,26 @@ law. Data-subject requests go to `superherowallet@protonmail.com`.
 
 ## The rewards programme has its own terms
 
-The Superhero Rewards Programme is governed separately from the terms of use, and the FAQ states the
-conditions plainly:
+The Superhero Rewards Programme is governed separately from the terms of use. The FAQ says "you
+agree to the terms shown on the rewards page", which reads as though a separate document exists —
+**it does not.** The "terms shown on the rewards page" are a single paragraph of UI copy, stored at
+`trending.inviteView.disclaimer` in `superhero/src/locales/en.json` and rendered on
+`/trends/invite`. There is no standalone rewards agreement, no URL for one, and nothing longer to
+read. In full, the programme reserves:
 
-- Eligibility and rewards "depend on on-chain activity and are not guaranteed."
-- "The program can be paused at any time without notice."
-- "Users from blacklisted countries are not eligible." The list is shown on the rewards page in the
-  app and does not appear in these repositories.
-- "By participating, you agree to the terms shown on the rewards page" — a separate document from
-  the site terms, presented at the point of participation.
+| Clause | What it means for you |
+| --- | --- |
+| "Eligibility and rewards depend on on-chain activity, are not guaranteed and can be paused at any time without notice or liability" | No accrued entitlement. A pause is not a breach |
+| "The right is reserved to disqualify any user from the program" | Discretionary and unappealable, with no stated criteria |
+| "Users from blacklisted countries are not eligible for rewards" | See the open questions — the list is nowhere |
+| "Rewards will be distributed in the form of AE tokens" | Not fiat, not a stablecoin. Value moves with AE |
+| "Rewards sent may be subject to tax reporting. Users are responsible for any tax obligations" | Yours to declare |
+
+What the programme actually rewards is narrower than "activity": the same paragraph scopes it to
+"creating content on other social media platforms (like X) with backlinks and/or invite links,
+referring new users to the platform." The backend implements exactly that — a post qualifies when it
+mentions `superhero.com` or `superhero_chain`
+(`superhero-api/src/profile/profile.constants.ts`).
 
 Claiming is an on-chain transaction and costs gas. See
 [Superhero Rewards Program](/rewards/rewards-program) and [Claiming Rewards](/rewards/claiming).
@@ -114,8 +125,10 @@ Claiming is an on-chain transaction and costs gas. See
 Nothing in the terms grants an API licence, a data licence or a brand licence, and none is published
 separately. Concretely:
 
-- **The read API is open but ungoverned.** `api.superhero.com` requires no key and publishes no rate
-  limit or terms of its own. Build as if limits exist and can change without notice.
+- **The read API is open, rate-limited, and covered by no terms of its own.** `api.superhero.com`
+  requires no key, but the backend enforces 10 requests per minute per IP and route
+  (`superhero-api/src/api-core/guards/rate-limit.guard.ts`). That limit is a code constant, not a
+  published commitment: it can change in any deploy, so build as though it will.
 - **Contract data is public and permissionless.** Reading contract state or events needs no
   permission from anyone, because the chain is public. Your product decisions about *displaying* it
   are yours.
@@ -151,16 +164,20 @@ not create a third party to absorb that.
 
 ## Open questions
 
-- **Where are the rewards programme's own terms published?** The FAQ says they are "shown on the
-  rewards page", but that document is not in these repositories and has no standalone URL here, so
-  it cannot be linked or summarised.
-- **Which countries are excluded from the rewards programme?** The restriction is stated; the list
-  is not, in any source available here.
+All three are questions for Superhero.com LVC at `superherowallet@protonmail.com`. They are legal
+drafting questions, not engineering ones, and no amount of reading the code will answer them.
+
+- **Which countries are excluded from the rewards programme?** The restriction is stated in the
+  disclaimer above; the list is published nowhere. It is not a code-level control either — the
+  backend has no country field, geo-IP lookup or jurisdiction check anywhere in `src/`, so the
+  exclusion is applied by hand or not at all. Only Superhero can produce the list.
 - **Do the terms cover token sales and DAOs?** Section II, "Subject of activity", describes a
   newsfeed of donations and comments plus access to token-swap, wrapping and liquidity contracts. It
   does not mention bonding-curve token sales, community DAOs or the ProtocolDAO token, which are the
-  product's central mechanisms. Whether those are intended to fall under the same section is not
-  determinable from the document as published on 29 September 2025.
+  product's central mechanisms — and the contracts confirm those mechanisms are live, not planned.
+  Whether they are intended to fall under the same section is not determinable from the document as
+  published on 29 September 2025; it needs either an amended Section II or a written clarification.
 - **Are there separate terms for the mobile apps or for Superhero Wallet?** The linked documents
-  address "the Website" and the Interface; no app-store or wallet-specific agreement appears in
-  these repositories.
+  address "the Website" and the Interface. No app-store or wallet-specific agreement appears in any
+  repository, including `superhero-com/superhero-wallet`. The app-store listings themselves are the
+  next place to look, and they could not be fetched from this environment.

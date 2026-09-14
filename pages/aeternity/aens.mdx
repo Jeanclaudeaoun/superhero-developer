@@ -69,11 +69,12 @@ separate protocol operations.
 This is the part most people trip over: short names cannot be bought, only bid on.
 
 - **Format:** first-price auction. The highest bid at close pays what it bid and takes the name.
-- **Starting bid:** scales with length. Shorter names start higher — a four-character name
-  starts in the region of 135 AE, while the floor drops steeply as names get longer.
+- **Starting bid:** scales with length. Shorter names start higher — a four-character name starts
+  around **134.6269 AE**, and the most expensive one-letter names start around **570 AE**, with the
+  floor dropping steeply as names get longer.
 - **Bid increment:** every subsequent bid must be **at least 5% above** the previous bid.
-- **Duration:** also scales with length, counted in key blocks *after the most recent bid*, so
-  each new bid restarts the clock:
+- **Duration:** scales with length, counted in key blocks *after the most recent bid*, so each new
+  bid restarts the clock:
 
 | Name length | Auction timeout | Roughly, at ~3 min per key block |
 | --- | --- | --- |
@@ -82,12 +83,49 @@ This is the part most people trip over: short names cannot be bought, only bid o
 | 5 to 8 | 14,880 blocks | ~31 days |
 | 1 to 4 | 29,760 blocks | ~62 days |
 
+**Ceres changed the extension rule, and the change matters most for long auctions.** From the Ceres
+hard fork, each successful bid extends the auction by **up to 120 key blocks** — the guarantee is
+that there are always at least 120 generations (roughly six hours) left in which to outbid after any
+bid. For a nine-to-twelve-character name, whose base timeout is 480 blocks, that is a shortening of
+the post-bid window; for a one-to-four-character name it replaces a ~62-day wait after every late
+bid with a ~6-hour one. Either way, the practical rule is the same: **after Ceres, a late bid buys
+the competition hours, not weeks.** Check the Ceres section of
+[AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md) before planning a bidding
+strategy around a specific deadline.
+
 A bid is just a claim transaction on a name that already has an auction running, so the same
 preclaim-with-salt discipline applies to bidding as to claiming. Nothing settles until the
-timeout elapses with no higher bid; then the winner's claim takes effect.
+extension window elapses with no higher bid; then the winner's claim takes effect.
 
 Live auctions are browsable on [æScan](https://aescan.io/), which tracks active names, ongoing
 auctions and recent registrations.
+
+### You cannot bid from Superhero
+
+No Superhero surface supports a short name, and each one refuses at a different layer:
+
+| Surface | Behaviour on a name of 12 characters or fewer |
+| --- | --- |
+| Web app profile claim | `validateClaimChainName` returns `chainNameClaimTooShort` for `name.length <= 12`, before any price is computed or any transaction is built (`src/components/modals/ProfileEditModal.tsx`) |
+| Sponsored claim (backend) | Rejected by `SponsoredChainNameLabelPipe`, which requires `PROFILE_CHAIN_NAME_MIN_LABEL_LENGTH` = 13 (`superhero-api/src/profile/validation/`) |
+| Agent CLI | `superhero-name.mjs` refuses with `name_too_short_auction_required` |
+
+So a short name has to be bid on somewhere else — Superhero Wallet's own claim screen, another
+æternity wallet, or `@aeternity/aepp-sdk` directly.
+
+**You do not need the starting-bid coefficients to compute a price.** `getMinimumNameFee(name)` in
+`@aeternity/aepp-sdk` implements the length-to-fee function, and it is what the app itself calls
+when pricing a long-name claim (`src/utils/claimChainName.ts`). For a short name that same call
+returns the auction's starting bid, so:
+
+```js
+import { getMinimumNameFee } from '@aeternity/aepp-sdk';
+
+getMinimumNameFee('abcd.chain'); // starting bid in aettos for a 4-character name
+```
+
+That is the authoritative number for whatever protocol version your SDK targets, which is a better
+answer than a table that goes stale at the next hard fork.
 
 ## Pointers
 
@@ -152,15 +190,11 @@ whatever `MIDDLEWARE_URL` its build is configured with — see [Networks](/aeter
 
 ## Open questions
 
-- The exact starting-bid formula is not reproduced here. The official AENS page gives one worked
-  figure (a four-character name starting around 134.6269 AE) and states that the starting bid is
-  a decreasing function of name length; the coefficients live in
-  [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md) and in the node's own
-  `aens` module, which is where to settle it.
-- Whether the Ceres release changed the post-bid extension from the per-length timeouts above to
-  a flat 120 key blocks is unresolved. Search results reference both, and the two rules give very
-  different auction lengths for a four-character name. Check the Ceres section of the protocol
-  spec before relying on either.
-- Superhero's tooling has no bidding command at all. Whether the web app can bid on a short name,
-  or whether short names must be handled in a different æternity wallet, is not documented in
-  either repository.
+- **The closed-form starting-bid formula is not reproduced here.** Two worked figures are
+  published — about 134.6269 AE for four characters, about 570 AE for the most expensive
+  one-letter names — and `getMinimumNameFee` computes any of them exactly, which is what this page
+  recommends. What is not transcribed is the coefficient table itself, because it is normative and
+  version-dependent: it lives in
+  [AENS.md](https://github.com/aeternity/protocol/blob/master/AENS.md) and in the node's `aens`
+  module. Read it there if you need the formula rather than a value; that file could not be fetched
+  from this environment.
