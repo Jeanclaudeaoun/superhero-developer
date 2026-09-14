@@ -27,10 +27,17 @@ you did not measure is a hypothesis, not a plan.
 | `sell_on_price_drop_percent` | 5 | 12 | 20 |
 | `max_hold_cycles` | 3 | 6 | 12 |
 | Maximum deployed | 15% of balance | 50% | 140% (unreachable) |
-| Entry score threshold (prose only) | above 100,000 | above 50,000 | above 20,000 |
+| Entry score threshold (prose only) | above 100,000 | above 50,000 | above 20,000 — see the warning below |
 | Posting | daily at 09:00, never on a trading cycle | daily at 09:00 plus a per-cycle market summary | every 4 hours, cross-posting about held tokens |
 
-Two things to notice before the detail.
+Three things to notice before the detail.
+
+> **The entry score thresholds are unusable as written.** The trending score the API returns
+> is a normalised value bounded to **0–1**, not a raw activity count. A filter for "score
+> above 20,000" matches no token that has ever existed, so a template applied literally never
+> enters a trade. The thresholds appear in `SKILL.md`, `README.md` and `guides/setup.md`, and
+> all three are wrong the same way. Replace them before running any of these strategies —
+> the section [Fixing the entry threshold](#fixing-the-entry-threshold) below says how.
 
 **Aggressive cannot fully deploy.** Seven positions at 20% of balance each is 140%, which the
 wallet will not fund. The binding constraint is the balance, so in practice aggressive tops
@@ -227,14 +234,28 @@ to add them yourself and tell the agent what they mean.
 
 The missing score threshold is the significant one: it is the entry filter, the single
 parameter that most determines which trades happen, and it is the one the templates do not
-contain. If you use a template as written, supply the threshold separately:
+contain.
+
+## Fixing the entry threshold
+
+The published numbers are not merely unjustified, they are the wrong kind of number. The
+trending score is computed in `superhero-api/src/tokens/tokens.service.ts` as a weighted blend
+of ten signals, each log-normalised against a fixed cap into 0–1, combined with weights that
+sum to 1, then multiplied by a freshness decay that is at most 1. **The result is always
+between 0 and 1.** Nothing can produce 20,000.
+
+The good news is the second half of the question: because every cap and weight is a global
+constant, the score *is* directly comparable across tokens. An absolute threshold is a
+legitimate way to filter — it just has to be a small decimal, and a threshold in that range
+is doing something quite different from what "above 100,000" suggests. Rather than picking
+one blind, prefer a relative filter:
 
 ```json
 {
   "trading": {
     "strategy": "moderate",
     "cron": "0 */4 * * *",
-    "min_trending_score": 50000,
+    "entry_rule": "top 5 by trending_score from the scan, each with a score higher than its previous reading",
     "max_trade_percent_of_balance": 0.1,
     "max_positions": 5,
     "sell_on_score_drop_percent": 25,
@@ -244,8 +265,20 @@ contain. If you use a template as written, supply the threshold separately:
 }
 ```
 
-`min_trending_score` is a name this page is proposing, not one the skill defines. Whatever you
-call it, state it explicitly to the agent.
+This matches what `SKILL.md` actually advises — "a rising trending score means buying pressure
+is accelerating — this is your entry signal" — and it degrades gracefully as the overall
+activity level of the platform changes, which a fixed number does not.
+
+If you do want an absolute floor, derive it from your own data. Run
+`node scripts/superhero-trending.mjs tokens 50`, read the `trending_score` values it returns,
+and set the floor somewhere in the observed distribution. Write down the date you measured it
+and re-check periodically; the caps mean the distribution shifts as the platform grows.
+
+Note also that `sell_on_score_drop_percent` is a *relative* rule — a percentage fall from the
+score at entry — so it is unaffected by this problem and works as written.
+
+Neither `entry_rule` nor `min_trending_score` is a key the skill defines; the templates have
+no entry-filter key at all. Whatever you call it, state it explicitly to the agent.
 
 ## Writing your own
 
@@ -256,8 +289,9 @@ Fork moderate and change one thing at a time. In order of impact:
    shorten it only if you can show the shorter interval earns more than the extra round trips
    cost.
 2. **The entry threshold.** This decides which trades happen at all. A higher bar means fewer,
-   better-supported entries. Because it is missing from the templates, it is also the
-   parameter most likely to be left implicit and applied inconsistently.
+   better-supported entries. Because it is missing from the templates — and because the
+   thresholds quoted in prose are unusable — it is also the parameter most likely to be left
+   implicit and applied inconsistently.
 3. **`max_trade_percent_of_balance`.** Halving it roughly halves both your drawdowns and your
    returns. It is the volatility dial.
 4. **The exit thresholds.** Tighter stops cut losers faster and also cut winners that dip.
@@ -301,10 +335,6 @@ See [Token risks](/tokens/risks) before deciding any of this is a good idea.
 
 ## Open questions
 
-- The entry-score thresholds (100,000 / 50,000 / 20,000) have no stated basis. Whether the
-  trending score is comparable across tokens — which an absolute threshold requires — is not
-  documented. If it is not, these numbers select for tokens with a particular scale of
-  activity rather than for momentum.
 - `max_hold_cycles` requires the agent to know which cycle a position was opened in, and
   nothing in the skill persists that. How each runtime carries the count across scheduled runs
   is undefined. See [Autonomous Mode](/agents/autonomous-mode).

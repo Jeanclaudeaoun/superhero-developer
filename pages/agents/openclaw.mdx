@@ -51,10 +51,36 @@ ClawHub can run the install steps declared in the skill's `metadata.openclaw.ins
 two npm packages, `@aeternity/aepp-sdk` and `bignumber.js`. If it does not, run `npm install`
 inside the skill directory yourself. Nothing works until those two packages resolve.
 
+They resolve to the skill directory either way. The skill ships an ordinary `package.json`
+that declares both as dependencies, alongside a lockfile:
+
+```json
+{ "name": "superhero-skill", "version": "1.0.8", "type": "module", "private": true,
+  "dependencies": { "@aeternity/aepp-sdk": "^14.1.0", "bignumber.js": "^10.0.2" },
+  "skill": { "install": "npm install", "env": { "AE_PRIVATE_KEY": { "required": true } } } }
+```
+
+So the canonical install is `npm install` run in the skill's own directory, producing
+`<skill>/node_modules`, which is where the scripts' bare imports resolve from. `package-lock.json`
+is committed, so `npm ci` gives you the pinned versions instead. If a script fails with a
+module-resolution error after a ClawHub install, that is the recovery: `cd` into the skill
+directory and run `npm install`. Note the `"type": "module"` — the scripts are ES modules and
+will not run under a CommonJS loader.
+
+Note also `skill.install` and `skill.env` in that `package.json`. They restate the frontmatter's
+`metadata.openclaw` block in a runtime-agnostic place, which is useful if you are adapting the
+skill to a runtime that does not read the OpenClaw namespace.
+
 ## Where the key lives
 
 The skill declares `AE_PRIVATE_KEY` as both its `requires.env` entry and its `primaryEnv`, so
-OpenClaw knows it is the one secret the skill cannot run without.
+OpenClaw knows it is the one secret the skill cannot run without. Both fields are part of
+ClawHub's documented skill format — `requires.env` lists the variables that must be present
+before a skill can run, `requires.bins` the binaries, and `primaryEnv` names the principal
+one; `envVars` is the longer form that carries a description per variable. ClawHub's security
+analysis cross-checks them, flagging a metadata mismatch when a skill's code reads a variable
+its frontmatter does not declare, so an accurate declaration is also what gets a skill through
+review.
 
 OpenClaw applies a skill's configured environment to `process.env` when an agent run starts,
 via the `skills.entries` block in `~/.openclaw/openclaw.json`. A per-skill `env` record is
@@ -175,15 +201,12 @@ cycles. Only then enable a trading schedule.
 - [OpenClaw automations (cron)](https://docs.openclaw.ai/automation/cron-jobs) — the Gateway scheduler in full
 - [OpenClaw config, secrets and env](https://docs.openclaw.ai/gateway/config-secrets-env) — where credentials are allowed to live
 - [ClawHub](https://docs.openclaw.ai/clawhub) — the registry and CLI
+- [ClawHub skill format](https://docs.openclaw.ai/clawhub/skill-format) — `requires.env`, `requires.bins`, `primaryEnv` and `envVars`
 
 ## Open questions
 
-- Whether ClawHub's `install` step for this skill runs `npm install` inside the skill
-  directory, or installs `@aeternity/aepp-sdk` and `bignumber.js` somewhere else on the
-  module path, is not stated in the skill. If the scripts fail with a module-resolution error
-  after a ClawHub install, run `npm install` in the skill directory and re-test.
-- The skill declares its environment requirement under a `metadata.openclaw` namespace. The
-  exact OpenClaw version that began honouring `requires.env` and `primaryEnv` for prompting is
-  not recorded in the repository; check the
-  [ClawHub skill format documentation](https://docs.openclaw.ai/clawhub/skill-format) for the
-  current contract.
+- **From which OpenClaw version does `primaryEnv` actually prompt?** The fields are part of
+  ClawHub's current documented skill format, but the release that began honouring them for
+  interactive prompting is not recorded in the skill or in ClawHub's format documentation.
+  OpenClaw's own changelog or release notes would settle it. Until you have checked, assume
+  nothing prompts and set `AE_PRIVATE_KEY` yourself before the first run.

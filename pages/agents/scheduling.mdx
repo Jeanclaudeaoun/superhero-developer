@@ -81,17 +81,31 @@ This is where scheduled agents silently drift by hours.
 | --- | --- |
 | System cron (Linux, macOS) | The host's local time, unless the crontab sets `TZ` or `CRON_TZ`. Subject to daylight-saving shifts — a 09:00 job moves relative to UTC twice a year |
 | GitHub Actions `schedule` | **UTC, always.** Your 09:00 is not the workflow's 09:00 |
-| OpenClaw Gateway cron | Evaluated by the Gateway process on its host — see the open question below |
+| OpenClaw Gateway cron | **The Gateway host's timezone**, unless the job was created with `--tz`. Pass `--tz UTC` explicitly |
+
+OpenClaw's own documentation is specific about this and the distinction is easy to get
+backwards: a **cron expression** with no `--tz` is evaluated in the Gateway host's timezone,
+while an offset-less **one-shot `--at` datetime** is treated as UTC. Passing
+`--tz <IANA zone>` makes either interpretation explicit, and the documentation recommends
+setting it on every job — particularly on a VPS, where the host timezone is rarely the one you
+had in mind.
 
 The safest habit for anything touching a market: **think in UTC and write in UTC.** Set `TZ=UTC`
-at the top of the crontab, or express the schedule in UTC and accept that it moves relative to
-your wall clock in summer. A trading loop that shifts an hour twice a year is a mild
-annoyance; one you *believe* is running at a fixed time but is not is a debugging problem you
-will not enjoy.
+at the top of the crontab, pass `--tz UTC` to OpenClaw, or express the schedule in UTC and
+accept that it moves relative to your wall clock in summer. A trading loop that shifts an hour
+twice a year is a mild annoyance; one you *believe* is running at a fixed time but is not is a
+debugging problem you will not enjoy.
 
 Also note the load-avoidance advice that applies to any hosted scheduler: jobs at the top of
 the hour contend with everyone else's. `7 */4 * * *` is as good as `0 */4 * * *` and less
 likely to be delayed.
+
+OpenClaw does some of that for you, and you should know it is happening: a recurring
+top-of-hour expression — minute 0 with a wildcard hour field, like `0 */4 * * *` — is
+**automatically staggered by up to five minutes** to spread load. Use `--exact` to force
+precise timing or `--stagger 30s` to set your own window. For a trading cycle the stagger is
+harmless and usually desirable, but it does mean a job you scheduled for exactly 12:00 may
+fire at 12:03, which matters if you were counting on the ordering in the next section.
 
 ## Overlapping runs
 
@@ -100,8 +114,23 @@ What happens when a cycle takes longer than the interval depends entirely on the
 | Scheduler | Behaviour |
 | --- | --- |
 | System cron | **Starts the next run anyway.** Two instances run concurrently, both reading the same wallet, both potentially trading |
-| OpenClaw Gateway | Has a maximum-concurrent-jobs setting, default 3. Beyond it, runs queue rather than overlap |
+| OpenClaw Gateway | Queues into a bounded lane, then **skips** a job whose previous run is still going |
 | GitHub Actions `schedule` | Scheduled runs can be delayed or dropped under load, and concurrency is controlled by the workflow's own `concurrency` block |
+
+OpenClaw's model is queue-then-skip rather than one or the other. Each run is admitted into a
+lane whose parallelism is capped — `agents.defaults.maxConcurrent` globally, and
+`cron.maxConcurrent` for the cron lane, with each execution holding its slot for the full
+duration of the run. A job that is admitted while an earlier run of the same job is still
+executing is then dropped at the point of execution, reported as *"queued manual run skipped
+before execution: already-running"*. So a long cycle does not stack up parallel copies, but it
+does silently lose cycles.
+
+For a trading loop, skipping is the right default and you should not try to defeat it. What
+you should do is watch for it: a cycle that is regularly skipped is a cycle that is too long
+for its interval, and the fix is a longer interval, not more concurrency. If the cron lane
+backs up generally, OpenClaw's troubleshooting guidance is to reduce cron frequency or raise
+`cron.maxConcurrent` — but raising it on a wallet-signing job re-introduces exactly the nonce
+conflict the lane was protecting you from.
 
 Overlap matters more here than in most cron jobs, because two concurrent cycles will each read
 the same holdings, each decide independently, and each sign transactions from the same
@@ -154,14 +183,6 @@ directory — and the key coming from a keychain rather than the crontab, which 
 - [OpenClaw](/agents/openclaw) — the Gateway scheduler, enabling it and managing jobs
 - [Claude Code](/agents/claude-code) — print mode, the flag to avoid, and system cron
 - [OpenClaw automations (cron)](https://docs.openclaw.ai/automation/cron-jobs) — job storage, state and concurrency
+- [OpenClaw automation schedules](https://docs.openclaw.ai/automation/cron-jobs/schedules) — `--tz`, `--exact`, `--stagger` and the UTC rules
+- [OpenClaw automation troubleshooting](https://docs.openclaw.ai/automation/cron-jobs/troubleshooting) — what a backed-up cron lane looks like
 - [Events that trigger workflows](https://docs.github.com/actions/using-workflows/events-that-trigger-workflows) — the `schedule` trigger, UTC and delivery guarantees
-
-## Open questions
-
-- Which timezone the OpenClaw Gateway evaluates cron expressions in — the host's local time or
-  UTC — is not stated in the skill, and was not confirmed from the runtime's documentation.
-  Verify with a job scheduled a few minutes ahead before trusting a fixed-hour schedule. See
-  [OpenClaw automations](https://docs.openclaw.ai/automation/cron-jobs).
-- Whether the OpenClaw scheduler skips or queues a job whose previous run is still executing,
-  once the concurrency limit is reached, is not documented at the level of detail a trading
-  loop needs. Until it is, keep cycle duration well below the interval.

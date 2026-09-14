@@ -164,7 +164,13 @@ The install locations differ per runtime; the rest of this page does not.
 - No MCP wrapper for these scripts is published in the Superhero organisation. The design
   above is a recommendation, not a description of existing code — if one ships, it will be in
   the [skill repository](https://github.com/superhero-com/superhero-agent-skill).
-- Only `superhero-governance.mjs` honours an `AE_NODE_URL` override; the other eleven scripts
-  hard-code `https://mainnet.aeternity.io`. Running the skill against testnet would need a
-  patch, so there is currently no safe rehearsal environment. See
+- Only `superhero-governance.mjs` honours an `AE_NODE_URL` override; the eight other scripts
+  that reach a node hard-code `https://mainnet.aeternity.io`, and the six that reach the REST
+  API hard-code `https://api.superhero.com`. Running the skill against testnet would need a
+  patch in both places, so there is currently no safe rehearsal environment — even though the
+  backend itself is network-aware and ships testnet addresses for the factory, the
+  affiliation treasury and the governance registry. Two environment variables,
+  `AE_NODE_URL` and an `AE_API_BASE`, applied consistently across the scripts, would close
+  this; watch the
+  [skill repository](https://github.com/superhero-com/superhero-agent-skill) for them. See
   [Testnet](/getting-started/testnet) for what testing on æternity normally looks like.

@@ -35,7 +35,30 @@ The app explains ROI in a banner on the page:
 > period. For most leaderboard windows, it is calculated as PNL divided by the portfolio
 > value at the start of the period, shown as a percentage.
 
-The hedge in "for most leaderboard windows" is the app's own — see the open questions.
+The hedge in "for most leaderboard windows" is the app's own, and the exception is the **All**
+window. `LeaderboardSnapshotService.computeWindow` in
+`superhero-api/src/account/services/leaderboard-snapshot.service.ts` computes it two
+different ways:
+
+```text
+7d and 30d
+  pnl_usd = AUM at the end of the window − AUM at the start
+  roi_pct = pnl_usd / AUM at the start × 100          (0 if the start AUM is 0)
+
+all
+  pnl_usd = total all-time gain, in USD
+  roi_pct = total all-time gain / total all-time cost basis × 100
+            falling back to the same ratio in AE if the USD cost basis is 0,
+            and to 0 if both are
+```
+
+So the 7d and 30d boards measure portfolio *growth*, which a deposit inflates and a
+withdrawal deflates. The All board measures true return on invested capital. They are not the
+same statistic, and a wallet can rank very differently on each.
+
+One more asymmetry: for the All window the code still treats "all" as **the last 365 days**
+for the window-based figures — the sparkline, the maximum drawdown, and the buy and sell
+counts. Only PnL and ROI are genuinely all-time.
 
 ## Timeframes
 
@@ -72,6 +95,52 @@ The card for a ranked wallet renders from these response fields:
 Rank is computed client-side from the page offset — `(page − 1) × 15 + index + 1` — so it is
 the rank within the currently selected metric and window, not a global standing.
 
+For a custom range, `created_tokens_count` and `owned_trends_count` are always zero — the
+live path does not compute them — while `volume_usd` is populated, which is the reverse of the
+snapshot path.
+
+## Who is eligible to appear
+
+This is the single most important thing to understand about the board, and it is not stated
+anywhere in the UI: **it is not a ranking of everybody.**
+
+The snapshot job builds its candidate set by taking the **top 100 addresses by all-time USD
+traded volume**, summed across the whole `transactions` table, and then ranks only those 100
+by whichever metric you chose. `LEADERBOARD_SNAPSHOT_MAX_CANDIDATES` is 100 in
+`src/account/services/leaderboard.types.ts`, and the job writes at most that many rows per
+window.
+
+The consequence is that volume is an implicit qualifier for every metric. A wallet with an
+outstanding ROI but modest lifetime volume never enters the pool, so it cannot appear on the
+ROI board no matter how well it traded. Ranking high therefore means "among the hundred
+biggest traders by lifetime volume, this one did best on the selected metric".
+
+There is a second filter on the read side: `minAumUsd` defaults to **1**, excluding rows whose
+AUM is below one US dollar. You can lower it to 0 on your own request.
+
+Custom ranges work differently. Supplying `startDate` and `endDate` bypasses the snapshot
+entirely and computes live, and the candidate pool is then the top addresses by USD volume of
+buy and sell transactions **inside that range** rather than all-time — capped at
+`maxCandidates`, which defaults to 100 and is clamped to 500.
+
+## Which trades count
+
+Bonding-curve trades only. The `transactions` table the leaderboard reads is written by the
+BCL transaction processor, with `tx_type` taken from the contract call's function name — the
+values are `buy`, `sell` and `create_community`. DEX activity lands in a separate
+`pair_transactions` table filled by `src/plugins/dex/`, which no part of the leaderboard
+query touches.
+
+So [DEX swaps](/defi/swap), liquidity provision and plain AE transfers are invisible here,
+both for the volume ranking that decides who is a candidate and for the `buy_count` and
+`sell_count` on each card. Portfolio value, however, is whatever the PnL service values the
+account's holdings at, so AUM and the sparkline can move for reasons the buy and sell counts
+never show.
+
+`tradingOnly=true` narrows it further, but only for custom ranges: it switches the
+selected-period PnL and ROI to realised token-trading PnL and cost basis, excluding portfolio
+value changes caused by transfers.
+
 ## The endpoint
 
 ```text
@@ -82,13 +151,16 @@ Base URL is Superhero's API: `https://api.superhero.com` on mainnet.
 
 | Parameter | Values |
 | --- | --- |
-| `sortBy` | `pnl`, `roi`, `aum`, `mdd` |
-| `sortDir` | `ASC` or `DESC` |
-| `window` | `7d`, `30d`, `all` |
-| `points` | Number of sparkline points |
-| `startDate`, `endDate` | ISO-8601; mutually exclusive with `window` and `points` |
-| `page` | 1-based |
-| `limit` | Page size. The UI uses 15. |
+| `sortBy` | `pnl`, `roi`, `aum`, `mdd`. Default `pnl`. |
+| `sortDir` | `ASC` or `DESC`. Defaults to `DESC`, except `sortBy=mdd` which defaults to `ASC`. |
+| `window` | `7d`, `30d`, `all`. Default `7d`. |
+| `points` | Number of sparkline points. **Ignored for `window` requests** — the snapshot job fixes it at 8 for 7d, 12 for 30d and 24 for all. For a custom range it is clamped to 2–12, default 8. |
+| `startDate`, `endDate` | ISO-8601, both required together, end after start. Switches to the live path; mutually exclusive with `window`. |
+| `minAumUsd` | Integer, 0 or more. **Defaults to 1**, which excludes near-zero portfolios. |
+| `tradingOnly` | Boolean. Custom ranges only: bases PnL and ROI on realised trading PnL rather than portfolio value change. |
+| `page` | 1-based. Default 1. |
+| `limit` | Page size, 1–50. Server default 18; the UI sends 15. |
+| `maxCandidates` | Deprecated and ignored for `window` requests. For a custom range it sizes the live candidate pool, default 100, clamped to 500. |
 
 The response is the standard paginated envelope: an `items` array of the fields above, plus a
 `meta` object carrying `page`, `limit`, `totalItems`, `totalPages`, `window`, `sortBy`,
@@ -106,13 +178,27 @@ And the inverted case for drawdown:
 curl "https://api.superhero.com/api/accounts/leaderboard?sortBy=mdd&sortDir=ASC&window=30d&points=30&page=1&limit=15"
 ```
 
-## Caching
+## Freshness
 
-The client caches each metric-and-window combination for **60 seconds** before considering it
-stale, and keeps fetched windows in memory for **5 minutes** before garbage-collecting them.
-Switching metrics or pages within those windows is served from cache. That is client-side
-caching only — it says nothing about how often the backend recomputes the underlying
-rankings.
+Two independent layers, and it is worth knowing which one you are looking at.
+
+**Server side**, `LeaderboardSnapshotService.refreshAllWindows` runs on
+`CronExpression.EVERY_10_MINUTES` and recomputes all three windows in sequence — 7d, then
+30d, then all — against a single `referenceEnd` timestamp captured at the start of the run.
+Each window's rows are deleted and rewritten inside one transaction, so a read never sees a
+half-built board. A run that is still going when the next tick fires is skipped rather than
+queued, so under load the effective interval stretches beyond ten minutes.
+
+Every `window` request is served straight from that `account_leaderboard_snapshots` table; the
+read path never recomputes. So the figures are **up to about ten minutes behind the chain**,
+plus whatever lag the PnL and price data already carry. Custom ranges are the exception —
+they compute live on the request, which is why they are slower.
+
+**Client side**, the app caches each metric-and-window combination for **60 seconds** before
+considering it stale, and keeps fetched windows in memory for **5 minutes** before
+garbage-collecting them. Switching metrics or pages within those windows is served from
+cache. Since the server only refreshes every ten minutes, a client refetch inside that
+interval returns identical data.
 
 ## How to climb it
 
@@ -123,19 +209,11 @@ reward:
 - Keep PnL and ROI positive over time.
 - Own and hold trending tokens to grow AUM.
 
-## Open questions
-
-- **How often does the backend recompute rankings?** The 60-second stale time and 5-minute
-  cache lifetime are client-side. Nothing in the web app reveals the server's refresh cadence
-  or how far behind the chain the figures run.
-- **How is ROI computed for the "all" window?** The in-app explanation says "for most
-  leaderboard windows", explicitly leaving at least one case undefined. The formula for an
-  all-time window is not stated.
-- **Are there eligibility filters?** Whether accounts below some minimum volume, portfolio
-  value or trade count are excluded is decided server-side and is not visible in the client.
-- **Which trades count?** Whether the leaderboard covers bonding-curve trades only, or also
-  [DEX swaps](/defi/swap), is not determinable from the client — it just renders what the
-  endpoint returns.
+The first of those is not optional advice, it is the entry condition: without enough lifetime
+USD volume to reach the top 100 traders you are not a candidate for any metric. Do not read
+that as encouragement to churn — trading costs you the 1% spread on every round trip, so
+volume bought purely to chase a leaderboard place is a guaranteed loss against an uncertain
+ranking.
 
 ## Read more
 

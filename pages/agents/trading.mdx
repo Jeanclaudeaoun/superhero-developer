@@ -17,7 +17,10 @@ always a bid — the sale contract holds the reserve to buy the entire supply ba
 ## The loop
 
 1. **Scan** — `node scripts/superhero-trending.mjs tokens 20`
-2. **Filter** — keep only tokens above the strategy's minimum trending score
+2. **Filter** — keep only tokens above the strategy's minimum trending score. The templates'
+   numbers for this are wrong by about five orders of magnitude; see
+   [What the trending score actually is](#what-the-trending-score-actually-is) before you use
+   them.
 3. **Check price** — `node scripts/superhero-token-swap.mjs price ct_<sale_address> 10`
 4. **Size the position** — never more than `max_trade_percent_of_balance` of the wallet on one
    token, and never more than `max_positions` open at once
@@ -42,6 +45,82 @@ tokens. Quote first with `price` and divide; there is no "spend 2 AE on this tok
 The flow-quality check is the one most often skipped and the one most likely to save money. A
 score can be driven by a single account. Read the transaction list and count distinct
 addresses before treating a score as a crowd.
+
+## What the trending score actually is
+
+> **The score the skill's thresholds are written against does not exist.** Every strategy
+> template filters on a trending score above 100,000, 50,000 or 20,000. The score the API
+> returns is bounded to the range **0 to 1**. No token has ever scored above 1, so those
+> filters match nothing. Read the next few paragraphs before configuring an agent.
+
+The formula is in `superhero-api/src/tokens/tokens.service.ts`
+(`calculateTokenTrendingMetrics`), with its constants in
+`superhero-api/src/configs/constants.ts` under `TRENDING_SCORE_CONFIG`. It is a weighted,
+capped, log-normalised blend of ten signals measured over a **24-hour window**, then decayed
+by how long ago the token last saw any activity.
+
+Each signal is normalised against a fixed global cap:
+
+```text
+normalized = log1p(min(raw, cap)) / log1p(cap)        -> always between 0 and 1
+```
+
+| Group | Weight | Signal | Weight in group | Cap |
+| --- | --- | --- | --- | --- |
+| Trading | 0.35 | Active wallets | 0.40 | 25 |
+| | | Buy count | 0.20 | 40 |
+| | | Sell count | 0.20 | 40 |
+| | | Volume in AE | 0.20 | 5,000 |
+| Social | 0.65 | Posts mentioning the token | 0.32 | 15 |
+| | | Comments mentioning it | 0.32 | 50 |
+| | | Unique authors | 0.22 | 20 |
+| | | Tips count | 0.05 | 15 |
+| | | Tips amount in AE | 0.03 | 250 |
+| | | Reads | 0.06 | 200 |
+
+The weights inside each group sum to 1.00, and the two group weights sum to 1.00, so the
+pre-decay score is itself between 0 and 1. Then:
+
+```text
+age_hours   = hours since the token's most recent trade or social activity
+decay       = 1 / (1 + age_hours / 2) ^ 1.15
+score       = pre_decay × decay                       rounded to 6 decimal places
+```
+
+A token at every cap with activity this instant scores 1.0. Two hours of silence halves it
+(`1 / 2^1.15 ≈ 0.45`); a full day of silence leaves about 5% of it.
+
+### Is it comparable across tokens?
+
+**Yes — the caps and weights are global constants, so two tokens' scores are on the same
+scale.** That part of the design holds up, and ordering tokens by score is meaningful. But it
+is comparable in a much narrower range than the skill assumes, and with three caveats:
+
+- **Everything above a cap is flattened.** A token doing 5,000 AE of volume and one doing
+  500,000 AE both score 1.0 on the volume signal. The score is built to rank emerging
+  activity, not to separate large tokens from enormous ones.
+- **Social dominates.** 65% of the weight is posts, comments, authors, tips and reads. The
+  constants file says so in a comment: "Trading remains important, but community activity
+  should dominate ranking." A token can score well on chatter alone.
+- **Scores are of different vintages.** Decay is applied using `Date.now()` at compute time,
+  and tokens are recomputed at different moments — every two hours for tokens with recent
+  activity (`ACTIVE_REFRESH_CRON`, batches of up to 250), every six hours as a backfill sweep
+  for stale ones. So a comparison between a token refreshed one minute ago and one refreshed
+  two hours ago is not quite apples to apples.
+
+### What to do about the thresholds
+
+Use relative filters, not absolute ones. Concretely:
+
+- Rank the scan output by score and take the top *n*, rather than filtering on a number.
+- Compare a token's score to its own previous score, which is what `SKILL.md` actually
+  advises — "a rising trending score means buying pressure is accelerating".
+- If you want an absolute floor, pick it from observed values on your own scan output. It
+  will be a small decimal, and a sensible starting point is somewhere around the median of
+  what your scan returns. Do not port the 100k/50k/20k figures.
+
+See [Risk Strategies](/agents/strategies) for the templates these numbers come from, and
+[The Trending Score](/tokens/trending-score) for the full formula.
 
 ## Sizing
 
@@ -256,11 +335,6 @@ work. See [Token risks](/tokens/risks).
 
 ## Open questions
 
-- The trending score's computation, inputs and time window are not documented in the skill or
-  the app repository. The strategy templates use absolute thresholds — above 100,000, 50,000
-  and 20,000 — but whether the score is comparable *across* tokens or only meaningful as a
-  time series for one token is unverified. Until that is settled, treat a rising score as more
-  informative than a high one. See [The Trending Score](/tokens/trending-score).
 - The skill provides no way to place a limit order or a stop. Every exit is a market sell
   executed at whatever the curve offers when the cycle happens to run, which means a sharp
   decline between cycles is not caught by `sell_on_price_drop_percent` until the next cycle.

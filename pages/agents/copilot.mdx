@@ -80,8 +80,46 @@ The same warnings apply as everywhere else in this section: a dedicated wallet, 
 with what you can lose, and never a shell profile if you can avoid it. Read
 [Wallet & Key Management](/agents/wallet-and-keys).
 
+Copilot will not prompt you for it. Copilot's documented SKILL.md frontmatter is `name`
+(required), `description`, `allowed-tools`, and a `metadata` section used for things like a
+version field and the provenance that `gh skill` writes on install — there is no environment
+declaration and no equivalent of OpenClaw's `primaryEnv`. The skill's `metadata.openclaw`
+block is a namespace Copilot has no reason to read. Export the variable yourself before
+launching, and verify with a `superhero-wallet.mjs exists` call as the first thing you ask
+for.
+
 Because five of the skill's scripts read `./contracts/` relative to the working directory, run
 Copilot from the skill directory or tell it where to run the scripts from.
+
+## Pre-approving the scripts
+
+Copilot CLI can pre-approve shell commands, both per session and per skill, so you do not
+confirm every script call.
+
+Per session, on the command line:
+
+```bash
+copilot --allow-tool 'shell(node scripts/superhero-trending.mjs*)' \
+        --allow-tool 'shell(node scripts/superhero-portfolio.mjs*)' \
+        --deny-tool  'shell(node scripts/superhero-token-swap.mjs*)'
+```
+
+`shell(<glob>)` takes a glob pattern, and `--deny-tool` is the half that matters here: it is
+how you run a research-only or manual-mode session where the read commands never prompt but
+anything that signs still does. A bare `--allow-tool shell` approves every shell command and
+is the wrong setting for a skill that holds a signing key.
+
+Per skill, the same idea lives in SKILL.md frontmatter as `allowed-tools`, which lists the
+tools Copilot may use without asking each time. Do not add `shell` or `bash` there for this
+skill — GitHub's own documentation warns that pre-approving them removes the confirmation step
+for terminal commands and lets an attacker-controlled skill or a prompt injection execute
+arbitrary commands. A session flag you can see in your shell history is a better place for
+this decision than a file that travels with the skill.
+
+One known limitation to plan around: compound commands always prompt. Anything using `;`,
+`&&`, a pipe, or a redirect triggers a permission prompt even when every individual command in
+the chain would be auto-approved on its own. Keep the commands you pre-approve to single
+invocations.
 
 ## Start it
 
@@ -121,12 +159,5 @@ trading loop. If you use it at all, use it for read-only reporting.
 - [Adding agent skills for the Copilot coding agent](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills) — the cloud surface
 - [Agent Skills in VS Code](https://code.visualstudio.com/docs/agent-customization/agent-skills) — agent mode setup
 - [GitHub Copilot now supports Agent Skills](https://github.blog/changelog/2025-12-18-github-copilot-now-supports-agent-skills/) — the announcement and supported surfaces
-
-## Open questions
-
-- Whether Copilot reads a `metadata` block in SKILL.md frontmatter at all — and therefore
-  whether it can prompt for `AE_PRIVATE_KEY` the way OpenClaw's `primaryEnv` does — is not
-  documented in the skill. Assume it does not, and set the variable yourself.
-- Whether Copilot CLI's Bash execution can be pre-approved per command, the way Claude Code's
-  permission rules allow, was not verified. If every script call prompts, check Copilot's own
-  tool-permission settings before concluding it cannot.
+- [Allowing and denying tool use](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools) — `--allow-tool`, `--deny-tool` and the `shell()` pattern syntax
+- [Creating agent skills for Copilot CLI](https://docs.github.com/en/enterprise-cloud@latest/copilot/how-tos/copilot-cli/customize-copilot/create-skills) — the frontmatter fields, including `allowed-tools`

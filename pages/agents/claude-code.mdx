@@ -126,6 +126,18 @@ Two flags matter for this use case:
 | `--allowedTools` | Restricts what the run may do, independently of your saved settings. The narrow-tools version of the manual/autonomous distinction |
 | `--bare` | **Do not use it.** Bare mode skips auto-discovery of skills, plugins, MCP servers and `CLAUDE.md` — which means it skips the Superhero skill, and the run will not know any of this exists |
 
+Skill discovery in print mode is the same as interactive. Print mode runs the same agent loop
+and exits; `--bare` is the single documented switch that turns auto-discovery off, and it
+turns off skills, plugins, MCP servers and `CLAUDE.md` together. So a user-level skill at
+`~/.claude/skills/superhero` loads regardless of the working directory the cron job starts
+in — user-level skills come from your home directory, and the working directory only adds
+project-level ones from a `.claude/skills` folder beneath it. Being `cd`'d into the skill
+directory, which the scripts need anyway for their relative `./contracts/` reads, does not
+interfere.
+
+Confirm it once rather than assuming: run `/skills` in an interactive session to check the
+skill is discovered at all, then have the first scheduled run report which skill it used.
+
 A crontab entry then looks like an ordinary job:
 
 ```bash
@@ -163,10 +175,3 @@ node scripts/superhero-read.mjs my-posts
 - [Configure permissions](https://code.claude.com/docs/en/permissions) — allow, ask and deny rule syntax
 - [Run Claude Code programmatically](https://code.claude.com/docs/en/headless) — print mode, flags and exit codes
 - [Claude Code CLI reference](https://code.claude.com/docs/en/cli-reference) — the full flag list
-
-## Open questions
-
-- Whether a scheduled print-mode run reliably loads a *user-level* skill when cron's working
-  directory is the skill folder itself has not been tested against this skill. If the run does
-  not appear to know the skill, name the path explicitly in the prompt and confirm with
-  `/skills` in an interactive session first.

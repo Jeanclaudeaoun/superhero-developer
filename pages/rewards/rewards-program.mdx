@@ -78,6 +78,67 @@ Two counters run on this milestone:
 At the base tier those numbers add up to exactly the figure the FAQ quotes:
 50 AE (milestone 1) + 10 posts × 10 AE + 50 AE (streak) = 200 AE.
 
+**200 AE is not a cap.** There is no total-AE ceiling anywhere in
+`superhero-api/src/profile/` — no constant, no env var, no check before a payout. The FAQ's
+"up to 200 AE" is that base-tier arithmetic, nothing more. Structurally the program is
+open-ended in two ways: the streak bonus is explicitly **recurring** (the source comment says
+"every time the streak reaches the configured length it completes … and the counter resets,
+so the user starts earning the next bonus from zero"), and the per-post ledger has no maximum
+row count. What bounds your earnings is the rate limit in the next section, not a total.
+
+## What the backend actually enforces
+
+Everything above is what the deployed instance shows. The rules underneath it live in
+`superhero-api/src/profile/profile.constants.ts` and
+`src/profile/services/profile-x-posting-reward.service.ts`, and they are worth knowing
+because most of the amounts are environment variables while the *structure* is fixed in code.
+
+The structure is three independent payout paths, each with its own reward wallet and its own
+enable flag:
+
+| Path | Trigger | Frequency |
+| --- | --- | --- |
+| Onboarding | Your first post containing a Superhero keyword | One-time. The threshold is the hard-coded constant `PROFILE_X_ONBOARDING_THRESHOLD = 1`. |
+| Per-post | A post containing your referral link | Once per UTC day, at your follower tier's rate |
+| Streak bonus | `PROFILE_X_REWARD_STREAK_LENGTH` consecutive UTC days of referral posts | Recurring — the counter resets and starts again |
+
+The keywords that qualify a post for the onboarding path are hard-coded as
+`superhero.com` and `superhero_chain`. The follower tiers are parsed from
+`PROFILE_X_FOLLOWER_TIERS`, a comma-separated list of `minFollowers:amountAe` pairs sorted
+ascending, with malformed or non-positive entries silently dropped. The minimum follower
+count is `PROFILE_X_REWARD_MIN_FOLLOWERS`, and an account below it accrues nothing at all —
+no qualifying posts, no per-post rewards, no streak progress — though already-accrued payouts
+still settle.
+
+One safety note for anyone reading the code: `PROFILE_REWARDS_DISABLED` defaults to `true`
+and hard-overrides every per-reward toggle, so a freshly configured instance pays nothing
+until it is explicitly armed. The code's own default amounts are placeholders (0.1 AE at the
+lowest tier, for instance) and differ from the figures the live page shows; read the tiers off
+the rewards card, not off the source.
+
+### What counts as a qualifying post
+
+- **Referral posts are matched host-pinned.** A URL in the post must have host
+  `superhero.com` and a `?ref=` query parameter equal to your referral code,
+  case-insensitively. A scheme-less fallback exists for X's truncated `display_url` values,
+  but only when the candidate *starts* with the configured host followed by a `/`, `?`, `#`
+  or end-of-string — so `evil.com/?u=superhero.com&ref=<code>` and
+  `superhero.com.evil.com/?ref=<code>` are both rejected.
+- **One rewarded post per UTC day.** The ledger has a unique index on
+  `(x_user_id, tweet_utc_day)` with insert-or-ignore, so a second referral post on the same
+  UTC day earns nothing. A tweet whose `created_at` cannot be parsed into a UTC day earns
+  nothing either — the code fails closed rather than paying an uncappable row.
+- **A streak day is a UTC day.** `updateStreak` collects the distinct UTC days of the
+  referral posts found in this scan, walks them in order, and increments only when the day is
+  exactly one after the last qualifying day. Any larger gap resets the streak to 1. So the
+  streak is anchored to UTC midnight, not to your local time or to 24-hour spacing.
+- **Old posts fall off the back.** A scan keeps the 2,000 newest tweets and advances a
+  forward-only `since_id` cursor even when it truncates, so posts older than that page cap are
+  never counted. The status response reports this as `x_posts_scan_truncated`.
+- **Nothing is clawed back.** Payouts are on-chain AE spends from a reward wallet and the
+  ledger is insert-only; the service has no path that reverses a paid row. Deleting a tweet
+  after it has been rewarded stops it appearing in future scans but does not reclaim the AE.
+
 ## How verification works
 
 Nothing here is on-chain until the payout. The flow is a signed request to the Superhero
@@ -96,7 +157,20 @@ backend, which scans X on your behalf.
 
 **The recheck is rate-limited.** The status response carries `next_check_allowed_at`; until
 that timestamp passes the button is disabled and shows a countdown. A submit past the cap
-returns HTTP 429 and the scan is skipped. The client code documents this as a 24-hour cap.
+returns HTTP 429 and the scan is skipped.
+
+The window is `PROFILE_X_REWARD_DAILY_CAP_HOURS`, which defaults to 24 and falls back to 24
+on bad input — so the client's "24 hours" is the default, not a constant. It is a hard cap on
+paid X API reads, claimed atomically in the database so that retries, restarts and concurrent
+requests cannot exceed it, and `next_check_allowed_at` is simply your last scan time plus that
+many hours. Two details follow from the implementation:
+
+- A *handled* scan failure — an X outage, say — still consumes the slot. That is deliberate:
+  the cap protects the X API budget, so it fails closed. An *unexpected* failure such as a
+  database error rolls the slot back so you are not locked out.
+- Recovering a pending or failed payout never calls X, so it runs **before** the cap check.
+  A recheck that finds a stuck payout can settle it even while the scan itself is cooling
+  down.
 
 **A successful check can still pay nothing.** A recheck that returns HTTP 200 may carry an
 `error` string explaining why no reward was sent — below the follower minimum, the X identity
@@ -105,8 +179,12 @@ that string as a red banner rather than silently reporting "no change".
 
 **Payouts are automatic.** The earnings banner states plainly: "Your AE rewards have been
 sent automatically to your connected wallet." There is no claim transaction for this program
-and therefore no gas cost to you. See [Claiming Rewards](/rewards/claiming) for the rewards
-that *do* need a transaction.
+and therefore no gas cost to you — and none exists to be added later without a new endpoint:
+the reward controller exposes only status, challenge, recheck and referral-link routes.
+Payment runs through `ProfileSpendQueueService`, which spends AE from a reward wallet held in
+an environment variable and serialises spends per wallet so concurrent payouts cannot collide
+on the account nonce. See [Claiming Rewards](/rewards/claiming) for the rewards that *do*
+need a transaction.
 
 ## Eligibility — read this before participating
 
@@ -127,25 +205,19 @@ Concretely, that means:
 - **The program can stop mid-stream.** It can be paused at any time, without notice, with no
   liability for work already done.
 - **Geography matters.** Users in blacklisted countries are not eligible. The list is not
-  published in the app.
+  published in the app, and it is not a check in the backend either — see the open question
+  below.
 - **Individual disqualification is allowed** at the operator's discretion.
 - **Rewards are income.** They may be reportable, and the tax consequences are yours.
 
 ## Open questions
 
-- **Is 200 AE a hard cap?** The FAQ says "earn up to 200 AE tokens", and the base tier
-  arithmetic lands exactly on 200. But the UI caps the post counter at 10 while paying
-  20 AE or 30 AE per post at higher follower tiers, which would exceed 200 AE. Nothing in
-  the client enforces a 200 AE ceiling. Settling this needs the backend reward service, not
-  the web app.
-- **Which countries are blacklisted?** The list is enforced server-side and is not present
-  in the client bundle or the FAQ.
-- **What counts as a "qualifying post"?** The client only reads
-  `per_post_total_paid_count` and `current_streak_days` back from the API. The matching
-  rules — how the referral link is detected, whether deleted posts are clawed back, how a
-  streak day is bounded — live in the backend scanner.
-- **Is the 24-hour recheck cap exact?** The client comment says 24 hours, but the actual
-  window is whatever `next_check_allowed_at` says, which the server sets.
+- **Which countries are blacklisted?** The disclaimer says users from blacklisted countries
+  are not eligible, but there is no geographic check anywhere in the reward code — searching
+  `superhero-api/src/` for country, geo, blacklist or `cf-ipcountry` turns up nothing outside
+  a comment about reverse proxies. So it is not an application rule that a reader could look
+  up; it is either enforced at the edge or applied manually when payouts are reviewed. Only
+  Superhero's operators can publish the list.
 
 ## Read more
 

@@ -55,6 +55,20 @@ Useful to know, because it bounds what you have to worry about:
 The invite path is the one most worth locking down. If your agent has no reason to generate
 invites, deny `superhero-invite.mjs` entirely.
 
+## A parameter that is wrong out of the box
+
+Before the first unattended cycle, fix the entry threshold. The skill's three strategy
+templates each specify a minimum trending score — above 100,000, 50,000 or 20,000 — and the
+score the API actually returns is a normalised value between 0 and 1. No token can satisfy any
+of them.
+
+The failure mode is not "the agent does nothing", which would at least be safe. It is that a
+model handed an unsatisfiable filter and told to trade will reason its way around it, and the
+threshold it improvises is one you never chose and cannot audit. State an explicit entry rule
+in your own words instead — see
+[Fixing the entry threshold](/agents/strategies#fixing-the-entry-threshold) — and have the
+agent report which tokens passed it and why, every cycle.
+
 ## What a runaway loop looks like
 
 A concrete, plausible failure — not a hypothetical category.
@@ -160,9 +174,15 @@ A checklist you can actually run through:
 ## Open questions
 
 - There is no scripted kill switch — no `pause`, no `panic-sell`. Stopping an agent means
-  stopping its scheduler or removing its permissions, both of which live outside the skill. If
-  one ships it will be in the
-  [skill repository](https://github.com/superhero-com/superhero-agent-skill).
-- Only `superhero-governance.mjs` honours an `AE_NODE_URL` override, so there is no supported
-  way to rehearse the trading loop against testnet. Every test is a live mainnet transaction.
-  See [Testnet](/getting-started/testnet).
+  stopping its scheduler or removing its permissions, both of which live outside the skill.
+  What would settle this is a new `case` block in `superhero-token-swap.mjs` that reads the
+  portfolio and sells every position in one invocation; nothing in the
+  [skill repository](https://github.com/superhero-com/superhero-agent-skill) does that today.
+  Until then, write your own wrapper around `superhero-portfolio.mjs summary` and
+  `superhero-token-swap.mjs sell`, and test it before you need it.
+- Only `superhero-governance.mjs` honours an `AE_NODE_URL` override, and every script that
+  calls the REST API hard-codes `https://api.superhero.com`, so there is no supported way to
+  rehearse the trading loop against testnet. Every test is a live mainnet transaction. The
+  backend is network-aware and testnet addresses exist for the factory, the affiliation
+  treasury and the governance registry, so this is a gap in the skill rather than in the
+  platform. See [Testnet](/getting-started/testnet).

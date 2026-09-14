@@ -202,6 +202,25 @@ So there are only two clean outcomes:
 Choose before you rotate, not after. See [AENS](/aeternity/aens) and
 [.chain names](/identity/chain-names).
 
+### How long you have, and what `extend` does
+
+An AENS name's TTL is measured in **generations** — blocks — relative to the current height,
+and the protocol's maximum is **180,000 generations, roughly 375 days**. That figure is both
+the SDK's default `nameTtl` and the highest value the protocol accepts, so a name cannot be
+pushed more than about a year into the future in one transaction.
+
+`superhero-name.mjs extend` calls `nameObj.extendTtl()` with no arguments, which means it
+takes that default: each extension resets the name to the maximum, roughly 375 days from the
+block it is mined in. Extending early does not stack — you cannot buy two years by running it
+twice — so there is no benefit to renewing far ahead of time and no penalty for renewing at
+any point before expiry.
+
+Practically: **put a yearly reminder on it, and make sure the key that owns the name is still
+under your control when it fires.** A name registered once and forgotten lapses after about
+375 days, and a lapsed name is claimable by anyone. There is also a fixed timeout of 2,016
+blocks, about four days, before a *revoked* name can be claimed again, which is worth knowing
+if you are trying to reclaim one deliberately.
+
 ### What rotation does not carry over
 
 | Thing | Moves to the new wallet? |
@@ -238,16 +257,23 @@ Assume immediate and total loss. There is no freeze, no reversal and no recovery
 - [Backup and recovery](/wallets/backup-and-recovery) — what "back it up offline" means concretely
 - [.chain names](/identity/chain-names) — what a name is and what it is worth
 - [æternity CLI](https://docs.aeternity.com/aepp-cli-js/) — signs the name and spend transactions the skill does not expose
+- [AENS specification](https://github.com/aeternity/protocol/blob/master/AENS.md) — name fees, TTLs and the revocation timeout
 - [aepp-sdk-js](https://github.com/aeternity/aepp-sdk-js) — the SDK behind `MemoryAccount` and every signature the skill makes
 
 ## Open questions
 
 - The skill provides no command to send plain AE from one address to another, and no command
   to transfer an AEX-9 token balance, even though the bundled `FungibleTokenFull` ACI declares
-  a `transfer` entrypoint. Rotation therefore requires a second tool. Whether a `send` command
-  is planned is not stated in the
-  [repository](https://github.com/superhero-com/superhero-agent-skill).
-- AENS names expire and must be extended. `superhero-name.mjs extend` exists, but neither the
-  script nor the guides state the name TTL or how far ahead an extension pushes it. Confirm
-  against the [AENS protocol specification](https://github.com/aeternity/protocol/blob/master/AENS.md)
-  before relying on a renewal schedule.
+  a `transfer` entrypoint and `superhero-token-swap.mjs` already initialises the token contract
+  against it. Rotation therefore requires a second tool. What would close this is a `send`
+  case in `superhero-wallet.mjs` and a `transfer` case in `superhero-token-swap.mjs`; neither
+  exists in the
+  [repository](https://github.com/superhero-com/superhero-agent-skill) today, and no issue or
+  roadmap entry in it says whether they are planned.
+- Whether `extendTtl()` in the SDK version the skill pins (`@aeternity/aepp-sdk ^14.1.0`)
+  still defaults to the 180,000-generation maximum was taken from the SDK's transaction-options
+  documentation, not read from the installed package. Confirm by running
+  `superhero-name.mjs extend` once and reading the resulting name object's `ttl` against the
+  current top block height, or check
+  [transaction options](https://github.com/aeternity/aepp-sdk-js/blob/develop/docs/transaction-options.md)
+  for the version you actually have.

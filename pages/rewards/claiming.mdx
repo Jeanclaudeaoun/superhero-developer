@@ -25,6 +25,19 @@ Press **Check rewards** on `/trends/invite`, sign the ownership challenge with y
 and the backend scans and pays. The earnings banner confirms it: rewards "have been sent
 automatically to your connected wallet".
 
+The backend agrees. `superhero-api/src/profile/controllers/profile-rewards.controller.ts`
+exposes exactly four routes for this program — read status, create a recheck challenge,
+submit a recheck, and mint the referral link — and **none of them is a claim**. Payouts are
+pushed by the server: `ProfileSpendQueueService` loads a reward wallet from a
+`*_REWARD_PRIVATE_KEY` environment variable and spends AE to your address, serialising
+per-wallet so concurrent payouts cannot collide on the account nonce. There is no transaction
+for you to sign and no gas for you to pay.
+
+So the FAQ's description of a claim banner with a claim button and a gas fee does not match
+any code path in the current backend or the current web app. Read it as describing an older
+design; the only claim banner that exists today is the invite-link card at the bottom of this
+page.
+
 What can go wrong:
 
 - **The button is greyed out with a countdown.** The recheck is rate-limited. The status
@@ -40,11 +53,21 @@ What can go wrong:
 ## Affiliate rewards — the withdraw call
 
 Affiliate rewards accrue in the `AffiliationTreasury` contract as your invitees trade. They
-sit there until you withdraw them.
+sit there until you withdraw them — but not indefinitely.
 
 **The gate:** four direct invitees must each have spent at least 10 AE, cumulatively, in
 token sales. The Collect Rewards card reads this live from the contract, shows a progress bar
 out of four, and lists each invitee's spend against the 10 AE threshold.
+
+**The deadline:** rewards expire. `get_accumulated_rewards` sums the current 30-day payout
+period's bucket and the previous one, and `withdraw()` zeroes those same two buckets.
+Anything credited earlier is unreachable — the contract source says so in as many words:
+"reward that hasn't or couldn't been withdrawn in the respecive periods can never be
+withdrawn again, thus be considered burned"
+(`bcl-contracts/contracts/AffiliationTreasury.aes`). A given reward is claimable for between
+30 and 60 days, depending where in a period it landed. Withdraw at least monthly; there is no
+notification and no grace period. The arithmetic is on
+[The Affiliation System](/rewards/affiliation).
 
 To withdraw:
 
@@ -63,6 +86,11 @@ Button states and what they mean:
 | No rewards yet | Threshold reached, but `get_accumulated_rewards` returns zero |
 | Collect rewards | Eligible; the call will go through |
 | Withdrawing... | Transaction submitted, waiting on the wallet and the chain |
+
+`withdraw()` takes no arguments and always pays the whole two-bucket balance — there is no
+partial withdrawal, and no way to leave some behind. It gates on a single `require`, the
+`ThresholdReached` check; it does not require a non-zero balance, so a withdraw with nothing
+accrued succeeds and spends zero while still costing you the transaction fee.
 
 Contract errors the card translates for you:
 
@@ -94,24 +122,16 @@ Errors you may hit:
 | `Trying to call undefined function` | You are on the wrong network — the treasury at that address does not exist on the network your wallet is set to. |
 | A message mentioning `Secret key` | The secret in the link is in a format the SDK cannot load. The link is malformed or truncated. |
 
+There is one more guard the table does not cover: `INVITER_EQUAL_INVITEE`. You cannot redeem
+your own code into your own wallet to attach yourself to yourself.
+
 If you are the **inviter** and you open your own link, the card switches to **Revoke
-invitation** instead of Claim, and calls `revoke_invitation_code` with your own wallet.
-
-## Open questions
-
-- **Does the FAQ's "claim banner" refer to something else?** The FAQ describes a claim banner
-  appearing on the Rewards page once a milestone completes, with a claim button and a gas
-  fee. The current rewards UI pays X posting rewards automatically with no such banner; the
-  only claim banner in the app is the invite-link card described above. Either the FAQ
-  predates the automatic payout, or a milestone claim flow exists that is not in this build.
-  Settling it needs the deployed backend, not the web app.
-- **Do unclaimed rewards expire?** Nothing in the client sets a deadline on accumulated
-  affiliate rewards or on an unclaimed invite link. The contract's payout-period accounting
-  (see [The Affiliation System](/rewards/affiliation)) is the place to check, and the ACI
-  alone does not answer it.
-- **What happens to the AE in a revoked link?** The CLI help calls revoke "reclaim funds",
-  which implies the gift returns to the inviter, but neither the ACI nor the client confirms
-  whether the `redemption_fee_cover` portion comes back with it.
+invitation** instead of Claim, and calls `revoke_invitation_code` with your own wallet. That
+returns the `invitation_amount` and nothing else — the `redemption_fee_cover` was spent to
+the one-time address when the code was registered and never comes back. Unlike affiliate
+rewards, an unclaimed invite link does **not** expire: the `invitation_codes` entry carries
+no timestamp and no entrypoint prunes it, so a leaked link stays claimable until you revoke
+it.
 
 ## Read more
 

@@ -112,6 +112,28 @@ The agent runs `superhero-wallet.mjs exists` to detect whether a key is configur
 **Answer manual.** Watch a few cycles before you hand over signing authority. See
 [Autonomous Mode](/agents/autonomous-mode).
 
+### Budget for the `.chain` name
+
+`superhero-name.mjs register` refuses anything shorter than 13 characters, because names of
+twelve or fewer go to auction while thirteen and above register instantly. It does not quote
+the cost before claiming, and the cost is not trivial.
+
+æternity's name fee falls with length, following a descending Fibonacci schedule in units of
+10^14 aettos. The two ends and the first instant-registration tier:
+
+| Label length, before `.chain` | Fee |
+| --- | --- |
+| 13 | 17711 × 10^14 aettos = **1.7711 AE** |
+| 25 | 55 × 10^14 aettos = 0.0055 AE |
+| 31 or more | 3 × 10^14 aettos = 0.0003 AE |
+
+So the shortest name the script will accept is also the most expensive one it can claim, by
+roughly four orders of magnitude over a long one. Registration is three transactions —
+preclaim, claim, and an update to point the name at your wallet — each with its own
+transaction fee on top. Fund the wallet with a couple of AE more than you think you need, or
+pick a longer name. The full table is in the
+[AENS specification](https://github.com/aeternity/protocol/blob/master/AENS.md).
+
 ## 6. Verify
 
 Run these three from the skill's root directory:
@@ -154,11 +176,4 @@ never be deleted.
 - [Example Prompts](/agents/prompts) — the next sentence to send after setup
 - [Fund your wallet](/getting-started/fund-wallet) — how to get AE into the agent's address
 - [superhero-agent-skill on GitHub](https://github.com/superhero-com/superhero-agent-skill) — the README and source
-
-## Open questions
-
-- The AENS name fee for a 13+ character `.chain` name is not stated anywhere in the skill, and
-  `superhero-name.mjs` does not quote it before claiming. The æternity protocol's
-  [AENS specification](https://github.com/aeternity/protocol/blob/master/AENS.md) defines the
-  name claim fee schedule; the exact current mainnet figure should be confirmed there before
-  documenting a number here.
+- [AENS specification](https://github.com/aeternity/protocol/blob/master/AENS.md) — the full name-fee schedule behind the table above

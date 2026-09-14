@@ -51,12 +51,68 @@ needs the wallet to be funded.
 ```
 
 `allowed_name_length` is read from the collection record returned by `GET /api/factory`.
-`allowed_chars` is a hard-coded string in the script, not a value from the API — treat the
-guide's rule (uppercase A–Z, digits, dash) as authoritative and see
-[Collections and naming](/tokens/collections-and-naming) for the canonical constraints.
+`allowed_chars` is a hard-coded string in the script, not a value from the API.
+
+The authority is the factory contract, which stores the rule per collection as a list of
+Unicode code-point ranges and exposes it as `allowed_name_chars(collection_name)`:
+
+```sophia
+datatype allowedNameChars = SingleChar(int) | CharRangeFromTo(int, int)
+
+function require_name_restrictions(name, allowed_name_length, allowed_name_chars) =
+  require(String.length(name) =< allowed_name_length, "NAME_TOO_LONG")
+  require(List.all((c) => allowed_char_range(allowed_name_chars, Char.to_int(c)),
+                   String.to_list(name)), "NAME_NOT_ALLOWED_CHAR")
+```
+
+The script's hard-coded string happens to describe the WORDS collection correctly — that
+collection's rule is `SingleChar(45)` for the dash plus `CharRangeFromTo(48, 57)` for digits
+and `CharRangeFromTo(65, 90)` for `A`–`Z`, with a length limit of 20. But it is a
+description, not a check, and it would not describe any other collection. Mainnet has four:
+
+| Collection | Length | Allowed characters |
+| --- | --- | --- |
+| WORDS | 20 | `A`–`Z`, `0`–`9`, and the dash |
+| CHINESE | 20 | Chinese ideographs U+4E00–U+9FFF, and the dash |
+| ARABIC | 20 | Arabic letters U+0621–U+064A, and the dash |
+| RUSSIAN | 20 | Uppercase Cyrillic U+0410–U+042F plus Ё (U+0401), and the dash |
+
+None of them permits lowercase, and only WORDS permits digits or Latin letters. If you are
+generating names programmatically, read `allowed_name_chars` from the factory, or mirror
+`superhero-api/src/configs/contracts.ts`, rather than trusting the script's string. A name
+that violates the rule fails on chain with `NAME_NOT_ALLOWED_CHAR` or `NAME_TOO_LONG` after
+you have paid for the attempt.
 
 The collection itself is resolved at runtime: the script fetches the factory schema and takes
-the **first** collection in the response. You cannot specify a different one.
+the **first** collection in the response. You cannot specify a different one, so in practice
+the skill can only create WORDS tokens.
+
+### Token metadata
+
+`create_community` does take metadata — its last argument is
+`meta_info : CommunityManagement.meta_info`, which is a plain `map(string, string)`. The
+factory passes it straight into the `CommunityManagement` contract it creates for the token.
+`superhero-token-create.mjs` sends an empty map, so a token created by the skill starts with
+no description, no image and no links.
+
+Adding them afterwards is harder than it looks. `CommunityManagement` does expose
+`change_meta_info(meta_info)`, but it is owner-gated — and `create_community` reassigns
+ownership during creation:
+
+```sophia
+let community_management = Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityManagement
+let dao = Chain.create(None, Contract.address) : DAO
+...
+community_management.set_owner(dao.address)
+```
+
+So the community management contract is owned by the token's **DAO**, not by you, from the
+moment the token exists. Changing metadata after creation is a DAO action, not a direct call,
+and it needs the token holders to pass it. Creation is the only cheap moment to set it — which
+means a token created by the skill effectively cannot have metadata unless you call
+`create_community` yourself with a populated map. See
+[Community management](/contracts/community-management) and
+[Community DAO](/contracts/dao).
 
 ### `create`
 
@@ -214,15 +270,3 @@ The factory is `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`. See
 - [Collections and naming](/tokens/collections-and-naming) — the canonical name rules
 - [Bonding curves](/tokens/bonding-curve) — what the initial buy is buying into
 - [Create a token on superhero.com](https://superhero.com/trends/create) — the app's own creation flow
-
-## Open questions
-
-- `allowed_chars` is hard-coded in the script rather than read from the factory, so if the
-  collection's rules change the script will not reflect it. The authoritative constraint is
-  `allowed_name_chars` on the CommunityFactory contract; confirm against
-  [Collections and naming](/tokens/collections-and-naming) before generating names
-  programmatically.
-- The skill does not expose any way to set token metadata at creation — the script passes an
-  empty `meta_info` map. Whether a description or image can be attached afterwards, and
-  through which contract, is not covered by the skill. See
-  [Community management](/contracts/community-management).

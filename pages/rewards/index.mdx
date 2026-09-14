@@ -18,7 +18,8 @@ else in this section.
 | Where the money comes from | A discretionary program budget | Protocol fees, split on-chain |
 | Payout | Sent automatically to your connected wallet | You call `withdraw()` on the AffiliationTreasury contract |
 | Gate | X account with at least 100 followers | 4 direct invitees who have each spent at least 10 AE |
-| Ceiling | The FAQ quotes "up to 200 AE" | Uncapped — it accrues as long as your downline trades |
+| Ceiling | The FAQ quotes "up to 200 AE", but no cap exists in the backend — one rewarded post per UTC day is the real limit | Uncapped per period, but see the deadline below |
+| Deadline | None | **Rewards expire.** Only the current 30-day payout period and the previous one are withdrawable |
 | Can be switched off | Yes, at any time without notice | No, it is contract logic |
 
 The **Superhero Rewards Program** is a growth campaign. It is off-chain, discretionary,
@@ -26,8 +27,17 @@ geo-restricted, and explicitly not guaranteed.
 
 The **Trading Affiliate Program** is protocol mechanics. Every community-token buy carries a
 1% spread; half of it goes to the community DAO and half to affiliation. That affiliation
-half is split across up to four levels of referrers above the buyer, and if there is no
-referrer it is **burned** rather than kept by anyone.
+half is split across up to four levels of referrers above the buyer, and any level with no
+referrer is credited to nobody — the AE stays in the treasury contract permanently, which is
+what the whitepaper means by "burned".
+
+Two things about it surprise people, both settled from
+`bcl-contracts/contracts/AffiliationTreasury.aes`:
+
+- **A partial chain strands the rest, not just an unaffiliated buy.** A buyer two levels deep
+  pays the full 0.5% but only 0.425% of it reaches anyone.
+- **Accrued rewards expire after 30 to 60 days.** `withdraw()` reaches the current 30-day
+  payout period and the one before it, and nothing else. Withdraw monthly.
 
 ## The affiliation split at a glance
 
@@ -40,11 +50,15 @@ Buyer pays AE for a community token
                 ├── 0.125% → level 2
                 ├── 0.050% → level 3
                 └── 0.025% → level 4
-                (if the buyer has no inviter: burned)
+                (any level with no recipient: stranded in the treasury forever)
 ```
 
-Source: the "Affiliation Bonding Curve Token Sale" and "Token Economics Summary" sections of
-the [Superhero whitepaper](https://superhero.com/whitepaper).
+The 0.5% is added on top of the curve price rather than carved out of it, so a buy whose
+curve price is 1,000 AE costs the buyer 1,005 AE. Source:
+`bcl-contracts/contracts/AffiliationTreasury.aes` and
+`bcl-contracts/contracts/AffiliationBondingCurveTokenSale.aes`, which is where these figures
+are `let`-bound constants — the whitepaper's "Affiliation Bonding Curve Token Sale" and
+"Token Economics Summary" sections describe the same split in prose.
 
 ## In this section
 
@@ -53,7 +67,8 @@ the [Superhero whitepaper](https://superhero.com/whitepaper).
 - [Claiming Rewards](/rewards/claiming) — which rewards arrive automatically, which need a
   transaction you sign, and what the failure modes look like.
 - [The Affiliation System](/rewards/affiliation) — the deep page. Exact percentages, the
-  `AffiliationTreasury` contract surface, payout periods, and the burn on unaffiliated buys.
+  `AffiliationTreasury` contract surface, the 30-day payout periods and the claim deadline
+  they create, and what really happens to fees nobody is credited.
 - [Invite Links](/rewards/invite-links) — creating, funding, sharing, revoking and tracking
   invite links. Read the secrecy warning on that page before you generate one.
 - [Leaderboards](/rewards/leaderboards) — the trading leaderboard, its four metrics, and the

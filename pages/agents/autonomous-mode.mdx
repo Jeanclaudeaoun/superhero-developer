@@ -84,6 +84,13 @@ three things: that the proposals are sane, that the agent is actually running th
 checks rather than reading the score alone, and that the cadence produces enough signal to be
 worth acting on.
 
+Watch the entry filter especially closely in these first cycles. The trending score the API
+returns is a normalised value between 0 and 1, while the skill's strategy templates quote
+entry thresholds of 100,000, 50,000 and 20,000 — so an agent applying a template literally
+will propose no trades at all, and an agent that notices the mismatch will improvise a
+threshold you never chose. Settle on an explicit entry rule before going unattended; see
+[Fixing the entry threshold](/agents/strategies#fixing-the-entry-threshold).
+
 If your runtime supports it, enforce manual mode outside the model rather than inside it. A
 permission rule that denies `superhero-token-swap.mjs buy` is a guarantee; an instruction in a
 markdown file is a preference. See [Claude Code](/agents/claude-code) for the permission-rule
@@ -192,10 +199,13 @@ from.
 ## Open questions
 
 - The skill defines no config file format or location for the strategy JSON. `SKILL.md` and
-  `guides/autonomous.md` show the JSON and refer to "the config", but no script reads it and
-  no path is specified. In practice the strategy is instruction text the runtime persists,
-  which means a runtime that loses conversation state loses the strategy. Confirm how your
-  runtime persists it before relying on autonomous mode across restarts.
+  `guides/autonomous.md` show the JSON and refer to "the config", but the only files any
+  script reads from disk are the contract ACIs under `contracts/` — no script opens a config
+  file, and no path is specified. In practice the strategy is instruction text the runtime
+  persists, which means a runtime that loses conversation state loses the strategy. Nothing
+  in the repository can settle this; it is a per-runtime answer, so confirm how yours persists
+  instructions before relying on autonomous mode across restarts.
 - There is no scripted kill switch. A `pause` or `panic-sell` command in the skill would make
   the "sell all positions" override mechanical rather than conversational; none exists in the
-  [repository](https://github.com/superhero-com/superhero-agent-skill) today.
+  [repository](https://github.com/superhero-com/superhero-agent-skill) today. A new script or
+  a `case` block in `superhero-token-swap.mjs` would settle it.
