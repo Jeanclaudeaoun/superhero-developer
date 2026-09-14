@@ -233,8 +233,7 @@ built app.
   protocol constant, so any number written here would be a guess about someone's deployment. The
   rate limit *shape* is settled (a per-address graylist, signalled by HTTP 425), but not its
   duration. Both close in one request: `POST https://faucet.aepps.com/account/<address>` and read
-  the response, then repeat it and read the graylist message. Outbound HTTP is blocked in the
-  environment these docs were written in, so neither call could be made.
+  the response, then repeat it and read the graylist message.
 - **Is a public testnet deployment of the Superhero *social* front end hosted anywhere?** See above
   — the testnet backend is evidently operated, and the hosted wallet at `wallet.superhero.com`
   reaches testnet from its own settings, but no testnet origin for superhero.com itself exists in

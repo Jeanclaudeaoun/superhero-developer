@@ -280,8 +280,7 @@ funds. Contact the maintainers privately first and ask for a disclosure channel.
   ships `bytecode_hashes.json` and `source_hashes.json`, and
   `superhero-api/src/plugins/governance/contract/aci/GovernanceBytecodeHashes.json` ships the
   governance pair, so the comparison is mechanical — compile, hash, and fetch the deployed
-  bytecode from a node. Outbound network access was blocked while this page was written, so it
-  has not been done.
+  bytecode from a node, then check the two hashes against each other.
 - **Is the `AddressLink.aes` source available anywhere?** Only its compiled ACI is committed, in
   `superhero-api`. Its nonce increment rule, its provider-registration policy, and what
   `ALREADY_CLAIMED` compares are inferred from the backend's error mapping rather than read.

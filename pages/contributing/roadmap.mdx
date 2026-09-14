@@ -7,7 +7,8 @@ description: "What is left to verify, built from the open questions the pages th
 
 What is left to **verify**. Every page declares the facts it could not confirm under its own
 `## Open questions` heading; this page collects those declarations into a work queue and groups
-them by what it would actually take to close each one.
+them by what it would actually take to close each one. At present there are **158 of them
+across 82 pages**.
 
 Regenerate the list at any time:
 
@@ -18,22 +19,29 @@ grep -rl "## Open questions" pages/
 # Every open question, one per line, prefixed by its page
 python3 - <<'EOF'
 import os, re
+total = 0
 for root, _, files in os.walk('pages'):
     for f in sorted(files):
         if not f.endswith('.mdx'):
             continue
         p = os.path.join(root, f)
-        m = re.search(r'^## Open questions\s*$(.*?)(?=^## |\Z)', open(p).read(), re.M | re.S)
+        # Strip fenced blocks first: the page template contains an example
+        # "## Open questions" heading that is not a real one.
+        text = re.sub(r'^([`~]{3,}).*?^\1', '', open(p).read(), flags=re.M | re.S)
+        m = re.search(r'^## Open questions\s*$(.*?)(?=^## |\Z)', text, re.M | re.S)
         if not m:
             continue
         for item in re.split(r'\n(?=[-*] )', m.group(1).strip()):
-            print(p, '::', ' '.join(item.split()))
+            if item.strip():
+                total += 1
+                print(p, '::', ' '.join(item.split()))
+print(f'\n{total} open questions')
 EOF
 ```
 
 ## Priority 1 — One session with network access
 
-**Roughly 33 questions** need a live call and nothing else. No address, constant or endpoint on
+**Roughly 36 questions** need a live call and nothing else. No address, constant or endpoint on
 this site has been confirmed against a running system; every one of them was read out of a
 source file instead.
 
@@ -54,8 +62,9 @@ unverifiable the moment chain state moves.
 
 ## Priority 2 — Questions only Superhero can answer
 
-**Roughly 22 questions.** No amount of code reading closes these; someone has to decide or
-publish. Listed most consequential first.
+**Roughly 60 questions, collapsing to the eleven distinct asks below** — the same few gaps recur
+on page after page. No amount of code reading closes these; someone has to decide or publish.
+Listed most consequential first.
 
 | Question | Page |
 | --- | --- |

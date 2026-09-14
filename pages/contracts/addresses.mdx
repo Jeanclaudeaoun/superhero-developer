@@ -150,11 +150,10 @@ addresses without any chain calls.
 
 ## Open questions
 
-- **Are these addresses still current on chain?** Outbound network access was blocked while
-  this page was written, so no address here was confirmed against a node or against
-  `GET /api/contracts`. Before relying on one, re-read it from `GET /api/factory` for the
-  factory-owned addresses, or from `superhero/src/config.ts` on the deployed build for the
-  rest.
+- **Are these addresses still current on chain?** No address here has been confirmed against a
+  node or against `GET /api/contracts`. Before relying on one, re-read it from
+  `GET /api/factory` for the factory-owned addresses, or from `superhero/src/config.ts` on the
+  deployed build for the rest.
 - **What is the mainnet `disabled: true` flag for?** It sits on the whole mainnet
   `NetworkDefinition` in `superhero/src/config.ts`, not on the DEX addresses as previously
   assumed here, and `src/utils/constants.ts` copies it through to `CURRENT_NETWORK.disabled`.

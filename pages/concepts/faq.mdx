@@ -416,4 +416,5 @@ is the threshold on both sides. See [Claim Your .chain Name](/getting-started/cl
   requests per minute with no environment override, so the deployed figure should match — but the
   guard is per-process and the number of replicas behind `api.superhero.com` is not public, so the
   limit you actually hit may be a multiple of it. Observing 429 responses against the live host
-  would settle it; that request could not be made from this environment.
+  settles it: send requests to `api.superhero.com` faster than ten per minute and count how many
+  land before the first 429.

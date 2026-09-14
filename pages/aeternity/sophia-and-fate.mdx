@@ -213,10 +213,9 @@ quoted as versions — read them as floors.
   not the answer itself. Fetch the deployed `Poll_Iris` and `Registry_Compiler_v6` bytecode from
   the node, hash it, and look the hash up in
   `aepp-governance/governance-contracts/generated/bytecode_hashes.json`. That is one node call per
-  contract and could not be made from this environment, where outbound HTTP is blocked. BCL
-  (8.0.0) and Tipping (7.4.1) are settled from their own single-key files.
+  contract. BCL (8.0.0) and Tipping (7.4.1) are settled from their own single-key files.
 - **Which compiler built ProfileRegistry?** Nothing settles this, and the trail has gone cold:
-  there is no ProfileRegistry source repository in this environment, and the current backend no
+  no ProfileRegistry source repository has been located, and the current backend no
   longer even carries its ACI — the only references left are two comments describing its indexer in
   the past tense (`superhero-api/src/profile/services/profile-read.service.ts` and
   `src/plugins/address-links/address-links-plugin-sync.service.ts`), which have been superseded by
