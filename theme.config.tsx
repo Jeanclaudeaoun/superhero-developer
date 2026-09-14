@@ -101,6 +101,27 @@ const config: DocsThemeConfig = {
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/icon-192.png" type="image/png" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+        {/* Content image presentation.
+         *
+         * This lives here rather than in a stylesheet imported from a custom
+         * pages/_app.tsx: that file existed only to pull in one CSS file, and
+         * its AppProps typing tripped a duplicate-@types/react conflict that
+         * failed the deployment build while passing locally. Nextra renders
+         * this head fragment on every page, so one <style> does the same job
+         * with no extra file and no typing surface.
+         *
+         * Pages use plain markdown image syntax, which keeps
+         * scripts/lint-mdx.py able to stay strict about the stray `<` and `{`
+         * in prose that actually break MDX compilation. */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+main img { display:block; max-width:min(100%,640px); height:auto; margin:2.25rem auto; border-radius:14px; }
+nav img { margin:0; border-radius:0; }
+`,
+          }}
+        />
       </>
     )
   },
