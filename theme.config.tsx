@@ -2,12 +2,9 @@ import React from 'react'
 import { useRouter } from 'next/router'
 import { DocsThemeConfig, useConfig } from 'nextra-theme-docs'
 
-// Canonical origin, used for og:url and the social-card image. Set
-// NEXT_PUBLIC_SITE_URL in the deployment environment to the real domain; the
-// fallback only keeps local builds and previews coherent.
-const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || 'https://docs.superhero.com'
-).replace(/\/$/, '')
+// next.config.js resolves this: an explicit NEXT_PUBLIC_SITE_URL, else the
+// project's real production domain from Vercel, else localhost.
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || '').replace(/\/$/, '')
 const OG_IMAGE = `${SITE_URL}/og-default.png`
 
 const config: DocsThemeConfig = {
