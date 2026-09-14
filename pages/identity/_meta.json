@@ -1,7 +1,7 @@
 {
   "index": "Overview",
   "superhero-id": "SuperheroID",
-  "profile-registry": "AddressLink",
+  "address-link": "AddressLink",
   "names": "Names",
   "chain-names": "Chain Names (AENS)",
   "x-verification": "Verifying Your X Account",

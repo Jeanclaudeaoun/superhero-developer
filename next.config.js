@@ -32,4 +32,18 @@ module.exports = withNextra({
   env: {
     NEXT_PUBLIC_SITE_URL: siteUrl(),
   },
+  async redirects() {
+    return [
+      {
+        source: '/identity/profile-registry',
+        destination: '/identity/address-link',
+        permanent: true,
+      },
+      {
+        source: '/contracts/profile-registry',
+        destination: '/contracts/address-link',
+        permanent: true,
+      },
+    ]
+  },
 })
