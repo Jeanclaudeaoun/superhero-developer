@@ -92,9 +92,24 @@ post on a user's behalf — the backend reads the chain, it does not write posts
 entrypoint is real and usable, and the sole reason posting is not gasless today is that no Superhero
 service calls it. See [Delegated & Gasless Posting](/social/delegated-posting).
 
-**The indexer reads the middleware, not the node directly.** Everything upstream of the plugins goes
-through `MIDDLEWARE_URL`, so the middleware's own lag is the floor on how fresh any API response can
-be.
+**The indexer reads the middleware, not the node directly** — so the middleware's own lag is the
+floor on how fresh any API response can be.
+
+**And it reads a different host than the web app does.** This is worth stating because the two are
+easy to conflate: `mdw.wordcraft.fun` is a *client-side* node URL from `superhero/src/config.ts` and
+appears nowhere in the backend. `superhero-api` has its own network table
+(`src/configs/network.ts`) pointing at the æternity Foundation's public infrastructure:
+
+| Backend setting | Mainnet value |
+| --- | --- |
+| `url` | `https://mainnet.aeternity.io` |
+| `middlewareUrl` | `https://mainnet.aeternity.io/mdw` |
+| `websocketUrl` | `wss://mainnet.aeternity.io/mdw/v2/websocket` |
+
+So `api.superhero.com` indexes from `mainnet.aeternity.io` while the browser reads chain state
+through `mdw.wordcraft.fun`. Both serve `ae_mainnet` and both see the same chain, but they are
+independent dependencies that can lag independently — which is one more reason a socket event should
+be treated as a hint rather than as a fact.
 
 ## Publishing a post
 

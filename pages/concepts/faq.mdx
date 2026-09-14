@@ -288,9 +288,24 @@ post whose first media entry is `comment:PARENT_ID`. See [Posts](/api-reference/
 
 ### How do I get live updates instead of polling?
 
-Open a socket.io connection to the API origin and subscribe to `token-created`, `token-updated`,
-`token-transaction` or `token-history`. Two of them fan out per `sale_address`. See
-[WebSocket](/api-reference/websocket).
+Open a socket.io connection to the API origin and listen for **`token-updated`** and
+**`token-history`**. Those are the only two channels the backend emits —
+`superhero-api/src/tokens/token-websocket.gateway.ts` contains exactly two `server.emit` calls, and
+there is no emit for `token-created` or `token-transaction` anywhere in it. The web app registers
+listeners for all four, so two of them are dead code; do not build on them.
+
+Three properties to design around:
+
+- **There is no subscribe.** The gateway defines no `@SubscribeMessage` handlers at all — the relay
+  was removed as a security fix after it was found rebroadcasting arbitrary client messages as
+  price events. Emits are broadcast to every connected client, so filter by `sale_address` yourself
+  after delivery.
+- **Delivery is at-most-once.** Nothing is replayed or acknowledged. Treat an event as a signal to
+  refetch over REST, never as the record itself.
+- **Notifications are a different gateway**, and that one is room-scoped:
+  `server.to(address).emit('notification', …)` and `('unread-count', …)`.
+
+See [WebSocket](/api-reference/websocket).
 
 ### Which SDK should I use?
 
