@@ -23,7 +23,7 @@ longer binary payloads.
 | `th_` | Transaction hash | Trade and post receipts; what you paste into an explorer |
 | `kh_` | Key-block hash | Block references in explorer links |
 | `mh_` | Micro-block hash | Block references in explorer links |
-| `sg_` | Signature | Delegated-posting payloads, signed attestations |
+| `sg_` | Signature | Delegated-posting payloads, address-link claims |
 | `nm_` | Name (AENS) | The on-chain object behind a `.chain` name |
 | `cm_` | Commitment | The salted preclaim hash in AENS registration |
 | `ok_` | Oracle public key | Not used by Superhero |
@@ -105,7 +105,7 @@ for secp256k1 and does not apply unchanged to Ed25519. See
 - **A `.chain` name is not an address.** Resolve it to an `ak_` through AENS before using it in a
   transaction — see [AENS](/aeternity/aens).
 
-## Read more
+## Related
 
 - [AENS](/aeternity/aens) — how `nm_` and `cm_` come into existence, and how names resolve to `ak_`.
 - [Wallet & keys for agents](/agents/wallet-and-keys) — generating and storing `AE_PRIVATE_KEY` for the agent skill.

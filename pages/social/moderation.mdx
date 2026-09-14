@@ -139,7 +139,7 @@ pipeline enforces it:
 
 1. The API reads `CommunityManagement.get_state()` and mirrors `muted_user_ids` into the room's
    muted list, alongside `moderators`, `min_token_threshold`, `is_private` and the owner
-   address.
+   address. The relay's admin and role lists are derived from the same read.
 2. Eligibility for the room is `balance >= min_token_threshold AND NOT muted`, where the muted
    check compares the member's æternity address against that list.
 3. A muted member is removed from the relay group with a kind-9001 event, and the sync refuses
@@ -152,6 +152,10 @@ until the mute is lifted.
 A mute affects chat-room eligibility only. Posts, comments, topic feeds and the popular ranking
 are not filtered by `muted_user_ids`: a muted account's existing posts stay visible, and it can
 keep posting.
+
+The per-room mute in the chat app is a different thing: it is a *notification* preference that
+silences your own alerts and changes nothing for anyone else. See
+[Notifications](/social/notifications).
 
 ## The write threshold
 
@@ -185,18 +189,6 @@ the same value, chosen once at creation.
   to ignore every mute; a different relay would enforce nothing.
 - **It is per-community.** There is no global mute list; each `CommunityManagement` instance
   holds its own.
-
-## Chat moderation is the same state
-
-The Nostr chat layer is where `CommunityManagement` is enforced. The relay decides who is in a
-NIP-29 group, but what the relay is told comes from the contract: the API reads `get_state()`,
-mirrors `moderator_accounts` and `muted_user_ids` into the room, recomputes eligibility, and
-publishes kind 9000 / 9001 membership events accordingly. The relay-signed admin and role lists
-are downstream of the same read.
-
-The per-room mute in the app is a different thing: it is a *notification* preference that
-silences your own alerts and changes nothing for anyone else. See
-[Notifications](/social/notifications).
 
 ## Hiding your own post
 

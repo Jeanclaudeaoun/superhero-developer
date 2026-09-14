@@ -59,18 +59,14 @@ not help — the curve is path-independent. See [Fees & Slippage](/tokens/fees-a
 ## 3. Reflexivity
 
 Price is a pure function of supply and nothing else. There is no external market, no arbitrageur,
-and no fundamental value pulling the price back to anything, so the feedback loop is direct:
+and no fundamental value pulling the price back to anything, so the feedback loop is direct: buying
+raises the price, which attracts buyers, which raises the price — and selling does the same in
+reverse. Neither direction has a natural floor above the curve itself, and a price that rose on one
+large buy is exactly as "real" as one that rose on a thousand small ones.
 
-- Buying raises the price, which makes the token look like it is performing, which attracts buyers, which raises the price.
-- Selling lowers the price, which makes it look like it is failing, which triggers more selling, which lowers the price.
-
-Both directions are self-reinforcing and neither has a natural floor above the curve itself. A price
-that rose on one large buy is exactly as "real" as a price that rose on a thousand small ones — the
-curve cannot tell the difference, and neither can the chart.
-
-**Momentum signals describe buying that has already moved the price.** By the time a token is at
-the top of the trending list, the supply that made it trend has already been minted, and you would
-be buying further up the curve than the people the signal is reporting on. See
+**Momentum signals describe buying that has already moved the price.** By the time a token tops the
+trending list, the supply that made it trend has already been minted, and you would be buying
+further up the curve than the people the signal is reporting on. See
 [The Trending Score](/tokens/trending-score).
 
 ## 4. Thin communities and concentration
@@ -127,13 +123,11 @@ See [Contract security](/contracts/security).
 ## 9. Availability and data risk
 
 The chain is the system of record; superhero.com is a client on top of it. If the web app or the
-indexer is down, your tokens are unaffected and the contracts still work — you can trade directly
-against the sale contract with the SDK. While it is down you lose the price charts, the trending
-score, the portfolio valuations and the transaction history, all of which are served by the backend
-rather than read from the chain.
-
-Indexer lag is normal: a freshly created token takes 2–5 minutes to appear, and a trade may be
-on-chain before it shows in a list. Verify against the explorer before concluding something failed.
+indexer is down, your tokens and the contracts are unaffected — you can trade directly against the
+sale contract with the SDK — but price charts, the trending score, portfolio valuations and
+transaction history are served by the backend and go with it. Indexer lag is normal: a new token
+takes 2–5 minutes to appear, and a trade may be on-chain before it shows in a list. Verify against
+the explorer before concluding something failed.
 
 ## What a community token is not
 

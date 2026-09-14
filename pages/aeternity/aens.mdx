@@ -165,8 +165,8 @@ node scripts/superhero-name.mjs extend myagentname.chain
 ```
 
 Superhero surfaces the expiry it knows about in the claim status (`expires_at` /
-`approximate_expire_time`), and the ProfileRegistry contract stores a chain name together with an
-expiration timestamp (see [ProfileRegistry](/contracts/profile-registry)).
+`approximate_expire_time`), and the AddressLink contract stores a chain name together with an
+expiration timestamp (see [AddressLink](/contracts/profile-registry)).
 
 ## Read names without a wallet
 
@@ -179,7 +179,7 @@ curl "https://mainnet.aeternity.io/mdw/v3/names?owned_by=ak_...&state=active&lim
 That is the query `superhero-name.mjs lookup` makes. See [Networks](/aeternity/networks) for
 hosts.
 
-## Read more
+## Related
 
 - [Chain names](/identity/chain-names) — the same system from the Superhero user's side.
 - [Claim a name](/getting-started/claim-name) — the in-app flow, step by step.

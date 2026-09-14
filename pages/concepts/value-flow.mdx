@@ -54,9 +54,8 @@ function exp_helper(x : int, term : int, sum : int, i : int, scale : int) : int 
     exp_helper(x, next_term, sum + next_term, i + 1, scale)
 ```
 
-The closed form and the contract agree to within about 2e-16 AE at supply 0 and 1.4e-12 AE at
-supply 10,000,000. Use the closed form to reason about the shape; use `price(count)` when a number
-has to be exact.
+The series matches the closed form to well below one aetto per token. Use the closed form to
+reason about the shape; use `price(count)` when a number has to be exact.
 
 The sell curve is `sell(x) = buy(x) * 0.995` — the 0.5% that funds the DAO. The sale contract adds
 a further 0.5% affiliation fee **on top of** the curve price, so the total spread between buy and
@@ -334,10 +333,8 @@ tokens directly, at the same 1,000× rate.
 A buy receipt carries two `Mint` events: one on the community token and one on the ProtocolDAO
 token contract.
 
-The trade card and the confirmation modal display a client-side estimate of
-`(1 - PROTOCOL_DAO_AFFILIATION_FEE) * PROTOCOL_DAO_TOKEN_AE_RATIO * aeValue`, with
-`PROTOCOL_DAO_AFFILIATION_FEE = 0.05` and `PROTOCOL_DAO_TOKEN_AE_RATIO = 1000` — that is **950×**.
-The minted amount is 1,000× the AE debited; the `Mint` event on your own transaction is the record.
+The minted amount is 1,000× the AE debited; the `Mint` event on your own transaction is the
+record.
 
 ## Related
 

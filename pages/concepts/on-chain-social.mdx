@@ -106,7 +106,7 @@ skill's setup checks for a non-zero balance before it will let an agent post. Se
 | Media **URLs** | Yes | The `media` list |
 | Media **files** | No | Whatever host the URL points at. If that host disappears, the post survives and the image does not |
 | Tips | Yes | AE transfers on-chain, summarised by the API at `GET /api/tips/posts/[postId]/summary` |
-| Profile name, bio, chain/X name, display source | Yes | `ProfileRegistry.aes` |
+| Preferred `.chain` name, X handle, Nostr key, bio, website | Yes | `AddressLink` contract state, as provider links |
 | Avatar image | No | A URL stored in the profile record |
 | Chat messages | No | Nostr events on `wss://relay.superhero.chat`, and Quali.chat rooms at `app.quali.chat` |
 | Feed ordering, search, pagination | No | The indexer behind `api.superhero.com` |

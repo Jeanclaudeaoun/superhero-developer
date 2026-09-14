@@ -123,18 +123,15 @@ where `for_account` is the grantee in `ak_` form — for the DEX, the router's c
 `ct_` swapped for `ak_`. Use the agent skill's SDK setup, `aepp-cli`, or any tool that can call a
 contract entrypoint.
 
-Every allowance Superhero grants is sized to the specific trade rather than unlimited, so a stale
-allowance is capped at whatever was left over from the operation that created it — usually zero,
-because a swap spends exactly what it was granted. Check, and revoke anything left standing on a
-token you hold in size.
+Every allowance Superhero grants is sized to the specific trade, so a stale allowance is capped at
+whatever was left over from the operation that created it — usually zero, because a swap spends
+exactly what it was granted. Check, and revoke anything left standing on a token you hold in size.
 
 ### Hygiene
 
-- **Read the amount** in the signing prompt. Superhero's built-in wallet names these calls in plain
-  language rather than showing raw calldata.
+- **Read the amount** in the signing prompt.
 - **Reset what you no longer need**, after you finish voting or when you stop using a pool.
-- **Remember base units.** An allowance figure with 18 zeros after it is not a bug, but neither is
-  it a small number — check the digit count against the token's decimals.
+- **Remember base units.** Check the digit count against the token's decimals.
 
 ## Related
 

@@ -30,7 +30,7 @@ that needs to be fast goes to the API.
 | Governance | `DAO.aes`, `DAOVote.aes`, `ReplaceableDAO.aes` | Treasury, proposals, voting, DAO migration |
 | Community | `CommunityManagement.aes` | Moderators, write thresholds, community metadata |
 | Affiliation | `AffiliationTreasury.aes` | Multi-level referral accounting and payout |
-| Identity | `ProfileRegistry.aes` | Profiles, custom/chain/X names, display source |
+| Identity | `AddressLink` | Provider links: preferred `.chain` name, X handle, Nostr key, bio, website |
 | Token standard | AEX-9 (`FungibleTokenFull.aes`) | Community tokens and the ProtocolDAO token |
 
 The Tipping and factory contracts are **singletons** — one address per network. The Tipping address
@@ -70,9 +70,10 @@ The service behind `api.superhero.com` is one NestJS process doing several jobs:
 - **Trendminer** — trending scores, charts and analytics, computed on a cron. In the web app this is
   the set of `/trends/*` views served from the same API. The formula is in
   [Attention Markets](/concepts/attention-markets).
-- **Attestation signer** — a backend key registered in `ProfileRegistry.aes` at deployment. It signs
-  X-handle attestations that the contract verifies with `Crypto.verify_sig`; the client obtains one
-  from `POST /api/profile/x/attestation`. See [Verifying Your X Account](/identity/x-verification).
+- **Address-link provider wallet** — the backend account that owns the `x`, `nostr`, `bio`, `site`
+  and `prefaens` provider namespaces in `AddressLink`. It checks the off-chain proof (an OAuth
+  session, a signed Nostr event, AENS ownership), then submits and pays for the `link` call the
+  user signed. See [Verifying Your X Account](/identity/x-verification).
 - **Clients** — the React/Vite web app, the React Native mobile apps, and the
   [agent skill](/agents) for AI agents.
 

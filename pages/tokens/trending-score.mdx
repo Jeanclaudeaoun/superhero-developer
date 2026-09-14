@@ -60,17 +60,24 @@ by `0.05`. Silence is the single biggest term in the whole formula.
 ### What that means in practice
 
 - **Caps make the score a presence signal, not a size one.** Volume is capped at 5,000 AE and
-  carries 0.20 of the 0.35 trading weight — so 5,000 AE and 500,000 AE of daily volume score
-  identically on that axis. The score cannot tell you how much money moved.
+  carries 0.20 of the 0.35 trading weight, so 5,000 AE and 500,000 AE of daily volume score
+  identically; 25 active wallets and 2,500 score the same. Above the caps the score stops
+  distinguishing, which is exactly where the largest tokens live.
 - **Log normalisation front-loads the first few units.** On the buy-count signal, going from 0 to 5
-  buys scores `0.48` while going from 20 to 40 adds only `0.18`. Small tokens can climb quickly;
-  large ones saturate.
+  buys scores `0.48` while going from 20 to 40 adds only `0.18`. Every signal is normalised against
+  a fixed cap rather than the token's own size, so a small token's first few trades and posts buy
+  far more score than a large token's next hundred.
 - **Sells count exactly as much as buys.** Sell count and buy count share the same weight and the
-  same cap. A token being dumped hard scores the same on that axis as one being accumulated. The
+  same cap, so a token being dumped scores the same on that axis as one being accumulated. The
   score measures *activity*, not direction.
+- **Social activity is 65% of it, and social activity is cheap.** Posts, comments and distinct
+  authors carry 0.86 of the social weight between them; manufacturing those is much cheaper than
+  manufacturing volume.
 - **Decay dominates a quiet token.** A token with an excellent pre-decay score and twelve hours of
   silence keeps about 11% of it. Most of the movement in the trending list between refreshes is the
   decay term, not new activity.
+- **It is a lagging indicator.** A momentum score describes activity that has already happened. On
+  a curve where price rises with every buy, acting on it means buying after the price has moved.
 
 ### Refresh cadence
 
@@ -143,7 +150,8 @@ rank tells you about position in a list and score tells you about intensity.
 
 A falling score means activity is fading and is a reasonable exit signal. A rising score does
 **not** mean buying pressure specifically: sells carry the same weight as buys, and social signals
-outweigh both. Confirm direction from the trade flow before treating a rising score as demand.
+outweigh both. Treat it as one input among several, never as a directional signal, and confirm
+direction from the trade flow before treating a rising score as demand.
 
 The agent skill's three strategy templates set an exit rule as a relative drop from the score at
 entry:
@@ -181,18 +189,6 @@ node scripts/superhero-trending.mjs performance ct_<sale_address>
 `tokens` accepts an alternative ordering as its second argument — `market_cap`, `holders_count`,
 `price`, `created_at`, `name`, `treasury` or `rank` — which is a useful cross-check. A token that is
 top-ten by trending score and nowhere by holder count is telling you something.
-
-## Limitations
-
-- **It is not a buying-pressure signal.** Buys and sells carry identical weight. A token being sold off scores as well as one being bought.
-- **It is blind above the caps.** 5,000 AE of volume and 500,000 AE score the same; 25 active wallets and 2,500 score the same. Above the caps the score stops distinguishing, which is exactly where the largest tokens live.
-- **It is comparable across tokens, but flatteringly so for small ones.** Every signal is normalised against a fixed cap rather than against the token's own size, and log normalisation means a token's first few trades and posts buy far more score than a large token's next hundred.
-- **Social activity is 65% of it, and social activity is cheap.** Posts, comments and distinct authors carry 0.86 of the social weight between them. Manufacturing those is much cheaper than manufacturing volume.
-- **It is periodic.** Up to two hours stale on an active token, longer on a quiet one. `trending_score_update_at` tells you how stale, and `GET /api/tokens/{address}/score` gives you a fresh figure.
-- **It is a lagging indicator.** A momentum score describes activity that has already happened. On a curve where price rises with every buy, acting on it means buying after the price has already moved.
-
-The score orders the list in a way that surfaces active communities, which is the job it was built
-for. Treat it as one input among several, never as a directional signal.
 
 ## Related
 

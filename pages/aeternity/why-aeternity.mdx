@@ -36,7 +36,7 @@ is portable rather than Superhero-specific. See [AENS](/aeternity/aens) and
 
 Sophia exposes `Crypto.verify_sig`, and æternity defines a signed-message prefix
 (`"aeternity Signed Message:\n"`, with a fixed 28-byte header) that a contract can reconstruct.
-Superhero's Tipping and ProfileRegistry contracts hash a message with Blake2b, prepend the prefix
+Superhero's Tipping and AddressLink contracts hash a message with Blake2b, prepend the prefix
 to produce a 60-byte payload, and verify it with `Crypto.verify_sig`. That is what makes
 [delegated posting](/social/delegated-posting) possible: a user signs off chain, a relayer pays
 the gas, and the contract still attributes authorship to the signer.
@@ -64,7 +64,7 @@ wallets and explorers read Superhero balances without integrating with Superhero
 Video calls at `/meet/:room` run on Jitsi, and chat runs on Nostr relays — neither is an
 æternity layer-2 mechanism.
 
-## Read more
+## Related
 
 - [Sophia & FATE](/aeternity/sophia-and-fate) — the language and VM.
 - [AE & Gas](/aeternity/ae-and-gas) — what the cost figures above are made of.

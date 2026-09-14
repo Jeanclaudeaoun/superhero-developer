@@ -125,11 +125,9 @@ the curve is locally almost linear, so a thousand tokens barely move it.
 
 ## Curve slippage
 
-Slippage on a bonding curve is a property of the integral. You are charged the area under a rising
-curve, but the quoted spot price is only the height at the left-hand edge of that area. The bigger
-the slice, the further the right-hand edge has risen above it, and the worse your average fill.
-
-All of these are buys starting from supply 10,000,000, where spot is `1.052709e-4 AE`:
+You are charged the area under a rising curve, but the quoted spot price is only its height at the
+left-hand edge. The bigger the trade, the worse your average fill. All of these are buys starting
+from supply 10,000,000, where spot is `1.052709e-4 AE`:
 
 | Tokens bought | Total AE cost | Average price (AE) | Average vs spot |
 | --- | --- | --- | --- |
@@ -139,14 +137,12 @@ All of these are buys starting from supply 10,000,000, where spot is `1.052709e-
 | 10,000,000 | 1,624.184008 | 1.62418e-4 | +54.29% |
 | 50,000,000 | 21,699.788231 | 4.33996e-4 | +312.3% |
 
-Buying 10,000,000 tokens in one transaction doubles the supply, and you pay a 54% premium to the
-price you saw before you clicked. Splitting the order does **not** help: the curve is
-path-independent, so ten buys of 1,000,000 from a rising supply cost exactly the same total as one
-buy of 10,000,000. The only things that reduce your average price are buying less, or buying when
-the supply is lower.
+Buying 10,000,000 tokens in one transaction doubles the supply and costs a 54% premium to spot.
+Splitting the order does **not** help: the curve is path-independent, so ten buys of 1,000,000 from
+a rising supply cost exactly the same total as one buy of 10,000,000. Only trade size and starting
+supply change your average price.
 
-A sell works the same way in reverse: you receive the area under the *sell* curve as supply falls
-back, so a large sell realises an average price below the spot price you were quoted.
+A large sell realises an average price below the quoted spot for the same reason, in reverse.
 `minimal_return_required` protects you from that — see
 [Buying & Selling](/tokens/buying-and-selling).
 

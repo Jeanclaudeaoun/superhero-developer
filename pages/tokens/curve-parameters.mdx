@@ -38,13 +38,11 @@ The scaling rule: for a curve `f(x) = α·e^(β·x) − γ`, the constants are `
 ### `minimum_count`
 
 `calculate_price` requires `count >= minimum_count` and aborts with `MINIMUM_TOKENS_REQUIRED`
-otherwise. `minimum_count` is `10^12` token decimal units, and a token has 18 decimals, so the floor
-is `10^12 / 10^18 = 10^-6` tokens — one millionth of a token. It keeps a trade from rounding to zero
-inside the integer arithmetic; any trade a person would make clears it by many orders of magnitude.
-
-It fires when you pass a **whole-token** count where the contract expects token decimal units. Ask
-for 5 tokens by sending `5` instead of `5000000000000000000` and the call aborts with
-`MINIMUM_TOKENS_REQUIRED` rather than silently buying five attotokens.
+otherwise. `minimum_count` is `10^12` token decimal units — `10^12 / 10^18 = 10^-6` tokens, one
+millionth of a token — so it only guards against a trade rounding to zero inside the integer
+arithmetic. In practice it fires when you pass a **whole-token** count where the contract expects
+decimal units: sending `5` instead of `5000000000000000000` aborts with `MINIMUM_TOKENS_REQUIRED`
+rather than silently buying five attotokens.
 
 ### The sell factor
 
@@ -79,9 +77,7 @@ a sale whose token decimals differ from its curve's cannot be deployed. Both are
 the factory creates: `create_community` passes `decimals = 18` to the sale, and
 `BondingCurveExponential.supported_decimals()` returns `18`.
 
-Read the value from one of those entrypoints rather than hardcoding 18. The agent skill's `create`
-command reads `supported_decimals()` from the curve; its `swap` command reads `meta_info().decimals`
-from the token contract.
+Read the value from one of those entrypoints rather than hardcoding 18.
 
 `GET /api/tokens/{address}` also returns `decimals` (as a string) alongside `total_supply`.
 `total_supply` from the API is already in token decimal units — divide it by 10^18 before feeding it
@@ -172,11 +168,11 @@ function fracToBigNumber(frac) {
 
 Three rules carry over from the Sophia standard library:
 
-1. Never build a `frac` from its constructors directly — inside Sophia use `Frac.make_frac`, which
-   normalises, so `make_frac(2, 4)` and `make_frac(1, 2)` are the same value. Off-chain, treat what
-   you decode as already normalised and do not assume a particular denominator.
-2. Do not compare `frac` values with `<`-style operators; Sophia code uses `Frac.lt`, `Frac.geq`,
-   `Frac.eq`. Off-chain, cross-multiply or convert to `BigNumber` first.
+1. Inside Sophia, build a `frac` with `Frac.make_frac`, which normalises (`make_frac(2, 4)` equals
+   `make_frac(1, 2)`); off-chain, treat a decoded value as normalised and do not assume a particular
+   denominator.
+2. Compare with `Frac.lt`, `Frac.geq` and `Frac.eq` in Sophia; off-chain, cross-multiply or convert
+   to `BigNumber` first.
 3. The denominator is not fixed and can be large. Do not coerce it to a JavaScript `number`.
 
 `buy_curve(x)` evaluates to **AE per whole token** — identically, aettos per attotoken, since both
@@ -356,9 +352,8 @@ Because the curve is convex, the trapezoidal rule always *overestimates* slightl
 
 Twenty parts per million on a 70,000 AE trade is about 1.4 AE — real money on large orders, though
 far inside any sane slippage tolerance. **Treat every off-chain calculation as an estimate and the
-contract's own return value as the price.** The agent skill uses the client-side bisection only to
-pick a token count, then calls `calculate_buy_price` on-chain for the amount it attaches to the
-transaction.
+contract's own return value as the price.** The agent skill uses bisection only to pick a token
+count, then calls `calculate_buy_price` on-chain for the amount it attaches.
 
 ## Reading the constants from a deployed curve
 
