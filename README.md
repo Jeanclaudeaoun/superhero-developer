@@ -23,9 +23,9 @@ pnpm build    # production build
 
 ### Deployment
 
-Set `NEXT_PUBLIC_SITE_URL` to the site's real origin (for example
-`https://docs.superhero.com`). It is used for `og:url` and for the absolute social-card image
-URL; without it both fall back to a placeholder domain, which makes link previews wrong.
+The canonical origin used for `og:url` and the social-card image resolves automatically:
+`NEXT_PUBLIC_SITE_URL` if set, otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`. Attaching a
+custom domain in Vercel is enough; no code change is needed.
 
 Brand assets live in `public/` and come from the Superhero app's own `public/` directory —
 the mark, the wordmark, the favicon set and the social card.
@@ -61,23 +61,24 @@ pages/
 ├── rewards/             Rewards program, affiliation, invite links, leaderboards
 ├── defi/                DEX swap, pools, wrapped AE, bridge, buying AE
 ├── agents/              AI agents: skill install, autonomous mode, strategies, CLI reference
-├── api/                 api.superhero.com REST reference
+├── api-reference/       api.superhero.com REST reference
 ├── contracts/           Sophia contract reference and deployed addresses
 ├── aeternity/           The underlying chain — scoped to what Superhero actually uses
-├── resources/           Whitepaper, brand, support, legal, official links
-└── contributing/        Authoring conventions and the documentation roadmap
+└── resources/           Whitepaper, brand, support, official links
 ```
 
 ## Editing
 
-Every page is written. Where something could not be verified against source, the page says so
-under its own `## Open questions` heading rather than presenting a guess as fact — that is
-deliberate, and those sections should not be padded or quietly removed.
+Every page follows the same shape: double-quoted `title` and `description` frontmatter, an H1,
+one to three sentences of opening prose, task-oriented sections, and a `## Read more` section of
+internal links. Plain MDX only — no imports, no components.
 
-**Start at [`pages/contributing/how-to-contribute.mdx`](./pages/contributing/how-to-contribute.mdx)
-before editing**; [`pages/contributing/page-template.mdx`](./pages/contributing/page-template.mdx)
-has the page shape and the MDX rules, and
-[`pages/contributing/roadmap.mdx`](./pages/contributing/roadmap.mdx) is the work queue.
+Five things break the build, and `scripts/lint-mdx.py` catches all of them: unquoted
+frontmatter, a bare `{` or `<` in prose, a `|` inside inline code inside a table row, a broken
+internal link, and a page missing from its directory's `_meta.json`. Run it before every push.
+
+`NOTES.md` holds maintainer-only material — product defects found while writing, and facts that
+have not been verified against a live system. It is not part of the site.
 
 ## Where the content comes from
 

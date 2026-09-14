@@ -47,6 +47,14 @@ const config: DocsThemeConfig = {
         <a href="https://superhero.com" target="_blank" rel="noreferrer">
           superhero.com
         </a>
+        {' · '}
+        <a href="https://superhero.com/terms" target="_blank" rel="noreferrer">
+          Terms
+        </a>
+        {' · '}
+        <a href="https://superhero.com/privacy" target="_blank" rel="noreferrer">
+          Privacy
+        </a>
         {' · Built on æternity'}
       </span>
     ),
