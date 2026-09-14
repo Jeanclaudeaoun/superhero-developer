@@ -155,6 +155,13 @@ def main():
         check_body(path, lines, report)
         for m in LINK.finditer(text):
             target = m.group(1).rstrip("/") or "/"
+            # A trailing file extension means a static asset under public/,
+            # not a page route — check it exists on disk instead.
+            if re.search(r"\.[A-Za-z0-9]{2,5}$", target):
+                if not os.path.isfile(os.path.join("public", target.lstrip("/"))):
+                    report(path, text[: m.start()].count("\n") + 1,
+                           "ASSET", f"missing file in public/ -> {target}")
+                continue
             if target not in routes:
                 report(path, text[: m.start()].count("\n") + 1,
                        "LINK", f"broken internal link -> {target}")

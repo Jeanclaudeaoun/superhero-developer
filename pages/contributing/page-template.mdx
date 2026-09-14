@@ -27,10 +27,10 @@ The actual documentation. Tables for parallel facts, code blocks for anything ru
 plain prose for everything else.
 
 ```bash
+
 # Every code block is runnable, or explicitly marked illustrative
 node scripts/superhero-wallet.mjs balance
 ```
-
 ## Read more
 
 - [Another page on this site](/aeternity/aens) — why a reader would follow it.
@@ -62,15 +62,7 @@ fabrications. Phrase each as a specific question with a named place to look — 
 the deployed tokens advertise; an `aex9_extensions()` call against a live sale settles it", not
 "more research needed".
 
-## What this site no longer uses
-
-Pages used to carry a **page brief** blockquote, a `status: outline` / `depth:` marker, a
-**What this page still needs** list and a **Sources to mine** list. That scaffolding existed to
-brief the writing pass. It is retired. If you find it on a page, that page is unfinished:
-write it, then delete the scaffolding. Anything from "still needs" that you could not resolve
-becomes an `## Open questions` entry.
-
-There are no status markers on finished pages. A page is either written or it is not, and the
+There are no status markers on pages. A page is either written or it is not, and the
 [roadmap](/contributing/roadmap) tracks what is left.
 
 ## MDX constraints
@@ -106,9 +98,9 @@ enabled.
 
 ## Cross-linking
 
-Internal links are root-relative with no file extension: `/aeternity/aens`, not
-`aens.mdx` and not `https://developers.superhero.com/aeternity/aens`. The linter resolves every
-one against the real page tree and fails on a broken target, so a typo cannot ship.
+Internal links are root-relative with no file extension: `/aeternity/aens` — never a filename
+like `aens.mdx`, and never an absolute URL back into this site. The linter resolves every one
+against the real page tree and fails on a broken target, so a typo cannot ship.
 
 Link to the live product where the reader can actually do the thing. Those URLs come from
 `superhero/src/routes.tsx` — for example `https://superhero.com/trends/create`,
