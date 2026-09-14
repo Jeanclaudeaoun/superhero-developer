@@ -17,14 +17,15 @@ relays for realtime messaging. Know which is which before you publish anything.
 | Comments | The same contract, with a `comment:` media prefix | Yes |
 | Tips | A plain AE transfer with a payload naming the post | Yes — it is a transaction |
 | Hashtags and topics | Derived by the indexer from post content | Follow the posts |
+| Trending tags | Pushed in by an external provider, replacing the whole index each time | No |
 | Chat messages | Nostr relays, off-chain | No — relay-dependent |
 | Notifications | The Superhero API, delivered over a socket and web push | No |
-| Moderation state | `CommunityManagement.aes` per community | Yes, but it hides rather than deletes |
+| Moderation state | `CommunityManagement.aes` per community | Yes, but it only gates chat rooms |
 
 ## In this section
 
-- [The Feed](/social/feed) — the popular and latest feeds, what "popular" actually ranks on,
-  and how the infinite feed pages.
+- [The Feed](/social/feed) — the popular and latest feeds, the exact ranking formula and its
+  weights, and how the infinite feed pages.
 - [Posting](/social/posting) — the canonical posting reference: the contract call, the limits,
   the content encoding, and both the UI and CLI paths.
 - [Delegated & Gasless Posting](/social/delegated-posting) — `post_without_tip_sig` in enough
@@ -35,9 +36,10 @@ relays for realtime messaging. Know which is which before you publish anything.
 - [Hashtags & Topics](/social/hashtags-and-topics) — the bridge from the social layer to the
   token layer.
 - [Chat](/social/chat) — Nostr-based, off-chain, relay-dependent, and gated by a CSP allowlist.
-- [Notifications](/social/notifications) — every notification type, how it is delivered, and
-  where a click lands.
-- [Moderation](/social/moderation) — how a network with no delete button moderates itself.
+- [Notifications](/social/notifications) — every notification type, which of them ever reach
+  the web bell, and where a click lands.
+- [Moderation](/social/moderation) — how a network with no delete button moderates itself, and
+  the narrow thing a mute actually does.
 
 ## Read more
 

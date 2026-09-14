@@ -33,10 +33,17 @@ There is nothing to claim, no vesting, and no minimum enforced by the protocol.
 
 ## Why the Tipping contract is not involved
 
-Tipping v3's entire entrypoint surface is `init`, `post_without_tip`, `post_without_tip_sig`
-and `get_state`. There is no tip entrypoint, no payable function and no balance held by the
-contract. The name is historical: the contract is the content layer, and tipping migrated to
-plain transfers.
+`tipping-contract/contracts/v3/Tipping_v3.aes` is 78 lines. Its complete entrypoint surface is
+`init`, `post_without_tip`, `post_without_tip_sig` and `get_state`; its only content variant is
+`datatype tip = PostWithoutTip(tip_meta, list(string))`; and its state is a map of posts plus a
+`version` string. **No entrypoint is marked `payable`**, so the contract cannot receive AE at
+all, and it holds no balance to distribute. The name is historical: v3 is the content layer,
+and tipping migrated to plain transfers.
+
+A companion contract, `Tipping_v3_Getter.aes`, adds exactly one read helper —
+`get_tip_by_id(c : Tipping, tip_id : int) : option(Tipping.tip)` — which looks a post up inside
+another contract's `get_state().tips` map so a caller can fetch one post without pulling the
+whole state. It is a read convenience, not a tipping path.
 
 Practical consequences:
 
@@ -45,6 +52,32 @@ Practical consequences:
   it, the AE still arrived — only the displayed total is wrong.
 - Anyone can reconstruct tip attribution themselves by scanning spend transactions to an
   address and decoding payloads that start with `TIP_POST:`.
+
+## How the indexer attributes a tip
+
+`superhero-api/src/tipping/services/tips.service.ts` is the whole rule, and it is short enough
+to state exactly:
+
+1. The transaction must have `tx.type === 'SpendTx'`. Contract calls are never tips.
+2. The payload is decoded from its `ba_…` form to a string. It must start with `TIP_PROFILE`
+   or `TIP_POST`, otherwise the transaction is skipped.
+3. For a `TIP_POST:` payload, everything after the colon is taken as a post id and looked up
+   directly by `id`. A miss leaves the tip unattached to a post, not rejected.
+4. Self-tips are dropped, not stored — for a post tip that means `sender == post.sender_address`
+   (tipping your own post), and for a profile tip `sender == receiver`
+   (`src/tipping/utils/is-self-tip.util.ts`).
+5. The row is keyed on `tx_hash`, so reprocessing the same transaction is idempotent.
+6. The amount is stored as `toAe(tx.amount)` — a decimal AE string, not aettos.
+
+Two things follow that matter if you are integrating:
+
+- **Tips sent outside the app count.** The check is entirely on the on-chain spend and its
+  payload. A manually constructed `spend` with a `TIP_POST:3903_v3` payload is indistinguishable
+  from one the app sent, and is indexed identically. Nothing binds a tip to the Superhero
+  client.
+- **There is no minimum and no dust filter.** Any positive amount is stored and summed. The web
+  composer requires a positive amount within your balance; the indexer applies no floor of its
+  own.
 
 ## Tipping from the app
 
@@ -77,13 +110,22 @@ the real value in place. Your optimistic bump is display only; it is never writt
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/tips/posts/{postId}/summary` | `totalTips` — the post's total, a string the client reads as a number of AE |
-| `GET /api/tips/accounts/{address}/summary` | Defined in the generated client, with no callers in the app |
+| `GET /api/tips/posts/{postId}/summary` | `totalTips` — a decimal AE string, summing every tip on the post **except** those sent by the post's own author. 404 if the post id is unknown. |
+| `GET /api/tips/accounts/{address}/summary` | `totalTipsSent` and `totalTipsReceived`, both decimal AE strings, each excluding rows where sender equals receiver |
+| `GET /api/tips` | The paginated tip list |
 
 The post id in the path takes the `_v3` suffix, matching the payload form.
 
+`GET /api/tips` accepts `sender`, `receiver`, `type` and `post_id` filters,
+`order_by` of `amount`, `type` or `created_at`, an `order_direction`, and `page`/`limit` with a
+maximum limit of 100. Ordering by `amount` casts the stored string to numeric first, so it
+sorts by value rather than lexically. Note that `type` holds the **whole decoded payload** —
+`TIP_PROFILE`, or `TIP_POST:3903_v3` — so filtering by `type` is an exact-string match on that,
+not on the bare word `TIP_POST`.
+
 Tip signals also feed the popular feed: `tipsAmountAE`, `tipsCount` and `uniqueTippers` are
-three of the eight weighting inputs a reader can scale. See [The Feed](/social/feed).
+three of the eight weighting inputs a reader can scale, and all three are computed with
+self-tips excluded. See [The Feed](/social/feed).
 
 ## Tipping someone who has not claimed anything
 
@@ -92,23 +134,22 @@ or not anyone has ever opened it in a wallet. A tip to an address whose owner ha
 Superhero simply increases that address's balance; if the key is lost, so is the AE. There is
 no pending-tip pool and no reclaim path.
 
-## Open questions
+## Tips and notifications
 
-- **Is there a minimum tip?** None is enforced in the modal beyond requiring a positive amount
-  within your balance, and none can be enforced on chain since the tip is a plain transfer.
-  Whether the indexer ignores dust is not documented.
-- **Does the indexer count tips sent outside the app?** A manually constructed spend with a
-  `TIP_POST:` payload should be indistinguishable on chain from one the app sent, but no source
-  confirms the indexer accepts them.
-- **What does the account tip summary return?** `GET /api/tips/accounts/{address}/summary` is
-  defined but unused, and its response shape is not recorded in the REST inventory.
-- **Are tips shown on profiles?** The per-account endpoint exists but nothing in the client
-  calls it, so there is no account-level tip surface today.
+There is no tip notification type. The catalog in
+`superhero-api/src/notifications/notification-catalog.ts` carries six types and none of them is
+a tip. The closest is `incoming-transfer`, which fires on any incoming `SpendTx` — a tip
+included — above `NOTIF_MIN_AMOUNT_AETTOS`, an anti-dust floor that defaults to 0, meaning off.
+But that type is declared `via(): ['expo']`, mobile push only, deliberately never written to
+the web feed because it would otherwise write a feed row for every transfer on chain. So an
+incoming tip produces a mobile push, if the recipient has a registered device, and nothing in
+the bell. See [Notifications](/social/notifications).
 
 ## Read more
 
 - [Posting](/social/posting) — the ids and `_v3` suffix convention the payload depends on.
 - [The Feed](/social/feed) — how tip signals influence popular ranking.
+- [Notifications](/social/notifications) — why a tip does not raise a bell notification.
 - [Value flow](/concepts/value-flow) — where money moves elsewhere in the protocol, and how
   tipping differs from the bonding-curve fee splits.
 - [Transactions](/api-reference/transactions) — reading spend transactions and their payloads.

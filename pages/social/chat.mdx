@@ -73,21 +73,35 @@ longer sign. Read-only flows — public room history and metadata — work with 
 ## Linking your Nostr key to your address
 
 A derived key is useless to the room bot until it knows which æternity address owns it. That
-link is its own signed flow, on the same claim-sign-submit pattern as the other address links:
+link is its own signed flow, on the same claim-sign-submit pattern as every other address link,
+and it ends in an on-chain `AddressLink.link` call the backend pays for:
 
 ```text
-POST /api/address-links/nostr/claim            -> a link message
-   (sign a kind-22242 event whose content is that exact message)
-POST /api/address-links/nostr/submit           -> relayed on-chain
-POST /api/address-links/nostr/unclaim          -> and its unlink pair
-POST /api/address-links/nostr/unclaim/submit
+POST /api/address-links/nostr/claim            { address, value: "npub1…" }
+     -> { message: "link:ak_…:nostr:npub1…:0", nonce, value }
+POST /api/address-links/nostr/submit           { address, value, nonce, signature, nostr_event }
+     -> { txHash }
+POST /api/address-links/nostr/unclaim          -> { message: "unlink:ak_…:nostr:1", nonce }
+POST /api/address-links/nostr/unclaim/submit   -> { txHash }
 ```
 
-The proof is a Nostr event, not an æternity signature: kind 22242, empty tags, the claim message
-as `content`, signed through the identity provider. The backend verifies the event signature,
-checks that its `pubkey` matches the claimed npub, and requires `created_at` to be fresh —
-under five minutes — so the event must be built immediately before submission. The resulting
-key lands in the profile's `nostr` field. See [The ProfileRegistry contract](/identity/profile-registry).
+**Two proofs are required, not one.** The `signature` is the æternity wallet's signature over
+the exact `message` string — 128 lowercase hex characters, no prefix — proving the address
+consents. The `nostr_event` is a JSON-serialised Nostr event proving control of the key: kind
+`22242`, empty tags, the claim message verbatim as `content`, Schnorr-signed. The backend
+rejects the submit if the event's kind is wrong, its `content` does not match the expected link
+message, its `pubkey` does not decode to the claimed npub, its signature fails, or its
+`created_at` is more than 300 seconds old or more than 60 seconds in the future
+(`superhero-api/docs/address-links/frontend-guide.md`). Build the event immediately before
+submitting; never cache or reuse one.
+
+The `nonce` is not a random challenge — it is the contract's own per-address counter, read with
+`AddressLink.get_nonce(address)`, and it advances on every link or unlink. If another device
+links something between your claim and your submit, the submit fails with a nonce mismatch and
+you restart from claim.
+
+The resulting npub lands in `accounts.links.nostr` once the indexer sees the transaction, and
+surfaces as the profile's `nostr` field. See [SuperheroID](/identity/superhero-id).
 
 ## Token-gated rooms
 
@@ -105,6 +119,32 @@ POST /api/rooms/{saleAddress}/mute         -> set it, with a signed challenge
 
 `GET /api/rooms/config` returns the groups relay URL and the relay-admin bot's hex public key,
 used for NIP-42 AUTH on private rooms. The bot's secret key is never exposed.
+
+### How the bot learns your balance changed
+
+Not by polling, and not by waiting for `recheck`. `superhero-api/src/token-gated-rooms/` runs a
+reactive pipeline off the middleware's live transaction stream:
+
+1. **`aex9-transfer.plugin.ts`** filters live transactions down to AEX-9 `Transfer` events on
+   an allowlist of community token contracts, and `BalanceIndexerService` applies them to a
+   `token_balance` ledger of raw base units, clamped at zero. It indexes **every** transfer —
+   plain wallet-to-wallet, DEX swap, airdrop — not only BCL buy and sell calls, so a balance
+   cannot go stale because the tokens moved outside the bonding curve.
+2. A real change emits `tgr.balance.changed`. Two sibling events feed the same consumer:
+   `tgr.community.upserted` when a `CommunityManagement` read shows a new threshold, moderator
+   set, muted set or privacy flag, and `tgr.link.changed` when an address links or unlinks a
+   Nostr key.
+3. **`EligibilityService`** recomputes `eligible` for the affected `(sale_address, member_address)`
+   pairs as `balance >= min_token_threshold AND NOT muted`, raw against raw with no decimal
+   shifting, and emits `tgr.eligibility.changed` only on a real flip.
+4. **`MembershipSyncService`** consumes that flip and publishes the NIP-29 kind 9000 (add) or
+   9001 (remove) event to the relay, moving `relay_state` through `pending_add` to `added`.
+
+`POST /api/rooms/{saleAddress}/recheck` forces one pass through the same path for a single
+address; it is a repair tool, not the normal mechanism. A reconciliation service and a
+startup backfill cover drift, and the relay actuators self-disable when no relay is configured,
+in which case the API still indexes balances and serves the read endpoints but publishes
+nothing.
 
 A room row carries:
 
@@ -238,11 +278,32 @@ The token page offers a public room and a holders-only private room on `app.qual
 from the token's name and address, and reads a preview of recent messages from
 `api.quali.chat`. Those are outbound links and an external API, not the Nostr client.
 
-One concrete detail if you are deploying: `api.quali.chat` does not appear in the server's
-`connect-src` allowlist, and because the service composes its URL at runtime from a schemeless
-constant, the build-time origin check — which scans the built bundle for literal `https://`
-origins — cannot see it either. The outbound links to `app.quali.chat` are ordinary navigations
-and are unaffected.
+### The Quali.chat preview does not work under the production CSP
+
+This is confirmed, not suspected. Three facts from the source line up:
+
+1. **`api.quali.chat` is absent from `connect-src`.** `server/lib/csp.cjs` builds the directive
+   from `CONNECT_SRC_ALLOWLIST`, the origins of the runtime backend env vars, the unconditional
+   chat-relay allowlist and the parsed `NOSTR_RELAY_URLS`. No Quali origin appears in any of
+   them, and the policy opens with `default-src 'none'`, so there is no fallback to fall back
+   to.
+2. **The service fetches it anyway.** `src/libs/QualiChatService.ts` builds
+   `new URL('https://' + QualiChatService.API_URL + path)` and calls `fetch`. Under the served
+   header the browser refuses the request before it leaves the page and posts a violation to
+   `/_csp-report`.
+3. **The build-time check cannot see it.** `scripts/check-csp-origins.cjs` scans the built
+   bundle with `/(https|wss):\/\/[a-zA-Z0-9…]/`. `API_URL` is the schemeless string
+   `'api.quali.chat'` and the scheme is concatenated at runtime, so the regex never matches and
+   the build passes. `https://quali.chat` and `https://app.quali.chat` *are* in the script's
+   `NAVIGATION_ONLY` set — correctly, since those are links — which makes the omission look
+   deliberate rather than overlooked.
+
+The user-visible consequence is on the token page's chat preview, which retries three times at
+five-second intervals before settling on an "unable after attempts" message. The outbound links
+to `app.quali.chat` are ordinary navigations under `form-action`/`frame-ancestors` rules that
+do not touch them, so those still work. If you are deploying and want the preview, add
+`https://api.quali.chat` to `CONNECT_SRC_ALLOWLIST` — and note that the build check will not
+remind you, because it cannot see the origin in the first place.
 
 ## What chat is not
 
@@ -256,24 +317,25 @@ and are unaffected.
 
 ## Open questions
 
-- **Does the Quali.chat message preview work under the production CSP?** The origin is not in
-  `connect-src` and is invisible to the build-time check. Whether a deployed instance blocks
-  those fetches needs confirming against a live deployment with the header enabled.
-- **How does the relay bot learn about balance changes?** Membership follows the token balance,
-  but whether the API watches chain events, polls, or relies on the `recheck` endpoint is not
-  visible from the client.
 - **What is the relationship between the Quali.chat partnership and the Nostr relay?** The FAQ
-  attributes chat to Quali.chat while the in-app client is pure Nostr against Superhero's own
-  relay. Whether Quali.chat operates that relay, or the two are independent products marketed
-  together, is not stated anywhere in the repositories.
+  attributes chat to Quali.chat while the in-app client is pure Nostr against
+  `wss://relay.superhero.chat`, and the Quali surfaces are Matrix rooms on a different host.
+  Whether Quali.chat operates the Nostr relay, or the two are independent products marketed
+  together, is stated nowhere in the four repositories — ask Superhero who runs
+  `relay.superhero.chat`.
+- **Is the Quali.chat CSP omission intentional?** The preview cannot load as deployed, yet
+  `quali.chat` and `app.quali.chat` were deliberately classified as navigation-only in the
+  build check. Whether the preview is considered retired or the omission is a bug is a question
+  for whoever owns `server/lib/csp.cjs`.
 - **Is NIP-04 still the intended DM scheme?** The client uses NIP-04 throughout; the wider
-  Nostr ecosystem has newer encrypted-DM proposals.
+  Nostr ecosystem has newer encrypted-DM proposals. Nothing in the repositories states a
+  migration plan.
 
 ## Read more
 
 - [SuperheroID](/identity/superhero-id) — the profile's `nostr` field and how it is linked.
-- [Moderation](/social/moderation) — the on-chain moderation state behind a community, distinct
-  from what the relay enforces.
+- [Moderation](/social/moderation) — the `CommunityManagement` state the eligibility pipeline
+  reads, including what a mute actually does to a room.
 - [Notifications](/social/notifications) — `room-membership` and `room-messages` are two of the
   notification types.
 - [Tokens overview](/tokens/overview) — a room exists because a token does.

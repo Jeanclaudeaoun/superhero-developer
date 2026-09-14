@@ -8,7 +8,8 @@ description: "How the feed is assembled, ranked and paginated."
 The Superhero home feed at `https://superhero.com/` has two modes: a ranked **popular** feed
 and a chronological **latest** feed. Both are infinite, both blend on-chain posts with token
 activity, and the popular ranking is tunable per reader. This page covers what drives each
-mode, the exact query parameters, and how paging works.
+mode, the exact scoring formula the backend applies, the query parameters, and how paging
+works.
 
 ## Choosing a mode
 
@@ -29,37 +30,175 @@ A separate `filterBy` query parameter filters the assembled list client-side:
 | `withMedia` | Only items carrying media |
 | `withComments` | Only items with at least one comment |
 
-## What "popular" ranks on
+## What is eligible for popular ranking
 
-Popular ranking is **all-time**, with a temporary freshness boost for new posts. The `window`
-parameter still exists on the endpoint but is deprecated and ignored — it is accepted only for
-backwards compatibility. Do not build anything that relies on it.
+`superhero-api/src/social/services/popular-ranking.service.ts` builds its candidate set from
+posts that are:
 
-The reader can scale eight signals, each to `low`, `med` or `high`. `med` is the default and
-the client omits it from the query, so a request carries only the signals you actually changed.
+- **not hidden** — `is_hidden = false`;
+- **top-level** — `post_id IS NULL`, so comments are never ranked as standalone items;
+- **within the newest 10,000 posts** by `created_at` (`MAX_CANDIDATES_ALL`).
 
-| Query parameter | Signal |
+Popularity is therefore computed inside that rolling pool, not across every post ever written.
+`is_hidden` is not a moderation action — the indexer sets it when any entry in the post's media
+list contains the substring `hidden` (`post.service.ts`, `detectPostType`), which is a
+client-side convention, not contract state.
+
+Governance polls also compete, through a plugin interface: a contributor supplies content items
+whose ids contain a colon (`poll:123`), scored with `votes_count` standing in for comments and
+zero for tips and reads. That is why a popular page can return mixed item types.
+
+## The scoring formula
+
+Ranking is **all-time**. The `window` query parameter still exists on the endpoint but the
+controller hard-codes `const window = 'all'` before calling the service, so the value you send
+is parsed, validated and then thrown away. It is marked `deprecated` in the DTO. Do not build
+anything that relies on it.
+
+Every candidate gets a base score from log-dampened engagement signals:
+
+```text
+baseScore =
+    w_comments            * ln(1 + comments)
+  + w_tipsAmountAE        * ln(1 + tipsAmountAE)
+  + w_tipsCount           * ln(1 + tipsCount)
+  + w_uniqueTippers       * ln(1 + uniqueTippers)
+  + w_reads               * ln(1 + effectiveReads)
+  + w_trendingBoost       * trendingBoost
+  + w_contentQuality      * contentQuality
+  + w_freshnessBoost      * freshnessFactor
+  + w_velocityBoost       * ln(1 + interactionsPerHour) * freshnessFactor
+  + w_interactionsPerHour * ln(1 + interactionsPerHour)
+  + tieRotation
+```
+
+then a daily shuffle, then age gravity, then a staleness penalty:
+
+```text
+score = (baseScore * dailyShuffle) / (ageHours + 2) ^ 0.25  -  stalePenalty
+```
+
+`ageHours` is floored at 1. The `+ 2` in the divisor stops a brand-new post being divided by
+something near zero. The penalty is subtracted **after** gravity on purpose: dividing it
+instead would make an older dead post outrank a younger dead one.
+
+### The weights
+
+From `superhero-api/src/configs/constants.ts`, `POPULAR_RANKING_CONFIG.WEIGHTS`:
+
+| Signal | Query parameter | Default weight |
+| --- | --- | --- |
+| Comments | `comments` | 2.5 |
+| Total tipped AE | `tipsAmountAE` | 1.5 |
+| Number of tips | `tipsCount` | 1.0 |
+| Distinct tippers | `uniqueTippers` | 1.5 |
+| Trending-topic boost | `trendingBoost` | 0.5 |
+| Content quality | `contentQuality` | 0.3 |
+| Reads | `reads` | 1.5 |
+| Engagement velocity | `interactionsPerHour` | 0.6 |
+| Freshness lift | not scalable | 1.5 |
+| Freshness-gated velocity amplifier | not scalable | 0.6 |
+
+Eight of the ten are reader-scalable. Each accepts `low`, `med` or `high`, which multiply that
+weight by **0.6, 1.0 and 1.5** respectively. `med` is the default and the client omits it, so a
+request carries only the signals you actually changed. In the app these are the **Customize**
+controls next to the sort selector, with a reset that clears every override.
+
+Because the multipliers scale the weights rather than replacing them, `high` on every signal
+is not a different ranking — it is the same ranking with every term multiplied by 1.5, which
+changes nothing about the order. Scaling is only meaningful when you move signals relative to
+each other.
+
+### Where each input comes from
+
+| Input | Computed from |
 | --- | --- |
-| `comments` | Comment impact |
-| `tipsAmountAE` | Total tipped amount |
-| `tipsCount` | Number of tips |
-| `uniqueTippers` | Number of distinct tippers |
-| `trendingBoost` | Trending-topic boost |
-| `contentQuality` | Content quality |
-| `reads` | Reads |
-| `interactionsPerHour` | Engagement velocity from comments, tips and unique tippers per hour |
+| `comments` | The **whole reply thread**, counted with a recursive CTE to a depth cap of 50, excluding replies written by the root post's own author. A hidden comment prunes its entire subtree. |
+| `tipsAmountAE` | `SUM(amount)` over the post's tips, excluding tips from the post's author |
+| `tipsCount` | `COUNT(*)` over the same set |
+| `uniqueTippers` | `COUNT(DISTINCT sender_address)` over the same set |
+| `reads` | `SUM(reads)` from `post_reads_daily` — see below |
+| `trendingBoost` | `min(1, highestTrendingTagScore / 100)` across the post's topics. The single strongest topic, not the sum. |
+| `contentQuality` | A heuristic over the post text — see below |
+| `interactionsPerHour` | `interactionsInLast48h / max(1, min(ageHours, 48))`, where interactions are comments plus tips |
 
-In the app these are the **Customize** controls next to the sort selector, with a reset that
-clears every override back to the default. Adding `debug=1` to the request asks the backend to
-return its scoring detail alongside the items.
+Velocity counts recent activity over a 48-hour window rather than the post's lifetime, so an
+old post that catches fire today registers full velocity instead of having the new activity
+averaged away over months.
 
-What the underlying formula is — how the three scale steps translate into weights, and what
-"content quality" and "reads" are computed from — is not documented anywhere available. See
-Open questions.
+### What "reads" actually are
 
-One client-side detail worth knowing if you compare two browsers: the app applies a seeded
-shuffle to each popular page before rendering, so two readers with identical weights see the
-same posts in a different order.
+A read is recorded by `GET /api/posts/{id}` — the single-post fetch — as a fire-and-forget call
+into `ReadsService`. It is deduplicated and capped twice:
+
+- **At recording time**, a viewer is identified by a SHA-256 hash of
+  `client IP + User-Agent`, truncated to 16 hex characters, and a Redis key
+  `reads:seen:<date>:<postId>:<viewer>` set with `NX` allows **one counted read per viewer, per
+  post, per UTC day**. Requests whose User-Agent contains `bot`, `spider`, `crawler`,
+  `preview`, `uptime`, `monitor` or `curl` are ignored outright, as is a request with no
+  User-Agent at all. If Redis is unreachable the dedup fails open and the read counts.
+- **At scoring time**, the counted volume is clamped to
+  `100 × (1 + comments + tipsCount + uniqueTippers)` before the logarithm. Passive traffic
+  alone therefore cannot outvote real engagement indefinitely.
+
+Reads live in `post_reads_daily`, keyed on `(post_id, date)`. Nothing beyond an IP and a
+User-Agent is collected; there is no read event in the client and no per-account read history.
+
+### What "content quality" actually is
+
+A pure function of the post text, in the range 0 to 1, with no author or account input at all:
+
+```text
+len          = the post's length in Unicode code points
+lengthScore  = clamp((len - 10) / 140, 0, 1)
+emojiRatio   = min(1, emojiCount / max(1, len))       // \p{Extended_Pictographic}
+alnumRatio   = min(1, alnumCount / max(1, len))       // \p{L} or \p{N}, any script
+quality      = 0.6 * lengthScore + 0.2 * alnumRatio + 0.2 * (1 - emojiRatio)
+
+if len < 10 and emojiRatio > 0.5:  quality = quality * 0.25
+```
+
+So the term rewards enough text, a healthy letter-and-digit ratio and low emoji saturation, and
+hits a short emoji-only post with a hard 75% cut. Code-point length is used rather than UTF-16
+length because emoji are surrogate pairs; the alphanumeric class covers every script, so a
+wholly Chinese, Arabic or Cyrillic post is not penalised against an equivalent Latin one.
+
+Its weight is 0.3, the smallest in the table. It is an anti-spam tiebreaker, not a quality
+ranking.
+
+### Freshness, staleness and the two shuffles
+
+| Term | Rule |
+| --- | --- |
+| `freshnessFactor` | 1 for the first 120 hours (5 days), then a linear fade to 0 at 240 hours (10 days) |
+| `stalePenalty` | 0 until 240 hours; then ramps linearly over a further 240 hours to a maximum of 5, **only** if the post has had no comment or tip in the last 48 hours. Any recent interaction zeroes it. Plugin items without interaction timestamps are never penalised. |
+| `tieRotation` | A deterministic value in `[0, 0.05)` from an FNV-1a hash of `postId + hourBucket`, added before gravity. It reorders near-tied posts every hour without touching genuinely different scores. |
+| `dailyShuffle` | A deterministic multiplier in `[0.8, 1.2]` from a hash of `postId + UTC day`. Applied only to the default feed — any weight override switches it off so personalized queries stay deterministic. |
+
+Note that the published design doc at `superhero-api/docs/popular-post-ranking.md` still
+describes a 48-hour linear freshness curve and no stale penalty. The constants in
+`src/configs/constants.ts` are the live values and are what the table above reports.
+
+After scoring, each page is **reranked for author diversity**: candidates are oversampled by 4x
+(minimum 80), one item per distinct author is taken first, and duplicates backfill only when
+there are not enough unique authors to fill the page.
+
+The app then applies a *second*, client-side Fisher-Yates shuffle to each popular page, seeded
+per session, so the order you see is stable while you scroll but different on your next visit.
+Between that and the server's daily jitter, do not expect two readers — or two visits — to see
+the same sequence.
+
+### Caching
+
+The default (unpersonalized) ranking lives in the Redis sorted set `popular:all`, refreshed by
+a cron every 10 minutes behind a `SET NX` lock so multiple app instances do not recompute in
+parallel, with a 1,800-second TTL. A cold key triggers a lazy recompute behind a per-window
+mutex, and the request in flight falls back to recent posts meanwhile. **Any** weight override
+bypasses the cache entirely and scores the candidate pool live, which is why a customized feed
+is slower than the default one.
+
+If ranking fails outright, the endpoint returns recent posts with `meta.fallback: true` and an
+`meta.error` string rather than a 500.
 
 ## Request shapes
 
@@ -68,13 +207,24 @@ GET /api/posts/popular?page=1&limit=10&tipsCount=high&reads=low
 GET /api/posts?order_by=created_at&order_direction=DESC&limit=10&page=1
 ```
 
+`limit` on the popular endpoint is 1 to 100, default 50; the web client asks for 10.
+`debug=1` appends a `debug` array to the response, one entry per returned item:
+
+```json
+{ "id": "3903_v3", "tx": "th_...", "author": "ak_...", "personalized": true,
+  "appliedWeights": { "comments": 2.5, "reads": 2.25, "...": 0 } }
+```
+
+`appliedWeights` is the resolved weight map after your scale multipliers, which makes it the
+quickest way to check that an override landed.
+
 `GET /api/posts` accepts more filters than the home feed uses:
 
 | Parameter | Values |
 | --- | --- |
 | `order_by` | `total_comments` or `created_at` |
 | `order_direction` | `ASC` or `DESC` |
-| `search` | Free-text over content and topics |
+| `search` | Free-text over content and topics, at most 100 characters |
 | `account_address` | Restrict to one author — this is what a profile feed uses |
 | `topics` | Comma-separated topic names, partial matching |
 | `limit`, `page` | Pagination |
@@ -105,10 +255,11 @@ latest-feed cache before the indexer has seen it; see [Posting](/social/posting)
 
 ## When popular runs out
 
-The popular feed is finite in a way the latest feed is not. When it is exhausted — or when the
-first page comes back with fewer than 10 items — the app starts appending latest posts below,
-de-duplicating against what popular already returned. A reader scrolling long enough therefore
-crosses from ranked content into chronological content without a visible seam.
+The popular feed is finite in a way the latest feed is not — it ranks at most 10,000
+candidates. When it is exhausted, or when the first page comes back with fewer than 10 items,
+the app starts appending latest posts below, de-duplicating against what popular already
+returned. A reader scrolling long enough therefore crosses from ranked content into
+chronological content without a visible seam.
 
 ## Topic feeds
 
@@ -123,22 +274,18 @@ place.
 
 ## Open questions
 
-- **What is the popular scoring formula?** The endpoint documents eight scalable signals and a
-  freshness boost, but not the base score, the boost decay, or how `low`, `med` and `high` map
-  to multipliers. Only the backend knows.
-- **How are "content quality" and "reads" measured?** Both are ranking inputs with no stated
-  definition. "Reads" in particular implies client-side telemetry that is not described in the
-  app repository.
 - **Is there a live post channel?** The API socket carries token-created, token-updated,
-  token-transaction and token-history channels. No post channel appears in the client, so live
-  post delivery would be new.
-- **What does `debug=1` return?** Documented as "debug info" with no shape.
+  token-transaction and token-history channels, and `superhero-api` exposes a `/notifications`
+  namespace for the bell. Neither carries new posts. Whether a post channel is planned is a
+  question for Superhero; nothing in the client or the backend implements one today.
 
 ## Read more
 
 - [Posting](/social/posting) — how an item gets into the feed in the first place.
-- [Tipping](/social/tipping) — three of the eight ranking signals come from tips.
-- [Hashtags & Topics](/social/hashtags-and-topics) — topic feeds and the trending boost.
+- [Tipping](/social/tipping) — three of the eight scalable ranking signals come from tips.
+- [Comments](/social/comments) — the thread count that carries the heaviest weight.
+- [Hashtags & Topics](/social/hashtags-and-topics) — topic feeds and where `trendingBoost`
+  comes from.
 - [Posts API](/api-reference/posts) — the endpoint-level reference.
 - [WebSocket API](/api-reference/websocket) — the channels behind the live activity items.
 - [Superhero](https://superhero.com/) — the live feed, with the sort and customize controls.

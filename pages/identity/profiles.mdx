@@ -33,9 +33,16 @@ Live: the social profile is at `https://superhero.com/users/` followed by an `ak
 | Balances and counts | The account aggregate — holdings count and total created tokens |
 
 The account aggregate served by `GET /api/accounts/{address}` carries `address`, `bio`,
-`chain_name`, `chain_name_updated_at`, an embedded `profile`, `public_name`, and a `links`
-object with `x`, `bio`, `site` and `prefered_aens_name`. The `links` object is authoritative:
-the client reads it first and treats the flat fields as fallbacks for older records.
+`chain_name`, `chain_name_updated_at`, an embedded `profile`, `public_name`, `holdings_count`,
+and a `links` object keyed by the `AddressLink` provider ids — `x`, `nostr`, `bio`, `site` and
+`prefaens`. The `links` object is authoritative: the client reads it first and treats the flat
+fields as fallbacks for older records.
+
+The endpoint also self-heals the chain name. If `chain_name_updated_at` is older than the
+staleness window, or has never been set, it re-reads the name from the middleware, returns the
+fresh value, and writes it back asynchronously. An hourly sweep in `AccountService` covers the
+same ground for accounts nobody is currently viewing, so a lapsed or transferred `.chain` name
+disappears from a profile within about an hour.
 
 ## The tabs
 
@@ -57,16 +64,18 @@ token-creation activity items.
 
 | Field | Where it lives |
 | --- | --- |
-| Custom name, chain name, X name, display source | `ProfileRegistry.aes` state |
-| Preferred AENS name, bio, website, X link, Nostr key | Address links — signed by you, relayed on-chain by the backend |
+| Preferred AENS name, bio, website, X handle, Nostr key | `AddressLink` contract state, as provider links — signed by you, submitted by the backend |
 | AENS name ownership and pointers | æternity AENS |
-| Avatar URL, cached aggregates, counts | Superhero API |
+| Chain name shown on a profile | Derived from the middleware and cached in `accounts.chain_name` — not a contract link |
+| Fullname, avatar URL, legacy username, `chain_expires_at` | The frozen `profile_cache` table. Its writer, the ProfileRegistry indexer, was removed. |
+| Follower and following counts | The social-graph tables, when that feature is enabled |
 | Posts and comments | `Tipping` v3 contract, indexed by the API |
 | Balances, portfolio history, leaderboard stats | Computed by the API from chain data |
 
 There is no field on a profile that the API can change on its own behalf. Everything a user
-controls is behind either a contract call from their own address or a wallet signature they
-produced.
+controls is behind a wallet signature they produced — though note that the *submission* of that
+signature is done by Superhero's provider wallet, the only account permitted to write those
+provider namespaces. See [The AddressLink contract](/identity/profile-registry).
 
 ## Editing your own profile
 
@@ -76,18 +85,26 @@ independent operations, not a single save:
 | Field | How it is written |
 | --- | --- |
 | Bio | Claim at `/api/address-links/bio/claim`, sign the returned message, submit at `/bio/submit` |
-| Website | The same claim-sign-submit pair under `/api/address-links/site/` |
-| Preferred `.chain` name | The same pair under `/api/address-links/prefered-aens-name/` |
-| X handle | The OAuth plus attestation flow — see [Verifying Your X Account](/identity/x-verification) |
-| Fullname, avatar, custom name | The legacy challenge-and-patch path: `POST /api/profile/{address}/challenge`, sign the challenge, `PATCH /api/profile/{address}` |
+| Website | The same pair under `/api/address-links/site/`, with the scheme stripped from the stored value |
+| Preferred `.chain` name | The same pair under `/api/address-links/prefered-aens-name/`, which uses `link_principal` and verifies AENS ownership on chain |
+| X handle | The OAuth flow — see [Verifying Your X Account](/identity/x-verification) |
+| Nostr key | The same pair under `/api/address-links/nostr/`, with a signed kind-22242 event as the extra proof |
 
 Each link has a matching unlink: `/unclaim` returns a message and nonce, you sign it, and
 `/unclaim/submit` relays the removal. Because the operations are independent, a partial failure
 is possible — the bio can save while the website call fails — and the editor reloads its state
 afterwards rather than assuming the form is authoritative.
 
-The legacy pair used for fullname, avatar and custom name is marked deprecated in the app's own
-REST inventory, with no callers recorded. Prefer the address-link endpoints for anything new.
+Every claim reads the contract's own `get_nonce(address)`, and the nonce advances on each link
+or unlink. If two devices claim at once the second submit fails with a nonce mismatch and has
+to restart from claim.
+
+**Fullname, avatar and the legacy username are not editable.** The app's REST inventory lists
+`POST /api/profile/{address}/challenge` and `PATCH /api/profile/{address}` as a deprecated
+legacy pair, but neither route exists in `superhero-api` at all — the profile controller has
+only the two read endpoints, the profile feed, the X-invite endpoints, the two progress
+endpoints and the `chain-name` claim flow. Those three fields live in the frozen `profile_cache`
+table and no live endpoint writes them.
 
 ## Leaderboards
 
@@ -111,25 +128,55 @@ for every metric except maximum drawdown (`mdd`), which sorts ascending because 
 drawdown is better. And the ranking is portfolio performance only — it says nothing about
 posting, tipping or governance participation.
 
-## Open questions
+## The account index
 
-- **What ranks the account index at `/trends/accounts`?** It reads `GET /api/accounts` with
-  `order_by` and `order_direction`, but the accepted `order_by` values are not documented in
-  the REST inventory.
-- **How is `public_name` computed server-side?** The client treats it as pre-resolved, but
-  whether the API applies the registry's chain-then-X-then-custom precedence, the account's
-  `display_source` preference, or something else, is not stated.
-- **Is `GET /api/profile/{address}` live?** It is documented with a full response shape but
-  stubbed to return `null` in the current client, which reads `GET /api/accounts/{address}`
-  instead.
+`/trends/accounts` reads `GET /api/accounts`, which pages at 1 to 100 rows and accepts a
+`search` term matched against the address, `accounts.chain_name` and the cached
+`public_name` / `username` / `fullname`. The ranking is trading activity, and `order_by` takes
+exactly nine values — anything else is a 400:
+
+| `order_by` | Ranks by |
+| --- | --- |
+| `total_volume` | Trade volume — **the default** |
+| `total_tx_count` | All trades |
+| `total_buy_tx_count` | Buys only |
+| `total_sell_tx_count` | Sells only |
+| `total_created_tokens` | Tokens the account created |
+| `total_invitation_count` | Invitations created |
+| `total_claimed_invitation_count` | Invitations redeemed |
+| `total_revoked_invitation_count` | Invitations revoked |
+| `created_at` | When the account row first appeared |
+
+`order_direction` is `ASC` or `DESC`, defaulting to `DESC`. There is one more filter worth
+knowing: `has_nostr=true` returns only accounts that have linked a Nostr key, which is what a
+chat-contact suggester wants.
+
+Note what is absent — nothing ranks by posting, commenting, tipping or governance. Both the
+account index and the leaderboard are trading surfaces.
+
+## How `public_name` is computed
+
+Server-side, by a fixed four-step ladder in `ProfileReadService`, with no per-account
+preference involved:
+
+```text
+prefered_aens_name   (links.prefaens — the AENS name the user explicitly linked)
+chain_name           (accounts.chain_name, derived from the middleware)
+username             (the frozen registry-era cache field)
+address              (the ak_… itself)
+```
+
+The registry's `display_source` preference has no successor — the field is not in the response
+and there is nothing to set. See [Names](/identity/names).
 
 ## Read more
 
 - [SuperheroID](/identity/superhero-id) — what the profile is a view onto.
-- [Names: Custom, Chain and X](/identity/names) — why the displayed name may not be the one you
-  set.
-- [Verifying Your X Account](/identity/x-verification) — the one profile field with a
-  cryptographic proof behind it.
+- [Names: Custom, Chain and X](/identity/names) — which name types still exist and how one is
+  resolved for display.
+- [The AddressLink contract](/identity/profile-registry) — the contract behind every editable
+  field on this page.
+- [Verifying Your X Account](/identity/x-verification) — the X link, and what its badge proves.
 - [Profile API](/api-reference/profile) — the endpoint-level reference for everything on this page.
 - [Portfolio](/tokens/portfolio) — the holdings and performance numbers the profile surfaces.
 - [Superhero](https://superhero.com/) — open any post author's name to land on their profile.

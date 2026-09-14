@@ -64,7 +64,26 @@ The in-memory list is capped at 200 items.
 Everything in `data` is read defensively. A missing field makes a row non-navigable rather than
 throwing.
 
-### Types and where a click lands
+### Types, channels, and where a click lands
+
+The backend catalog (`superhero-api/src/notifications/notification-catalog.ts`) has six types,
+and each declares which channels it goes out on. That declaration matters more than the routing
+table below, because **only two of the six are ever written to the web feed at all**:
+
+| Type | Channels | Trigger |
+| --- | --- | --- |
+| `post-comment` | expo, **database**, web-push | Someone comments on a post you authored |
+| `invitation-claimed` | expo, **database**, web-push | Someone redeems an invitation you created |
+| `incoming-transfer` | expo only | Any incoming `SpendTx` above `NOTIF_MIN_AMOUNT_AETTOS` |
+| `announcement` | expo only | Authored by the Superhero team |
+| `room-membership` | expo only | You are added to or removed from a token-gated room |
+| `room-messages` | expo only | New messages in a room you belong to |
+
+`database` is the channel that writes a bell row. So the bell in the web app carries comments
+and invitation claims and nothing else in practice. `incoming-transfer` is deliberately
+excluded — it fires for every transfer on chain to the recipient, and the class comments say
+writing a feed row for each is exactly the cost the web feed must not pay. The client's routing
+table still maps all six, because the same payload also feeds the mobile app.
 
 | Type | Destination | Actor field |
 | --- | --- | --- |
@@ -87,6 +106,26 @@ Two deliberate choices are worth calling out:
 The backend deliberately ships routing *hints* — a type plus ids — rather than a URL, because
 the same payload also feeds the mobile app, which has different routes. Each client owns its
 own mapping.
+
+### What suppresses a notification
+
+Every send passes three gates before a channel sees it, and `post-comment` shows all three:
+
+1. **Self-action.** `postAuthorAddress === commenterAddress` returns immediately. You are never
+   notified about your own reply.
+2. **Preference.** The recipient's opt-out is checked *before* the rate cap, on purpose — an
+   opted-out author would otherwise spend their budget silently and land capped on re-enabling.
+3. **Per-recipient rate cap.** A fixed Redis window allows `NOTIF_POST_COMMENT_RATE_CAP`
+   comment notifications per `NOTIF_POST_COMMENT_RATE_WINDOW_SEC` — **20 per hour** by default.
+   Past that, further comments are dropped until the window resets. The cap fails *open*: if
+   Redis is unreachable the notification is attempted anyway. Deduplication is per
+   `(notification, recipient)` and each comment has a distinct transaction hash, so dedup alone
+   would not stop a comment storm; the cap is what does.
+
+`incoming-transfer` has its own floor, `NOTIF_MIN_AMOUNT_AETTOS`, an anti-dust threshold that
+defaults to `0` — off. It also refuses to dispatch a transfer event with no transaction hash,
+because the dedup key would otherwise collapse to the recipient alone and swallow every later
+transfer for the whole TTL window.
 
 ## Browser push
 
@@ -146,6 +185,34 @@ origin-scoped.
 | `POST /api/notifications/devices` | Register a device |
 | `DELETE /api/notifications/devices` | Deregister it |
 
+### The preference keys
+
+There is no separate preference vocabulary: a key is a catalog `type`, and the six of them are
+exactly the types in the table above — `incoming-transfer`, `announcement`,
+`invitation-claimed`, `post-comment`, `room-membership`, `room-messages`. The catalog is
+ordered, and the mobile preferences screen renders its rows in that order.
+
+The write is a partial upsert behind a signed challenge:
+
+```text
+POST /api/notifications/{address}/preferences
+{ "nonce": "…", "signature": "sg_… or hex",
+  "preferences": [ { "type": "post-comment", "enabled": false } ] }
+```
+
+Only the types you list are changed; the rest keep their state. Unknown type strings are
+rejected against the catalog. The model is opt-out — a type with no stored row is enabled.
+
+### Devices are the mobile half
+
+`/notifications/devices` registers an **Expo push token**, for the native apps. The web-push
+endpoints below register a **VAPID browser subscription**. They are different transports for
+different clients, which is why the web client calls one and not the other: a type declared
+`via(): ['expo']` reaches only a registered device, and reaches nothing at all if the account
+has none. Both registration paths are behind their own signed challenge, and deregistration
+binds the signature to both the address and the token — otherwise anyone who learned a push
+token could silently disable a victim's notifications.
+
 The per-room mute control is separate and lives with chat: it writes `muted` and a tri-state
 account-wide `mute_all` through `POST /api/rooms/{saleAddress}/mute` behind its own signed
 challenge. The account-wide half of that switch is what turns `room-messages` notifications off
@@ -169,19 +236,18 @@ Others cover token creation, swaps, wrapping and unwrapping AE, liquidity change
 a profile update. None of these are recorded in the notification feed; they exist only for the
 duration of the operation.
 
+## No tip notification
+
+There is no tip type in the catalog, and the nearest thing — `incoming-transfer`, which does
+fire for a tip, since a tip is a plain `SpendTx` — is Expo-only and never reaches the bell. So
+an incoming tip produces a mobile push if you have a registered device, and nothing at all in
+the web app. See [Tipping](/social/tipping).
+
 ## Open questions
 
-- **What triggers each feed type server-side?** The types and their payload fields are visible
-  from the client, but the conditions the backend uses — how soon after a comment, whether
-  self-actions are suppressed, how `announcement` rows are authored — are not documented in the
-  app repository.
-- **What preference keys exist?** The preferences endpoints are generated from the API schema
-  with untyped bodies, so the set of togglable categories is unknown from the client side.
-- **What does a device registration do that a web-push subscription does not?** The devices
-  endpoints exist alongside the web-push ones with no callers visible in the web client; they
-  are presumably for the mobile app.
-- **Is there a notification for tips?** No `tip` type appears in the client's mapping or its
-  tests, even though tipping is a first-class action.
+- **How is an `announcement` authored?** The type exists with a `superhero-api/src/announcements`
+  module behind it, but the authoring surface is an operator tool rather than anything in the
+  public API or either client. Ask Superhero who can publish one.
 
 ## Read more
 
