@@ -21,6 +21,15 @@ pnpm build    # production build
 > `pnpm-lock.yaml` is committed and resolved against those pinned versions, so
 > `pnpm install --frozen-lockfile` (the default on Vercel and most CI) works as-is.
 
+### Deployment
+
+Set `NEXT_PUBLIC_SITE_URL` to the site's real origin (for example
+`https://docs.superhero.com`). It is used for `og:url` and for the absolute social-card image
+URL; without it both fall back to a placeholder domain, which makes link previews wrong.
+
+Brand assets live in `public/` and come from the Superhero app's own `public/` directory —
+the mark, the wordmark, the favicon set and the social card.
+
 ### Two constraints worth knowing before you edit
 
 1. **Never create `pages/api/`.** Next.js reserves it for API routes in the pages router,
@@ -59,22 +68,16 @@ pages/
 └── contributing/        Authoring conventions and the documentation roadmap
 ```
 
-## Current status
+## Editing
 
-This site is a **briefed outline**. Every page carries:
-
-- a **page brief** — one or two sentences saying what belongs on it,
-- a `status` and `depth` marker,
-- whatever content could already be sourced from the Superhero repositories,
-- a **What this page still needs** list, and
-- a **Sources to mine** list naming the exact files to read.
-
-That structure exists so that each subsequent writing pass — human or agent — can pick a page,
-read its sources, verify the facts, and replace the brief with finished content.
+Every page is written. Where something could not be verified against source, the page says so
+under its own `## Open questions` heading rather than presenting a guess as fact — that is
+deliberate, and those sections should not be padded or quietly removed.
 
 **Start at [`pages/contributing/how-to-contribute.mdx`](./pages/contributing/how-to-contribute.mdx)
-before editing**, and use [`pages/contributing/roadmap.mdx`](./pages/contributing/roadmap.mdx)
-as the work queue.
+before editing**; [`pages/contributing/page-template.mdx`](./pages/contributing/page-template.mdx)
+has the page shape and the MDX rules, and
+[`pages/contributing/roadmap.mdx`](./pages/contributing/roadmap.mdx) is the work queue.
 
 ## Where the content comes from
 

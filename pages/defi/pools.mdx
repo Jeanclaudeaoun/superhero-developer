@@ -383,9 +383,9 @@ committing, look at the pair's volume against its price movement on
   `fee_to = None` and the contracts' README describes it as initially disabled, but nothing in
   either repository records whether it was ever enabled or which account was passed as the initial
   `fee_to_setter` at deployment. Two read-only dry-run calls against the mainnet factory
-  `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` settle both — `fee_to()` and
-  `fee_to_setter()` — and neither could be made from this environment, where outbound HTTP is
-  blocked. Until then, assume providers keep the full 0.3% but verify before relying on it.
+  `ct_2mfj3FoZxnhkSw5RZMcP8BfPoB1QR4QiYGNCdkAvLZ1zfF6paW` settle both: call `fee_to()` and
+  `fee_to_setter()`. Until they are made, assume providers keep the full 0.3% but verify before
+  relying on it.
 
 ## Read more
 

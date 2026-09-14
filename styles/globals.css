@@ -1,0 +1,18 @@
+/* Content images.
+ *
+ * Pages use plain markdown image syntax rather than inline JSX, so the
+ * presentation lives here. That keeps scripts/lint-mdx.py able to stay strict
+ * about stray `<` and `{` in prose, which is what actually breaks the build. */
+main img {
+  display: block;
+  max-width: min(100%, 640px);
+  height: auto;
+  margin: 2.25rem auto;
+  border-radius: 14px;
+}
+
+/* The mark in the navbar is chrome, not content — exempt it. */
+nav img {
+  margin: 0;
+  border-radius: 0;
+}

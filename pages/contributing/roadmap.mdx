@@ -5,13 +5,10 @@ description: "What is left to verify, built from the open questions the pages th
 
 # Documentation Roadmap
 
-Every page on this site is written. What remains is **verification** — facts that could not be
-confirmed from the source available, which each page declares under its own `## Open questions`
-heading.
-
-This roadmap is generated from those declarations rather than from a guess at what might be
-missing. At the time of writing: **157 pages, 83 of them carrying open questions, 159 questions
-in total**, down from 370 across 135 pages.
+What is left to **verify**. Every page declares the facts it could not confirm under its own
+`## Open questions` heading; this page collects those declarations into a work queue and groups
+them by what it would actually take to close each one. At present there are **158 of them
+across 82 pages**.
 
 Regenerate the list at any time:
 
@@ -22,43 +19,31 @@ grep -rl "## Open questions" pages/
 # Every open question, one per line, prefixed by its page
 python3 - <<'EOF'
 import os, re
+total = 0
 for root, _, files in os.walk('pages'):
     for f in sorted(files):
         if not f.endswith('.mdx'):
             continue
         p = os.path.join(root, f)
-        m = re.search(r'^## Open questions\s*$(.*?)(?=^## |\Z)', open(p).read(), re.M | re.S)
+        # Strip fenced blocks first: the page template contains an example
+        # "## Open questions" heading that is not a real one.
+        text = re.sub(r'^([`~]{3,}).*?^\1', '', open(p).read(), flags=re.M | re.S)
+        m = re.search(r'^## Open questions\s*$(.*?)(?=^## |\Z)', text, re.M | re.S)
         if not m:
             continue
         for item in re.split(r'\n(?=[-*] )', m.group(1).strip()):
-            print(p, '::', ' '.join(item.split()))
+            if item.strip():
+                total += 1
+                print(p, '::', ' '.join(item.split()))
+print(f'\n{total} open questions')
 EOF
 ```
 
-## What already closed, and how
-
-The previous roadmap's two largest clusters are gone. They closed by **fetching source**, not by
-calling anything:
-
-| Repository | Closed |
-| --- | --- |
-| `superhero-com/bcl-contracts` | All ten BCL Sophia sources. Every "what does this contract actually check" question. |
-| `superhero-com/superhero-api` | The backend. Rate limits, the trending-score formula, DTO units, the AddressLink plugin. |
-| `aeternity/tipping-contract` | `Tipping_v3.aes` — the delegated-posting signing scheme and its absent replay protection. |
-| `aeternity/aepp-governance` | `Poll.aes`, `Registry.aes` — on-chain vote gating and delegation. |
-| `superhero-com/superhero-wallet` | Ledger, AirGap, the connection permission set, key export, seed-backup verification. |
-| `aeternity/dex-contracts-v2` | The 0.3% fee constant, the protocol-fee switch, the real router signatures. |
-
-**The lesson worth carrying forward: reach for the source before reaching for the network.** A
-documented formula is better than an observed value, because it does not go stale. Most questions
-phrased as "call this endpoint and see" were answered better by reading the code that produces
-the response.
-
 ## Priority 1 — One session with network access
 
-**Roughly 33 questions** need a live call and nothing else. Outbound HTTP was blocked throughout
-this work (the proxy returns 403 on CONNECT for every external host), so no address, constant or
-endpoint was confirmed against a running system.
+**Roughly 36 questions** need a live call and nothing else. No address, constant or endpoint on
+this site has been confirmed against a running system; every one of them was read out of a
+source file instead.
 
 | Call | Closes questions on |
 | --- | --- |
@@ -77,8 +62,9 @@ unverifiable the moment chain state moves.
 
 ## Priority 2 — Questions only Superhero can answer
 
-**Roughly 22 questions.** No amount of code reading closes these; someone has to decide or
-publish. Listed most consequential first.
+**Roughly 60 questions, collapsing to the eleven distinct asks below** — the same few gaps recur
+on page after page. No amount of code reading closes these; someone has to decide or publish.
+Listed most consequential first.
 
 | Question | Page |
 | --- | --- |
@@ -104,11 +90,10 @@ capturing the first one; the site has no convention for this yet.
 - [Your first post](/getting-started/first-post) — the composer, each control labelled
 - [Your first trade](/getting-started/first-trade) — the trade card, every field labelled
 
-## Priority 4 — Defects found while writing
+## Priority 4 — Defects in the products these pages describe
 
-These are not documentation gaps. They are bugs in the products the docs describe, found by
-reading the source, and each is documented in place so a reader is not misled. They are listed
-here so they are not lost.
+These are not documentation gaps. They are bugs, found by reading the source, and each is
+documented in place so a reader is not misled. They are listed here so they are not lost.
 
 | Defect | Where |
 | --- | --- |
@@ -127,7 +112,7 @@ here so they are not lost.
 
 ## Priority 5 — Keeping it true
 
-The docs now assert a great many specific things about code that will change. Worth doing
+This site asserts a great many specific things about code that will change. Worth doing
 periodically:
 
 - Re-run `python3 scripts/lint-mdx.py` — it gates frontmatter, MDX hazards, internal links and

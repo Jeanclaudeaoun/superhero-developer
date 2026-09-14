@@ -337,9 +337,9 @@ await factory.has_community(collectionId, 'MYTOKEN');
   transactions.** `create_community` deploys a `CommunityManagement`, a `DAO`, a sale and its
   AEX-9 token through `Chain.create` in one call, and then optionally performs an initial buy
   that reaches two more contracts. Whether a dry run's `gasUsed` covers all of that identically
-  to a mined call needs one measurement against a live node, which was not possible here: run
-  `create_community` with `callStatic: true`, note `result.gasUsed`, then mine the same call
-  and compare. Until someone does, keep the 30% margin the page recommends.
+  to a mined call needs one measurement against a live node: run `create_community` with
+  `callStatic: true`, note `result.gasUsed`, then mine the same call and compare. Until someone
+  does, keep the 30% margin the page recommends.
 
 ## Read more
 

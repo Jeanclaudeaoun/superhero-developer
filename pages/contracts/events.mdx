@@ -486,8 +486,8 @@ removed as a security fix, so a client `message` emit is dropped and delivery is
   padded base32hex of the Blake2b digest, as shown above — but the Superhero backend never
   passes it as a filter; it fetches by `contract_id` (plus `tx_hash`) and matches `event_hash`
   client-side. Whether `/v3/contracts/logs` accepts an `event_hash=` or similar parameter, and
-  what it is called, would be settled by the middleware's own OpenAPI document at
-  `{middlewareUrl}/v3/api`, which was unreachable while this page was written. Client-side
+  what it is called, is settled by the middleware's own OpenAPI document — fetch
+  `{middlewareUrl}/v3/api` and read the `/v3/contracts/logs` parameter list. Client-side
   filtering on `topics[0]` or `event_hash` always works regardless.
 - **What `target` accepts on the `Object` channel.** The subscribe message shape is now
   settled from the Superhero backend's own client, but that client only ever subscribes to
@@ -497,7 +497,7 @@ removed as a security fix, so a client `message` emit is dropped and delivery is
   place to settle it.
 - **Whether the ProfileRegistry event names are exactly as the whitepaper spells them.** The
   six hashes in that section are correct only if the names are, and neither an ACI nor a source
-  file for `ProfileRegistry.aes` exists in any repository available here. The contract now
+  file for `ProfileRegistry.aes` exists in any repository read. The contract now
   looks retired, so this may never be settleable — and may not be worth settling. What would
   close it: the `ProfileRegistry.aes` source, or the deployed address plus a decompile.
 

@@ -5,8 +5,8 @@ description: "Launch a community token from a terminal or an AI agent, with ever
 
 # Create a Token from the Command Line
 
-`scripts/superhero-token-create.mjs` in the [agent skill](https://github.com/superhero-com/superhero-agent-skill)
-wraps `CommunityFactory.create_community` in three subcommands: `check`, `create` and `info`. It
+`scripts/superhero-token-create.mjs` in the agent skill wraps `CommunityFactory.create_community`
+in three subcommands: `check`, `create` and `info`. It
 signs with a key from your environment, resolves the collection for you, and prints one line of JSON
 on success. This page documents what it does at each step, what every failure looks like, and how to
 do the same thing against the SDK directly if you would rather not depend on the script.
@@ -256,7 +256,6 @@ deployment, but a redeployment would leave a hardcoded address pointing at an ab
 - [Collections & Naming Rules](/tokens/collections-and-naming) — how to pick a collection deliberately instead of taking the first one
 - [Buying & Selling](/tokens/buying-and-selling) — the trading script, which follows the same conventions
 - [Agent CLI reference](/agents/cli-reference) — every script in the skill, not just this one
-- [superhero-agent-skill on GitHub](https://github.com/superhero-com/superhero-agent-skill) — the source for the script documented here
 - [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/) — `Contract.initialize`, ACIs and call options such as `amount`
 - [Create a token on superhero.com](https://superhero.com/trends/create) — the hosted equivalent, if you would rather not hold a raw key
 

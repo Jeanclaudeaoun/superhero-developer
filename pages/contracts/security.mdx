@@ -141,8 +141,7 @@ rights. See [ProfileRegistry](/contracts/profile-registry).
 
 ### Two economic claims that need correcting
 
-Both of these were stated more strongly in earlier drafts of this documentation than the source
-supports.
+Both are routinely stated more strongly than the contract source supports.
 
 **"Unaffiliated fees are burned" is imprecise.** The sale contract sends the affiliation share
 to `AffiliationTreasury.record_sale_transaction` on **every** buy — there is no conditional.
@@ -281,8 +280,7 @@ funds. Contact the maintainers privately first and ask for a disclosure channel.
   ships `bytecode_hashes.json` and `source_hashes.json`, and
   `superhero-api/src/plugins/governance/contract/aci/GovernanceBytecodeHashes.json` ships the
   governance pair, so the comparison is mechanical — compile, hash, and fetch the deployed
-  bytecode from a node. Outbound network access was blocked while this page was written, so it
-  has not been done.
+  bytecode from a node, then check the two hashes against each other.
 - **Is the `AddressLink.aes` source available anywhere?** Only its compiled ACI is committed, in
   `superhero-api`. Its nonce increment rule, its provider-registration policy, and what
   `ALREADY_CLAIMED` compares are inferred from the backend's error mapping rather than read.
@@ -297,7 +295,6 @@ funds. Contact the maintainers privately first and ask for a disclosure channel.
 - [Wallet security](/wallets/security) — key handling, which is the risk most users actually face
 - [Registry and Poll](/contracts/governance-contracts) — the revocable-after-close behaviour and the off-chain tally
 - [AffiliationTreasury](/contracts/affiliation-treasury) — the unpermissioned entrypoints and the reward expiry
-- [superhero-com/bcl-contracts](https://github.com/superhero-com/bcl-contracts) — the Sophia sources, including the audit header quoted above
 - [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the poll contracts and the tally server
 - [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) — the posting contract and its signature scheme
 - [Superhero whitepaper](https://superhero.com/whitepaper) — the protocol's own security section

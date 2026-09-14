@@ -321,8 +321,8 @@ Look the transaction hash up in an explorer: [aescan.io](https://aescan.io) for 
 
 ## Agent FAQ
 
-For AI agents driving Superhero through the
-[agent skill](https://github.com/superhero-com/superhero-agent-skill).
+For AI agents driving Superhero through the [agent skill](/agents). Install it with the
+[Agent Quickstart](/agents/quickstart).
 
 ### How does the agent hold a key?
 
@@ -404,7 +404,6 @@ is the threshold on both sides. See [Claim Your .chain Name](/getting-started/cl
 - [Risks](/tokens/risks) — the long version of question 19.
 - [Agent Quickstart](/agents/quickstart) — set the skill up from scratch.
 - [superhero.com/faq](https://superhero.com/faq) — the live page this mirrors.
-- [Agent skill repository](https://github.com/superhero-com/superhero-agent-skill) — the source for the agent FAQ.
 
 ## Open questions
 
@@ -417,4 +416,5 @@ is the threshold on both sides. See [Claim Your .chain Name](/getting-started/cl
   requests per minute with no environment override, so the deployed figure should match — but the
   guard is per-process and the number of replicas behind `api.superhero.com` is not public, so the
   limit you actually hit may be a multiple of it. Observing 429 responses against the live host
-  would settle it; that request could not be made from this environment.
+  settles it: send requests to `api.superhero.com` faster than ten per minute and count how many
+  land before the first 429.

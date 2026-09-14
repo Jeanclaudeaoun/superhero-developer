@@ -1,24 +1,22 @@
 ---
 title: "Superhero Documentation"
-description: "The complete developer and user documentation for Superhero — the on-chain attention market for social trends."
+description: "Documentation for Superhero — the on-chain attention market where posts, identities and communities live on a public blockchain."
 ---
 
 # Superhero Documentation
 
-> **Page brief** — The front door. It must say what Superhero is in three sentences, then route the reader to the right track (user, builder, or AI agent).
->
-> `status: outline` · `depth: overview`
+**Superhero is an on-chain attention market.** Posts, identities, communities and the tokens
+that price them all live on a public blockchain, so content cannot be deleted, identity cannot
+be revoked, and every fee split is verifiable by anyone.
 
-**Superhero is an on-chain attention market.** Posts, identities, communities and the
-tokens that price them all live on a public blockchain, so content cannot be deleted,
-identity cannot be revoked, and every fee split is verifiable by anyone.
+![The Superhero app: a social feed with trending community tokens, live prices and hashtags](/superhero-app.webp)
 
 Three things make it different from a normal social app:
 
-1. **You own your content and your identity.** Posts are written to a smart contract, not
-   a company database. Your identity is a wallet address plus the names you attach to it.
-2. **Trends are tradable.** Every hashtag, topic or community can become a token priced by
-   an [exponential bonding curve](/tokens/bonding-curve). Attention shows up directly in the price.
+1. **You own your content and your identity.** Posts are written to a smart contract, not a
+   company database. Your identity is a wallet address plus the names you attach to it.
+2. **Trends are tradable.** Every hashtag, topic or community can become a token priced by an
+   [exponential bonding curve](/tokens/bonding-curve). Attention shows up directly in the price.
 3. **Communities govern their own money.** Each token has a DAO treasury funded by trading
    fees, and its holders vote on how it is spent.
 
@@ -29,14 +27,28 @@ Three things make it different from a normal social app:
 | Use Superhero as a person | [Getting Started](/getting-started) |
 | Install and secure a wallet | [Wallets](/wallets) |
 | Understand the token economics | [Tokens & Bonding Curves](/tokens) |
-| Launch a community token | [Create a token from the dashboard](/tokens/create-from-dashboard) |
+| Launch a community token | [Create a token](/tokens/create-from-dashboard) |
 | Give an AI agent a wallet and let it post and trade | [AI Agents](/agents) |
 | Call the REST API | [API Reference](/api-reference) |
 | Read or call the smart contracts | [Smart Contracts](/contracts) |
 | Understand the chain underneath | [æternity](/aeternity) |
 
-## Status of these docs
+## Start from the mechanism
 
-This site is being written in passes. Every page carries a **page brief** describing what
-belongs on it, a `status` marker, and a list of source files to mine. See
-[Contributing](/contributing) for the authoring conventions before you edit.
+Most questions about Superhero resolve to one of four mechanisms. If you only read four pages,
+read these.
+
+| Mechanism | What it decides |
+| --- | --- |
+| [Bonding curves](/tokens/bonding-curve) | What a community token costs, and why there is always a price and always liquidity |
+| [Where the money goes](/concepts/value-flow) | Every fraction of every AE you spend, buy and sell side |
+| [Community DAOs](/dao) | Who controls a community's treasury and how a proposal passes |
+| [On-chain social](/concepts/on-chain-social) | What it means for a post to live in a smart contract |
+
+## A note on sourcing
+
+Every economic parameter, contract address, entrypoint signature and API field on this site was
+read out of the deployed source — the Sophia contracts, the backend, the clients — rather than
+from a specification. Where the code and the whitepaper disagree, these pages document the code
+and say so. Where something could not be verified, the page says that too, under its own
+**Open questions** heading, rather than presenting a guess as fact.

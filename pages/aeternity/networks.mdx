@@ -169,7 +169,7 @@ them as best-effort, back off on failure, and cache what you can.
   hosts or the public æternity nodes. Superhero and the æternity Foundation would each have to state
   their own; nothing in any repository does.
 - **Does `mdw.wordcraft.fun` run the same node and middleware versions as `mainnet.aeternity.io`?**
-  A `GET /v3/status` against each returns `node_version`, `node_revision` and `mdw_version`, and
-  comparing the two answers would settle it in one step. That request could not be made from this
-  environment — outbound HTTP is blocked — so it stays open. It matters if you depend on a
-  middleware feature added in a specific release.
+  A `GET /v3/status` against each returns `node_version`, `node_revision` and `mdw_version`.
+  Comparing the two answers settles it in one step: `curl https://mdw.wordcraft.fun/v3/status`
+  against the same path on `mainnet.aeternity.io`. It matters if you depend on a middleware
+  feature added in a specific release.

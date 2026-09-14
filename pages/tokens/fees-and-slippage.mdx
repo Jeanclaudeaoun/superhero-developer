@@ -233,7 +233,7 @@ Every transaction pays an æternity network fee in AE, independent of everything
 | Post | 1 contract call | Not documented in the repositories |
 
 Only the creation figure is stated anywhere in the sources, and it is described there as
-approximate. Two things are worth noting regardless: a **sell costs two transactions**, not one,
+approximate. Two things hold regardless: a **sell costs two transactions**, not one,
 because of the allowance step; and the web app never lets you spend your whole balance. Its
 "spendable" figure is `balance − balance × (slippage + 1) / 100 − 0.001 AE`, so at the default 1%
 tolerance it holds back 2% of your balance plus a flat 0.001 AE for the fee.

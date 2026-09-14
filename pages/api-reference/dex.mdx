@@ -328,4 +328,4 @@ results" from getting fewer rows than you asked for.
   question is settled — nothing calls it, and the API replicates its two contracts under
   `/api/dex/*`, with the source calling it "legacy". Whether the host itself is still serving is a
   question for its operators at æternity, not something either repository records. A single
-  request to it would answer it; outbound HTTP was unavailable when this page was written.
+  request answers it: `curl -sI https://dex-backend-mainnet.prd.service.aepps.com/`.

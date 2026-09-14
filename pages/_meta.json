@@ -37,15 +37,9 @@
   "resources": "Resources",
   "contributing": "Contributing",
   "superhero": {
-    "title": "superhero.com ↗",
+    "title": "Open Superhero ↗",
     "type": "page",
     "href": "https://superhero.com",
-    "newWindow": true
-  },
-  "agentskill": {
-    "title": "Agent Skill ↗",
-    "type": "page",
-    "href": "https://github.com/superhero-com/superhero-agent-skill",
     "newWindow": true
   }
 }

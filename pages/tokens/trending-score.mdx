@@ -229,5 +229,5 @@ signal.
 
 ## Open questions
 
-- **The distribution of live scores is unknown.** The formula bounds the score in `[0, 1]`, but where real tokens actually sit in that interval — whether a busy token reaches 0.5 or tops out near 0.1 — cannot be derived from the weights alone, and no node or API was reachable from the authoring environment. Pull `GET /api/tokens?order_by=trending_score&limit=100` and look at the spread before setting any absolute threshold.
+- **The distribution of live scores is unknown.** The formula bounds the score in `[0, 1]`, but where real tokens actually sit in that interval — whether a busy token reaches 0.5 or tops out near 0.1 — cannot be derived from the weights alone. Pull `GET /api/tokens?order_by=trending_score&limit=100` and look at the spread before setting any absolute threshold.
 - **Whether the weights and caps documented here match what mainnet is running.** They come from `superhero-api/src/configs/constants.ts` in the checked-out backend; a deployed instance could be on a different revision. `GET /api/tokens/{address}/score` echoes each signal's `cap` alongside its `raw` value, so one call against the live API confirms or refutes the whole table.

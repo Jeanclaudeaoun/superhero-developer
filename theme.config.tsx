@@ -2,55 +2,75 @@ import React from 'react'
 import { useRouter } from 'next/router'
 import { DocsThemeConfig, useConfig } from 'nextra-theme-docs'
 
-const SITE_URL = 'https://developers.superhero.com'
+// Canonical origin, used for og:url and the social-card image. Set
+// NEXT_PUBLIC_SITE_URL in the deployment environment to the real domain; the
+// fallback only keeps local builds and previews coherent.
+const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://docs.superhero.com'
+).replace(/\/$/, '')
+const OG_IMAGE = `${SITE_URL}/og-default.png`
 
 const config: DocsThemeConfig = {
   logo: (
-    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-      <span
-        style={{
-          display: 'inline-block',
-          width: 20,
-          height: 20,
-          borderRadius: 6,
-          background: 'linear-gradient(135deg, #3b82f6 0%, #a855f7 100%)',
-        }}
+    <span
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.55rem',
+        letterSpacing: '-0.01em',
+      }}
+    >
+      <img
+        src="/superhero-mark.png"
+        alt=""
+        width={22}
+        height={17}
+        style={{ display: 'block' }}
       />
       <strong style={{ fontWeight: 700 }}>Superhero</strong>
-      <span style={{ opacity: 0.5 }}>Docs</span>
+      <span style={{ opacity: 0.45, fontWeight: 400 }}>Docs</span>
     </span>
   ),
+  logoLink: '/',
+
+  // The GitHub icon in the navbar points at the organisation, not at any one
+  // repository — these docs cover the whole platform, not a single project.
   project: {
-    link: 'https://github.com/superhero-com/superhero-agent-skill',
+    link: 'https://github.com/superhero-com',
   },
-  docsRepositoryBase:
-    'https://github.com/Jeanclaudeaoun/superhero-developer/tree/main',
+
+  // No "edit this page" or feedback link: both would expose the repository this
+  // site happens to be built from, which is not where readers should be sent.
+  editLink: { component: null },
+  feedback: { content: null },
+
   footer: {
     text: (
-      <span>
-        Superhero Documentation ·{' '}
+      <span style={{ opacity: 0.8 }}>
         <a href="https://superhero.com" target="_blank" rel="noreferrer">
           superhero.com
-        </a>{' '}
-        · Built on æternity
+        </a>
+        {' · Built on æternity'}
       </span>
     ),
   },
-  editLink: { text: 'Edit this page on GitHub →' },
-  feedback: { content: 'Question? Open an issue →' },
+
   sidebar: {
     defaultMenuCollapseLevel: 1,
     toggleButton: true,
   },
   toc: { float: true, backToTop: true },
   darkMode: true,
-  primaryHue: 265,
+  primaryHue: 220,
+
   useNextSeoProps() {
     const { asPath } = useRouter()
     return {
-      titleTemplate: asPath === '/' ? 'Superhero Documentation' : '%s – Superhero Docs',
+      titleTemplate:
+        asPath === '/' ? 'Superhero Documentation' : '%s – Superhero Docs',
     }
   },
+
   head: function Head() {
     const { asPath } = useRouter()
     const { frontMatter, title } = useConfig()
@@ -58,16 +78,29 @@ const config: DocsThemeConfig = {
     const description =
       (frontMatter as { description?: string })?.description ??
       'Documentation for Superhero — the on-chain attention market for social trends, built on æternity.'
+    const pageTitle = title ? `${title} – Superhero Docs` : 'Superhero Documentation'
 
     return (
       <>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="description" content={description} />
+        <meta name="theme-color" content="#1161FE" />
+
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Superhero Documentation" />
         <meta property="og:url" content={url} />
-        <meta property="og:title" content={title ? `${title} – Superhero Docs` : 'Superhero Documentation'} />
+        <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={description} />
+        <meta property="og:image" content={OG_IMAGE} />
+
         <meta name="twitter:card" content="summary_large_image" />
-        <link rel="icon" href="/favicon.ico" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={description} />
+        <meta name="twitter:image" content={OG_IMAGE} />
+
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icon-192.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </>
     )
   },
