@@ -28,13 +28,12 @@ pnpm dev      # http://localhost:3000
 
 ## The loop
 
-### 1. Pick a page
+### 1. Pick something to work on
 
-Take the next item from the [roadmap](/contributing/roadmap). A page that still carries a
-**page brief** blockquote, a `status:` marker or a **Sources to mine** list is unwritten —
-that scaffolding is the marker, and deleting it is part of finishing the page.
+Take the next item from the [roadmap](/contributing/roadmap), or an unresolved bullet from any
+page's `## Open questions`.
 
-Prefer depth over breadth. One finished page beats three half-written ones.
+Prefer depth over breadth. One page corrected properly beats three touched in passing.
 
 ### 2. Read the sources before writing a word
 
@@ -62,20 +61,13 @@ rather than guessing it. Anything you could not verify is not a fact yet.
 
 ### 4. Write the page
 
-Replace the scaffolding with real content, following the
-[page template](/contributing/page-template). Keep and expand anything already on the page — it
-was sourced from the repositories and is correct. Do not delete an accurate table in order to
-rewrite it from memory.
+Follow the [page template](/contributing/page-template). Keep and expand anything already on the
+page — it was sourced from the repositories and is correct. Do not delete an accurate table in
+order to rewrite it from memory.
 
 End with `## Read more`. Add `## Open questions` only if something is genuinely unresolved.
 
-### 5. Delete the scaffolding
-
-The page brief blockquote, the `status` / `depth` line, **What this page still needs** and
-**Sources to mine** all come out. They told you what to write; once written, they are noise.
-Unresolved items from "still needs" move to `## Open questions`, rephrased as specific questions.
-
-### 6. Lint, then build
+### 5. Lint, then build
 
 ```bash
 python3 scripts/lint-mdx.py    # must print "0 issues"
@@ -85,10 +77,10 @@ pnpm build                     # about 90 seconds; full confidence
 The linter catches the five MDX mistakes that break `next build`, plus broken internal links and
 `_meta.json` drift. It is fast — run it after every page, not once at the end.
 
-### 7. Update the roadmap
+### 6. Update the roadmap
 
-If you finished something the roadmap listed, remove it. If you opened a new gap, add it. The
-roadmap is the only handoff between sessions; a stale one costs the next writer an hour.
+If you closed something the roadmap listed, remove it. If you opened a new gap, add it. The
+roadmap is the handoff to whoever comes next; a stale one costs them an hour.
 
 ## The rules
 
@@ -132,8 +124,6 @@ yours to run:
 - [ ] `python3 scripts/lint-mdx.py` prints `0 issues`
 - [ ] `pnpm build` succeeds
 - [ ] Every page you touched has a `## Read more` section with reasons on the links
-- [ ] No page brief, `status:` marker, "What this page still needs" or "Sources to mine" remains
-      on a page you called finished
 - [ ] Every factual claim traces to a file, a contract, or a search result you actually saw
 - [ ] New pages are listed in their directory's `_meta.json`
 - [ ] [The roadmap](/contributing/roadmap) reflects what you did
@@ -153,9 +143,8 @@ the shortest route from spotting an error to fixing it.
 ## Open questions
 
 - Who reviews and merges is not established. The repository has no `CODEOWNERS`, no
-  `.github/workflows`, and no PR template; `theme.config.tsx` points `docsRepositoryBase` at
-  `github.com/Jeanclaudeaoun/superhero-developer`. Until that is settled, treat the checklist
-  above as self-review.
+  `.github/workflows`, and no PR template. Until that is settled, treat the checklist above as
+  self-review.
 - There is no automated check in CI, so nothing prevents a page with broken MDX from being
   merged. A workflow running `scripts/lint-mdx.py` and `pnpm build` on pull requests would close
   that gap.
