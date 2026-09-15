@@ -15,7 +15,7 @@ that needs to be fast goes to the API.
 | --- | --- | --- |
 | Chain | æternity mainnet (`ae_mainnet`) or testnet (`ae_uat`) | Public nodes; see [Networks & Endpoints](/aeternity/networks) |
 | Contracts | Sophia contracts compiled to FATE | On-chain, addresses in [Deployed Addresses](/contracts/addresses) |
-| Indexer + API | Event subscriber and REST/WebSocket service | `api.superhero.com` (testnet: `testnet.api.dev.tokensale.org`) |
+| Indexer + API | Event subscriber and REST/WebSocket service | `api.superhero.com` |
 | Node / middleware | Chain RPC and transaction history | `mdw.wordcraft.fun` and `mdw.wordcraft.fun/mdw` (testnet: `testnet.aeternity.io`) |
 | Clients | React/Vite web app, React Native mobile apps, agent skill | [superhero.com](https://superhero.com), the app stores, and the [agent skill](/agents) |
 
@@ -182,7 +182,7 @@ else is mainnet). A deployed container can override most of these at runtime thr
 
 | Key | Mainnet | Testnet |
 | --- | --- | --- |
-| `BACKEND_URL` | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
+| `BACKEND_URL` | `https://api.superhero.com` | Not publicly documented |
 | `NODE_URL` | `https://mdw.wordcraft.fun` | `https://testnet.aeternity.io` |
 | `MIDDLEWARE_URL` | `https://mdw.wordcraft.fun/mdw` | `https://testnet.aeternity.io/mdw` |
 | `EXPLORER_URL` | `https://aescan.io` | `https://testnet.aescan.io` |

@@ -39,8 +39,8 @@ names, inspect AEX-9 balances and sign for a locally built app.
 
 | Setting | Mainnet (`ae_mainnet`) | Testnet (`ae_uat`) |
 | --- | --- | --- |
-| Backend / API | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
-| WebSocket | `https://api.superhero.com` | `https://testnet.api.dev.tokensale.org` |
+| Backend / API | `https://api.superhero.com` | Not publicly documented |
+| WebSocket | `https://api.superhero.com` | Not publicly documented |
 | Node | `https://mdw.wordcraft.fun` | `https://testnet.aeternity.io` |
 | Middleware | `https://mdw.wordcraft.fun/mdw` | `https://testnet.aeternity.io/mdw` |
 | Explorer | `https://aescan.io` | `https://testnet.aescan.io` |
@@ -117,7 +117,7 @@ Its æternity testnet defaults:
 | Node | `https://testnet.aeternity.io` |
 | Middleware | `https://testnet.aeternity.io/mdw` |
 | Explorer | `https://testnet.aescan.io` |
-| Superhero API | `https://testnet.api.dev.tokensale.org` |
+| Superhero API | Not publicly documented |
 | Tipping backend | `https://superhero-backend-testnet.prd.service.aepps.com` |
 | Multisig backend | `https://ga-multisig-backend-testnet.prd.service.aepps.com` |
 
@@ -139,9 +139,8 @@ AE_NODE_URL=https://testnet.aeternity.io node scripts/superhero-governance.mjs .
 ```
 
 The other scripts set their node and API URLs as constants at the top of the file. To run them
-against testnet, change those constants — and swap the Superhero API base to
-`https://testnet.api.dev.tokensale.org`, which is a different host rather than a path on the same
-one:
+against testnet, change those constants. The Superhero API base needs changing too: the testnet API
+is a different host rather than a path on the mainnet one, and it is not publicly documented.
 
 | Script | Constants to change |
 | --- | --- |

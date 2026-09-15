@@ -671,10 +671,6 @@ Each of these needs a statement from Superhero. No further code reading will set
   **do not add an invite to this page on the strength of a search result, a social post, or someone
   saying so.** The whole value of this page is that every URL on it traces to a repository or to
   official æternity documentation.
-- **Is `testnet.api.dev.tokensale.org` a permanent testnet endpoint?** The hostname still reads as a
-  development deployment, and the backend repository does not name it — neither `.env.example` nor
-  `.env.testnet.example` carries a testnet API hostname, so the value in the web app's
-  `src/config.ts` is the only record of it. Superhero would have to state whether it is supported.
 - **What availability can you expect from `mdw.wordcraft.fun`?** Its operator is now reasonably
   clear — the backend's deployment guide pulls mainnet database backups from `dev.wordcraft.fun`,
   and the API's package name (`wordcraft-api`) and Swagger title ("WORD CRAFT Scan") share the
