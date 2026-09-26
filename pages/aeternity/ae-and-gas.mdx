@@ -101,20 +101,20 @@ exhausts its `gasLimit` refunds nothing — the transaction is still mined, the 
 rolled back, and you pay the full limit. A generous `gasLimit` costs nothing when the call
 succeeds and everything when it does not.
 
-## Typical Superhero costs
+## Transactions per Superhero action
 
-Orders of magnitude, not protocol constants:
+Each transaction pays gas at the network's current gas price:
 
-| Action | Approximate cost | Transactions |
-| --- | --- | --- |
-| Publish a post | ~0.00001 AE | 1 |
-| Publish a comment | ~0.00001 AE | 1 |
-| Cast a vote | ~0.0001 AE | 1 |
-| Revoke a vote | ~0.0001 AE | 1 |
-| Delegate / revoke delegation | ~0.0001 AE | 1 |
-| Create a governance poll | ~0.01–0.02 AE | 2 |
-| Create a token | ~0.001 AE gas, plus any initial buy | 1 |
-| Redeem an invitation | ~0.000201 AE (2.01 × 10^14 aettos), measured | 1 |
+| Action | Transactions |
+| --- | --- |
+| Publish a post | 1 |
+| Publish a comment | 1 |
+| Cast a vote | 1 |
+| Revoke a vote | 1 |
+| Delegate / revoke delegation | 1 |
+| Create a governance poll | 2 |
+| Create a token | 1, plus any initial buy |
+| Redeem an invitation | 1 |
 
 The agent skill confirms a balance of **at least 0.01 AE** before doing anything on chain.
 

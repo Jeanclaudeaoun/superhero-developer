@@ -239,9 +239,8 @@ require(Call.value == (redemption_fee_cover + invitation_amount) * List.length(i
         "INVITATION_AMOUNT_AND_FEE_NOT_MATCHING")
 ```
 
-A redemption transaction costs roughly `2.01e14` aettos (0.000201 AE); the 0.001 AE floor is
-about five times that. The value check is **exact equality**, not a minimum, so attach exactly
-`(cover + amount) × count`.
+The 0.001 AE floor covers the invitee's redemption gas with room to spare. The value check is
+**exact equality**, not a minimum, so attach exactly `(cover + amount) × count`.
 
 The CLI's help text gives the same arithmetic:
 

@@ -161,7 +161,7 @@ default to your own wallet. `delegate` refuses your own address.
 
 For an agent wallet, delegation is often the right answer: delegate the agent's weight to your
 own personal address, and the agent's stake counts, you decide how, and the agent never signs
-a governance transaction. It is one transaction and about 0.0001 AE. Delegating *to* an agent
+a governance transaction. It is one transaction. Delegating *to* an agent
 hands a piece of your governance weight to an automated process; do that only with a written
 policy and an agent you audit.
 
@@ -194,16 +194,18 @@ denying `superhero-governance.mjs create` and `delegate` is a guarantee. See
 A good default: let the agent **read and summarise** polls on a schedule, and nothing else.
 `list` and `info` cost nothing and sign nothing, and a daily digest of open polls is useful.
 
-## Costs
+## Transactions
 
-| Action | Transactions | Approximate cost |
-| --- | --- | --- |
-| Create poll | 2 | 0.01–0.02 AE |
-| Vote | 1 | around 0.0001 AE |
-| Revoke vote | 1 | around 0.0001 AE |
-| Delegate | 1 | around 0.0001 AE |
-| Revoke delegation | 1 | around 0.0001 AE |
-| List, info, delegatee, delegators | 0 | free, but still needs a key |
+Each transaction pays gas at the network's current gas price.
+
+| Action | Transactions |
+| --- | --- |
+| Create poll | 2 |
+| Vote | 1 |
+| Revoke vote | 1 |
+| Delegate | 1 |
+| Revoke delegation | 1 |
+| List, info, delegatee, delegators | 0 — free, but still needs a key |
 
 ## Configuration
 

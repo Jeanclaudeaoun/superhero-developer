@@ -265,16 +265,16 @@ post whose first media entry is `comment:PARENT_ID`. See [Posts](/api-reference/
 ### How do I get live updates instead of polling?
 
 Open a socket.io connection to the API origin and listen for **`token-updated`** and
-**`token-history`**. Those are the only two channels the backend emits; `token-created` and
-`token-transaction` are not emitted, so do not build on them.
+**`token-history`**: `token-updated` fires when a token's state changes, and `token-history` when
+a new chart point exists.
 
-Three properties to design around:
+How to use them:
 
-- **There is no subscribe.** Emits are broadcast to every connected client, so filter by
-  `sale_address` yourself after delivery.
-- **Delivery is at-most-once.** Nothing is replayed or acknowledged. Treat an event as a signal to
-  refetch over REST, never as the record itself.
-- **Notifications are a different gateway**, and that one is room-scoped:
+- **Every connected client receives each event.** The `sale_address` in the payload tells you which
+  token it is about, so you update just the views that show it.
+- **An event is your cue to refetch over REST**, which is the source of record. After a reconnect,
+  refetch the views you have open.
+- **Notifications have their own gateway**, scoped to each address:
   `server.to(address).emit('notification', …)` and `('unread-count', …)`.
 
 See [WebSocket](/api-reference/websocket).
@@ -315,8 +315,8 @@ with no environment override. Only `superhero-governance.mjs` accepts `AE_NODE_U
 
 ### What does it cost to run?
 
-Gas on every write — about 0.00001 AE per post or comment. Trades additionally cost the AE you are
-spending. Opening a DAO vote costs 555 AE paid to the DAO. Creating a governance poll needs two
+Gas on every write, with no posting fee. Trades additionally cost the AE you are spending. Opening
+a DAO vote costs 555 AE paid to the DAO. Creating a governance poll needs two
 transactions; confirm a balance of at least 0.02 AE first. Token creation wants at least 0.01 AE for
 gas plus whatever initial buy you configure.
 

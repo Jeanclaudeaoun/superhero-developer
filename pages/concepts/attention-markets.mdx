@@ -43,7 +43,7 @@ three constants (`a = 0.001`, `k = 0.00000001`, `c = 0.0009999`) to show you a q
 Two design consequences fall straight out of the constants:
 
 - At supply zero the marginal price is `0.001 - 0.0009999 = 0.0000001 AE`. The curve starts almost
-  free, which is what makes creating a token cheap and makes being first meaningfully rewarding.
+  free, which makes being first meaningfully rewarding.
 - The exponent is small (`1e-8`), so the curve is nearly linear for the first few hundred thousand
   tokens and then bends hard. Only 10–20% of the total supply is expected to be reached, which gives
   a noticeable price increase right from the start of the curve.
@@ -160,9 +160,9 @@ The trending score is a *derived* number, not a protocol quantity: no contract r
 depends on it, and the weights above are backend configuration that can change with a deploy. Treat
 it as a ranking aid, not as ground truth. See [The Trending Score](/tokens/trending-score).
 
-## What the price does not tell you
+## Reading the price well
 
-A market that prices attention inherits every pathology attention has.
+The price records the community's conviction as it happens. A few things help you read it well.
 
 **Reflexivity.** The price is supposed to measure conviction, but the price is also what creates
 conviction. There is no external anchor — no earnings, no redemption value other than the curve
@@ -174,9 +174,6 @@ public on every token page so you can check for this — see [Reading a Token Pa
 The trending score's caps blunt this: a single wallet cycling trades saturates the buy and sell
 counts at 40 each and contributes 1 to a 25-cap active-wallet count. The price and the market cap
 have no such ceiling.
-
-**Abandoned tokens.** Creating a token is cheap and permanent. Rank and market cap sort inactive
-tokens down the list, but nothing removes them.
 
 **First-mover concentration.** The curve is cheapest at supply zero, so the creator and the earliest
 buyers can accumulate a large share of the eventual supply for very little AE. That share is also

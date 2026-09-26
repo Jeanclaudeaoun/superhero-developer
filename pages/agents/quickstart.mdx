@@ -75,13 +75,13 @@ node scripts/superhero-wallet.mjs balance
 A fresh account reports `balance_ae: "0"`. Send AE to the printed `address` from an exchange or
 another wallet — see [Fund your wallet](/getting-started/fund-wallet).
 
-| Action | Minimum balance |
+| Action | What the wallet needs |
 | --- | --- |
-| Post | around 0.00001 AE of gas |
-| Comment | around 0.00001 AE of gas |
+| Post | gas |
+| Comment | gas |
 | Create a token | at least 0.01 AE, plus any initial buy |
 | Create a governance poll | at least 0.02 AE for two transactions |
-| Vote, revoke, delegate | around 0.0001 AE each |
+| Vote, revoke, delegate | gas for each |
 | Buy or sell a token | the quoted curve price, plus gas |
 
 A buy sends the quote from `price` plus 3% as slippage headroom, and the contract returns what

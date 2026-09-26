@@ -31,7 +31,7 @@ The ACI is `Tipping_v3.aci.json`.
 | `get_state` | `() => Tipping.state` | — |
 
 Both posting entrypoints return the new `tip_id`. Neither is payable, so a post costs only the
-transaction fee and gas — roughly 0.00001 AE.
+transaction fee and gas.
 
 `tip_id` is assigned as `Map.size(state.tips)`, so ids are dense and sequential from 0. There
 is no delete, so ids are never reused. The Superhero API serves them suffixed — post `0`

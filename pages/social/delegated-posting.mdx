@@ -151,8 +151,7 @@ when the relayer submitted it, not when the author signed it.
 
 Use `post_without_tip_sig` when the author cannot pay — new-user onboarding before the wallet
 is funded, or a custodial surface that holds no user key but can forward a signature. For
-everything else prefer `post_without_tip`: it is simpler and the gas is negligible (roughly
-0.00001 AE per post).
+everything else prefer `post_without_tip`: it is simpler, and the author pays only gas.
 
 ## Related
 

@@ -38,12 +38,12 @@ Socket.IO client for your language.
 | `token-updated` | A token's live price, supply, market cap or DAO balance has been re-read from chain and written back |
 | `token-history` | A buy, sell or token creation has been indexed **live** |
 
-Both are broadcast to every connected client. There is no subscription step and no per-token
-scoping: connect, listen, and filter on `sale_address` in your own process. There is no push for
-new token sales; poll `GET /api/tokens?order_by=created_at&order_direction=DESC` or read
-`GET /api/feed` instead.
+Both are broadcast to every connected client, so getting started takes two steps: connect and
+listen. Each payload carries the token's `sale_address`, so your process can route it to the views
+that show that token. For newly created tokens, read
+`GET /api/tokens?order_by=created_at&order_direction=DESC` or `GET /api/feed`.
 
-The server accepts no client-sent messages. All emissions originate server-side.
+All emissions originate server-side, from services that have already validated the payload.
 
 ## Payloads
 
@@ -120,15 +120,13 @@ the same nine currency codes as the REST API: update the current candle when the
 the active interval and open a new one otherwise. For a live-trades list, spread `data` and
 `token` into one object and prepend it to your cached `GET /api/transactions` page.
 
-**Only live-indexed trades are pushed.** Backfill and reorg re-processing are silent; a
-historical gap must be closed over REST.
+**Trades are pushed as they are indexed live.** For history, read `GET /api/transactions`.
 
 ## Delivery
 
-Socket.IO handles reconnection itself. There is no message buffering across a disconnect, no
-acknowledgement and no replay: **events that occur while you are disconnected are lost.**
-Delivery is at-most-once; treat events as a hint to refetch, and re-read the REST endpoint after
-any reconnect.
+Socket.IO reconnects on its own. Events are live signals: use each one as your cue to refetch, with
+the REST endpoints as the source of record. After a reconnect, re-read the REST endpoints behind
+the views you have open so they pick up anything that changed in between.
 
 ## A minimal live-trades client
 

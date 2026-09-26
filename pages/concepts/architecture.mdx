@@ -155,17 +155,16 @@ config — `https://api.superhero.com` on mainnet. The backend emits two channel
 | `token-updated` | A token's aggregate state changes; the payload carries `sale_address` |
 | `token-history` | A new chart point exists for a `sale_address` |
 
-`token-created` and `token-transaction` are not emitted. Refresh token lists and transaction feeds
-from the REST endpoints, and use `token-updated` as your signal to do so.
+Use `token-updated` as your signal to refresh token lists and transaction feeds from the REST
+endpoints.
 
-The gateway is broadcast-only: every emit originates from a server-side service that has validated
-the payload, and there are no client-to-server messages. Two consequences for a client:
+Every emit comes from a server-side service that has already validated the payload, and every
+connected client receives it. The `sale_address` in each payload tells your client which token it
+is about, so it can update just the views that show that token.
 
-- **There is no server-side subscribe.** Emits go to every connected client; filter by
-  `sale_address` in your own client after delivery.
-- **Delivery is at-most-once.** Nothing is replayed and nothing is acknowledged, so a socket event is
-  a hint to refetch, never a source of record. The client's own queue-and-replay on `connect` and its
-  1000 ms reconnect cover the socket, not the messages missed while it was down.
+An event is your cue to refetch, and the REST endpoints are the source of record. The web app
+reconnects on its own after 1000 ms; after a reconnect, refetch the views you have open so they
+pick up anything that changed in between.
 
 Notifications ride a **separate** gateway, room-scoped rather than broadcast:
 `server.to(address).emit('notification', …)` and `server.to(address).emit('unread-count', { count })`.
