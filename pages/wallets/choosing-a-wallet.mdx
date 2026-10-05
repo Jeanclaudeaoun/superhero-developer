@@ -10,9 +10,17 @@ program on different surfaces. They differ less in what they can do than in wher
 what gets you back in. Pick by surface and by recovery model. All of them hold the same kind of
 `ak_...` account on the same derivation path.
 
+## Recommended: passkey
+
+For most people, start with a **passkey**. On superhero.com, tap "Continue with passkey" and
+approve with Face ID, a fingerprint or your device PIN. That creates your account: no seed phrase
+to write down, nothing to install. Make sure your passkey syncs (iCloud Keychain, Google Password
+Manager or a password manager), because on a passkey-created wallet the passkey is your backup.
+See [The Built-In Wallet](/wallets/built-in-wallet).
+
 ## Comparison
 
-| | Browser extension | Mobile app | Web wallet | Built-in wallet | Raw key (agent) |
+| | Browser extension | Mobile app | Web wallet | Built-in wallet (passkey, recommended) | Raw key (agent) |
 | --- | --- | --- | --- | --- | --- |
 | Product | Superhero Wallet | Superhero Wallet | Superhero Wallet, at `wallet.superhero.com` | Superhero app itself | Your own process |
 | Custody | Yours, in the extension | Yours, on the device | Yours, in a hosted page | Yours, in this browser's storage | Yours, in an env var |
@@ -30,14 +38,6 @@ what gets you back in. Pick by surface and by recovery model. All of them hold t
 
 The first three columns are one program built from a single source tree, so the differences
 between them are platform capabilities, not different products.
-
-## Three things called "Superhero wallet"
-
-| Name | What it is |
-| --- | --- |
-| **Superhero Wallet** (standalone) | The multi-chain wallet: browser extension, iOS and Android apps, and the hosted web build |
-| **The web wallet** at `wallet.superhero.com` | The web build of that same wallet, served as a page |
-| **The built-in wallet** | A vault inside superhero.com itself, æternity-only, unlocked by a passkey or passphrase |
 
 ## Hardware and cold signing
 
@@ -84,10 +84,10 @@ over AEX-2 instead; see [Connecting a Wallet](/wallets/connecting).
 
 ### First time, on a phone
 
-Use the **Superhero app's built-in wallet**: tap "Continue with passkey", approve with Face ID or a
+Use a **passkey** (recommended): tap "Continue with passkey", approve with Face ID or a
 fingerprint, and you have an account. Make sure your passkey syncs. On a passkey-created wallet
-the passkey *is* your backup, and there is no phrase export screen. Or install the **Superhero
-Wallet mobile app**.
+the passkey *is* your backup, and there is no phrase export screen. If you prefer a seed phrase,
+install the **Superhero Wallet mobile app**.
 
 ### First time, on a desktop
 
@@ -102,7 +102,7 @@ two places. You want a portable backup and storage a browser cannot evict.
 
 ### Nothing to install
 
-Use the **built-in wallet** created from a passkey, or the **web wallet** at
+Use a **passkey** (recommended), or the **web wallet** at
 `wallet.superhero.com`. Read [The Built-In Wallet](/wallets/built-in-wallet) and
 [Web Wallet](/wallets/web-wallet) first.
 
