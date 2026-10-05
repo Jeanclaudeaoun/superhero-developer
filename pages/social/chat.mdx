@@ -207,19 +207,6 @@ Nothing is on chain and nothing is on a Superhero server.
 | Relay connection timeout | 5 s |
 | Online-status timeout | 5 min |
 
-## Quali.chat rooms
-
-Besides the in-app Nostr chat, each token page links out to rooms on Quali.chat:
-
-| Surface | Technology | Where |
-| --- | --- | --- |
-| In-app chat | Nostr, NIP-29 and NIP-04, relay `wss://relay.superhero.chat` | `/chat` and its sub-routes |
-| Quali.chat rooms | Matrix: `m.room.message` events, `m.text` message types, rooms addressed as `#ROOM:quali.chat` | Linked from the token page |
-
-The token page offers a public room and a holders-only private room on `app.quali.chat`, named
-from the token's name and address. Those are outbound links to a separate product, not the
-Nostr client.
-
 ## What chat is not
 
 - **Not permanent.** A relay can drop history, go away, or refuse to serve you. Nothing is
