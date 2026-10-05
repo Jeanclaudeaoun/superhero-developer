@@ -37,7 +37,7 @@ summary decodes the subject in this order before asking you to sign.
 | `ChangeDAO` | A **contract** (`ct_`) implementing the `ReplaceableDAO` interface |
 | `AddModerator` / `DeleteModerator` | An account (`ak_`) to appoint or remove as moderator |
 
-`VotePayoutAmount`'s `int` is in aettos — `10^18` aettos to one AE.
+`VotePayoutAmount`'s `int` is in aettos, with `10^18` aettos to one AE.
 `ChangeMinimumTokenThreshold`'s `int` is in the community token's smallest unit, so divide by
 `10^decimals` to compare it against a displayed balance.
 
@@ -46,14 +46,14 @@ summary decodes the subject in this order before asking you to sign.
 `add_vote` validates only that `Call.value` is 555 AE and that the caller holds the minimum
 token threshold; it does not compare a payout amount to the DAO's balance. `apply_vote_subject`
 executes the subject with `Chain.spend(receiver, amount)`, which aborts if the balance is
-insufficient — leaving the vote unapplied. If no application succeeds inside the execution
+insufficient and leaves the vote unapplied. If no application succeeds inside the execution
 window, the proposal expires.
 
 - **Check the treasury before you propose an amount, and leave headroom.** The balance can fall
   between proposal and execution: another payout vote may apply first, and treasury income only
   arrives on buys.
-- **`VotePayout` spends `Contract.balance`** — whatever is there at execution, including zero
-  — so it cannot fail this way.
+- **`VotePayout` spends `Contract.balance`**: whatever is there at execution, including zero,
+  so it cannot fail this way.
 
 Any number of proposals can be open at once, including conflicting ones. If two payout votes
 both pass, both can be applied, in whatever order people call `apply_vote_subject`, until the
@@ -82,7 +82,7 @@ VoteSubjects.ChangeDAO(new_dao_address) =>
 Five effects in one transaction: the treasury moves, the sale's beneficiary changes, the sale's
 owner changes, the target is checked to point at the same `CommunityManagement`, and that
 contract's ownership is transferred. **Moderator appointments and threshold changes keep
-working after a migration** — the new DAO becomes the owner that `CommunityManagement` checks.
+working after a migration**, because the new DAO becomes the owner that `CommunityManagement` checks.
 
 Two guards protect the migration:
 
@@ -110,7 +110,7 @@ DAOVote.metadata = { subject     : VoteSubjects.subject
 | --- | --- |
 | `subject` | The machine-readable action. This is what executes. |
 | `description` | Free text explaining the proposal to voters. At most 300 characters. |
-| `link` | A reference URL — a forum thread, a spec, a budget. |
+| `link` | A reference URL, such as a forum thread, a spec or a budget. |
 
 Only `subject` and the description length are enforced by the contract: `DAOVote.init`
 requires `String.length(metadata.description) =< 300`. There is no title field. The link is
@@ -123,7 +123,7 @@ The same rule covers all seven subjects: a holder who owns at least the communit
 `minimum_token_threshold` at the moment of the call can open a vote by calling
 `DAO.add_vote(metadata)` with exactly 555 AE attached. The balance is read live from the AEX-9
 contract for `Call.caller`; there is no snapshot and no holding period. There is no
-moderator-only subject and no proposal whitelist — moderators are appointed by vote but hold
+moderator-only subject and no proposal whitelist. Moderators are appointed by vote but hold
 no proposal rights of their own.
 
 ## Open a proposal
@@ -148,7 +148,7 @@ description = "Pay 100 AE to the contributor who built the community bot, \
 link        = "https://forum.aeternity.com/t/..."
 ```
 
-`100000000000000000000` is 100 AE in aettos — `100 * 10^18`. A vote is not editable after it
+`100000000000000000000` is 100 AE in aettos (`100 * 10^18`). A vote is not editable after it
 is opened, so check the digit count before you sign; the Superhero wallet's transaction summary
 shows the decoded subject and its payload.
 
@@ -161,9 +161,9 @@ displays the subject that was signed.
 
 ## Related
 
-- [Voting](/dao/voting) — how holders vote on a proposal once it is open.
-- [Quorum and Thresholds](/dao/quorum-and-thresholds) — the numbers a proposal must clear.
-- [Replaceable DAOs](/dao/replaceable-dao) — what a `ChangeDAO` target has to implement.
-- [Moderators and Write Thresholds](/dao/moderators) — what the moderator and threshold subjects change.
-- [DAO contract reference](/contracts/dao) — `add_vote` and `apply_vote_subject` in the full entrypoint table.
-- [Open a DAO and its proposals](https://superhero.com/trends/daos) — the live list of communities.
+- [Voting](/dao/voting): how holders vote on a proposal once it is open.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds): the numbers a proposal must clear.
+- [Replaceable DAOs](/dao/replaceable-dao): what a `ChangeDAO` target has to implement.
+- [Moderators and Write Thresholds](/dao/moderators): what the moderator and threshold subjects change.
+- [DAO contract reference](/contracts/dao): `add_vote` and `apply_vote_subject` in the full entrypoint table.
+- [Open a DAO and its proposals](https://superhero.com/trends/daos): the live list of communities.

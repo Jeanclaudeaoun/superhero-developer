@@ -38,7 +38,7 @@ Two secrets are involved:
   at submit time. It never goes on chain. It ensures a caller can only submit a handle the
   backend observed an OAuth session for.
 
-## Step 1 — the OAuth leg (PKCE)
+## Step 1: the OAuth leg (PKCE)
 
 The client runs a standard OAuth 2.0 authorization-code flow with PKCE.
 
@@ -54,7 +54,7 @@ The client runs a standard OAuth 2.0 authorization-code flow with PKCE.
 | `code_challenge_method` | `S256` |
 
 The verifier is 32 random bytes, base64url-encoded. The scopes are exactly what the backend
-needs to call X API v2's `/2/users/me` — nothing that can post on your behalf.
+needs to call X API v2's `/2/users/me`, and nothing that can post on your behalf.
 
 The entry point is gated on `X_OAUTH_CLIENT_ID` (set from `VITE_X_OAUTH_CLIENT_ID` at build
 time). When that value is empty the **Connect X** control is hidden.
@@ -67,7 +67,7 @@ and both are cleared on read.
 Keep the app and the callback on the same host. Switching between `localhost` and `127.0.0.1`
 mid-flow loses the wallet session along with the PKCE record.
 
-## Step 2 — the callback
+## Step 2: the callback
 
 `/profile/x/callback` reads `code` and `state` from the query string and proceeds only when:
 
@@ -78,7 +78,7 @@ mid-flow loses the wallet session along with the PKCE record.
 The stored record is read and cleared in one operation, so the callback runs exactly once per
 page load. The callback then restores the address as a signer and calls the claim endpoint.
 
-## Step 3 — claim
+## Step 3: claim
 
 ```text
 POST /api/address-links/x/claim
@@ -98,7 +98,7 @@ The response is a claim:
 
 | Field | Meaning |
 | --- | --- |
-| `message` | The exact string the wallet must sign — `link:<address>:x:<handle>:<nonce>` |
+| `message` | The exact string the wallet must sign: `link:<address>:x:<handle>:<nonce>` |
 | `nonce` | `AddressLink.get_nonce(address)`, the contract's own per-address counter |
 | `value` | The X username the backend resolved, trimmed and lowercased |
 | `verification_token` | A base64url HMAC token binding address, provider, value and expiry |
@@ -113,19 +113,19 @@ payload = { address, provider: "x", value, expiry }
 token   = base64url( JSON.stringify(payload) + "." + HMAC_SHA256(payload, ADDRESS_LINK_SECRET_KEY) )
 ```
 
-`expiry` is `Date.now() + ADDRESS_LINK_VERIFICATION_TTL_SECONDS * 1000` — **five minutes** by
+`expiry` is `Date.now() + ADDRESS_LINK_VERIFICATION_TTL_SECONDS * 1000`, which is **five minutes** by
 default. The token is not encrypted, only unforgeable. Verification recomputes the HMAC and
 compares it in constant time. The HMAC key is `ADDRESS_LINK_SECRET_KEY`, the same value used as
 the provider wallet's private key.
 
-## Step 4 — the user's signature
+## Step 4: the user's signature
 
 Sign `claim.message` verbatim with `signMessage`. Do not reconstruct it locally and do not
 pre-hash it: `signMessage` applies the æternity personal-message framing that the contract
 reproduces internally, and any deviation fails as `INVALID_SIGNATURE`.
 
 The client verifies the result locally with the SDK's `verifyMessageSignature` before sending
-it, and normalizes it to lowercase hex — an `sg_…` signature is decoded to bytes and
+it, and normalizes it to lowercase hex: an `sg_…` signature is decoded to bytes and
 hex-encoded, a `0x` prefix is stripped. The backend rejects anything that is not exactly 128
 hex characters.
 
@@ -133,7 +133,7 @@ Trigger the signing prompt from an explicit user click. Browsers and pop-up bloc
 a wallet window opened from an effect rather than a gesture, so the callback screen shows a
 confirm button and re-enables it on failure.
 
-## Step 5 — submit
+## Step 5: submit
 
 ```text
 POST /api/address-links/x/submit
@@ -142,19 +142,19 @@ Content-Type: application/json
 { "address": "ak_…", "value": "<x username>", "nonce": 0, "signature": "<hex>", "verification_token": "…" }
 ```
 
-The submit handler checks the token — not expired, address matches, provider is `x`, value
-matches — and then calls `AddressLink.link(address, "x", value, nonce, signature)` from the
+The submit handler checks the token (not expired, address matches, provider is `x`, value
+matches) and then calls `AddressLink.link(address, "x", value, nonce, signature)` from the
 provider wallet. The response is `txHash`. The link is now pending confirmation; the client
 invalidates the profile query so the verified badge appears once the backend has indexed it.
 
 | Failure | Response |
 | --- | --- |
 | Token missing, malformed, or its HMAC does not verify | 400 |
-| `Date.now() > payload.expiry` | 400 "Verification token has expired" — restart from claim |
+| `Date.now() > payload.expiry` | 400 "Verification token has expired"; restart from claim |
 | Token address, provider or value does not match the body | 400, one message per field |
 | Signature is not 128 hex characters | 400 before the call is built |
 | Contract rejects the signature | 400, from `INVALID_SIGNATURE` |
-| The nonce moved since the claim | 400, from `INVALID_NONCE` — restart from claim |
+| The nonce moved since the claim | 400, from `INVALID_NONCE`; restart from claim |
 | The handle is already linked to a different value for this address | 400, from `ALREADY_CLAIMED` |
 
 ## Unlinking
@@ -216,12 +216,12 @@ for the OAuth check. The namespace owner is readable on chain as
 
 ## Related
 
-- [AddressLink](/identity/address-link) — the contract this flow writes to, its
+- [AddressLink](/identity/address-link): the contract this flow writes to, its
   provider-ownership model, and its nonce.
-- [SuperheroID](/identity/superhero-id) — the rest of what an identity links.
-- [Profiles & Accounts](/identity/profiles) — where `x_username` surfaces once indexed.
-- [Chat](/social/chat) — the `nostr` provider, whose proof is a signed Nostr event rather than
+- [SuperheroID](/identity/superhero-id): the rest of what an identity links.
+- [Profiles & Accounts](/identity/profiles): where `x_username` surfaces once indexed.
+- [Chat](/social/chat): the `nostr` provider, whose proof is a signed Nostr event rather than
   an OAuth session.
-- [Rewards program](/rewards/rewards-program) — verifying X is one of the reward milestones.
-- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) —
+- [Rewards program](/rewards/rewards-program): verifying X is one of the reward milestones.
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md):
   the reference for `Crypto.verify_sig`.

@@ -16,15 +16,15 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/invitations` | `order_by`, `order_direction`, `inviter`, `limit`, `page` | Paginated invitation rows |
-| `GET /api/affiliations/invites/{code}` | — | One invite-code pool, by its public code |
-| `POST /api/affiliations` | — | Create a pool of invite codes |
-| `POST /api/affiliations/invites/{code}/{provider}/{access_code}` | — | Exchange a GitHub, Google or X access code for one private code |
-| `GET /api/affiliations/preview` | — | An HTML dashboard, not JSON |
+| `GET /api/affiliations/invites/{code}` | None | One invite-code pool, by its public code |
+| `POST /api/affiliations` | None | Create a pool of invite codes |
+| `POST /api/affiliations/invites/{code}/{provider}/{access_code}` | None | Exchange a GitHub, Google or X access code for one private code |
+| `GET /api/affiliations/preview` | None | An HTML dashboard, not JSON |
 | `GET /api/bcl-affiliation/analytics` | `start_date`, `end_date` | Referral programme metrics |
 | `GET /api/bcl-affiliation/analytics/top-inviters` | `start_date`, `end_date`, `limit` | Leaderboard of inviters |
 | `GET /api/bcl-affiliation/analytics/x-verification` | `start_date`, `end_date` | X-verification funnel metrics |
 | `GET /api/bcl-affiliation/analytics/x-invite` | `start_date`, `end_date` | X-invite usage metrics |
-| `GET /api/bcl-affiliation/tree` | — | The whole referral graph, one node per inviter |
+| `GET /api/bcl-affiliation/tree` | None | The whole referral graph, one node per inviter |
 
 Each `/api/bcl-affiliation/*` endpoint has a `/preview` sibling that returns a server-rendered
 HTML dashboard, not JSON.
@@ -72,7 +72,7 @@ redeemed it. An unclaimed invite has a `receiver_address` and no `invitee_addres
 carries its claim status alongside the creation call's `tx_hash`, `block_height` and `amount`,
 so one call covers an inviter's invites without a per-invitee middleware lookup.
 
-## `/api/affiliations/*` — the OAuth invite-code pool
+## `/api/affiliations/*`: the OAuth invite-code pool
 
 A separate mechanism from `/api/invitations`, unrelated to the on-chain treasury: a pool of
 pre-shared invite codes handed out one per social account, gated by an OAuth login. An
@@ -104,7 +104,7 @@ Stores `codes` as the pool's private codes, generates a random ten-character pub
 validated against `/^[a-z0-9]{1,64}$/i`, so anything with punctuation or a `ct_`/`ak_` prefix is
 a 400.
 
-Returns the `Affiliation` row — `id`, `account_address`, `code`, `created_at` — or `null` (a 200
+Returns the `Affiliation` row (`id`, `account_address`, `code`, `created_at`) or `null` (a 200
 with a null body, not a 404) when no such pool exists. The child codes are not included.
 
 ### `POST /api/affiliations/invites/{code}/{provider}/{access_code}`
@@ -139,7 +139,7 @@ const treasury = await factory.affiliationTreasury();
 
 | Entrypoint | What it does |
 | --- | --- |
-| `register_invitation_code(addresses, redemption_fee, amount)` | Funds a batch of invite keypairs. Payable — send `(amount + redemption_fee) * count` |
+| `register_invitation_code(addresses, redemption_fee, amount)` | Funds a batch of invite keypairs. Payable: send `(amount + redemption_fee) * count` |
 | `revoke_invitation_code(address)` | Reclaims an unused invite |
 | `get_invitation_code(address)` | Returns `[sender, amount, claimed]` for one invite |
 
@@ -161,7 +161,7 @@ GET {middlewareUrl}/v3/transactions?contract=ct_2GG42rs2FDPTXuUCWHMn98bu5Ab6mgNx
 ```
 
 Filter to `tx.function === 'register_invitation_code'`, read the invitee addresses from argument
-0 and the per-invite amount from argument 2 (in **aettos** — divide by 1e18), and follow
+0 and the per-invite amount from argument 2 (in **aettos**; divide by 1e18), and follow
 `response.next` to page. Use it only for an invite the indexer has not caught;
 `GET /api/invitations?inviter=...` answers the same question in one call.
 
@@ -209,13 +209,13 @@ summary of `total_created_codes`, `total_invited_users` and `invite_bind_rate`.
 
 ### `GET /api/bcl-affiliation/tree`
 
-The full referral graph as one payload — no pagination, no parameters. `{ items, meta }`, where
+The full referral graph as one payload, with no pagination and no parameters. `{ items, meta }`, where
 `items` is one node per **inviter**:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `sender_address` | string | The inviter's `ak_...` |
-| `sender` | object | That inviter's own stats — see below |
+| `sender` | object | That inviter's own stats (see below) |
 | `invitees` | array | One stats object per distinct address they invited |
 | `amount` | number | Total AE this inviter sent to invitees, in **AE** |
 
@@ -233,7 +233,7 @@ total_received_invitation_count   registered as invitee
 
 An **invitee node carries only `total_received_invitation_count`**; its other counters are 0
 even when that address is itself an inviter. To walk deeper, look the invitee's address up as a
-`sender_address` in the same `items` array — the structure is a flat list of one-level fans.
+`sender_address` in the same `items` array. The structure is a flat list of one-level fans.
 
 `meta` carries `unique_inviters`, `unique_invitees`, `total_registered`, `total_redeemed`,
 `total_revoked` and `total_amount_ae`.
@@ -244,9 +244,9 @@ not to any node's invitee list.
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — pagination and the write-endpoint authentication model
-- [Accounts API](/api-reference/accounts) — the per-account invitation counters
-- [Factory & Contracts API](/api-reference/factory-and-contracts) — discovering the factory the treasury hangs off
-- [Node & Middleware](/api-reference/node-and-middleware) — the middleware query behind invite creation
-- [Affiliation treasury](/contracts/affiliation-treasury) — the contract itself
-- [Invite links](/rewards/invite-links) — the feature from a user's point of view
+- [API Conventions](/api-reference/conventions): pagination and the write-endpoint authentication model
+- [Accounts API](/api-reference/accounts): the per-account invitation counters
+- [Factory & Contracts API](/api-reference/factory-and-contracts): discovering the factory the treasury hangs off
+- [Node & Middleware](/api-reference/node-and-middleware): the middleware query behind invite creation
+- [Affiliation treasury](/contracts/affiliation-treasury): the contract itself
+- [Invite links](/rewards/invite-links): the feature from a user's point of view

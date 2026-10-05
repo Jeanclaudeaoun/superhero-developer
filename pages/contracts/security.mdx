@@ -22,7 +22,7 @@ updated state surviving a failed call, and reentrancy against a half-written sto
 ### Delegated posting
 
 `post_without_tip_sig` verifies an Ed25519 signature over a Blake2b digest with
-`Crypto.verify_sig`. The message is framed with the æternity signed-message prefix — the
+`Crypto.verify_sig`. The message is framed with the æternity signed-message prefix, the
 28-byte constant `#1a61657465726e697479205369676e6564204d6573736167653a0a20`, which decodes to
 a length byte, `aeternity Signed Message:` with a newline, and a second length byte. That
 framing prevents a signature produced in another æternity protocol context from being replayed
@@ -89,14 +89,14 @@ are verifiable directly against the naming system. See [AddressLink](/contracts/
   only) are exact complements through `is_closed()`, so exactly one is callable at any height
   and locked tokens are never stuck.
 - **Results are frozen before they are actionable.** `final_vote_state()` returns
-  `option(vote_state)` and yields `None` while a vote is open — a height gate,
-  `Chain.block_height >= close_height`. `DAO.apply_vote_subject` aborts with
+  `option(vote_state)` and yields `None` while a vote is open (a height gate,
+  `Chain.block_height >= close_height`). `DAO.apply_vote_subject` aborts with
   `VOTE_NOT_YET_FINAL` on `None`, so a proposal cannot be executed on a favourable mid-vote
   tally.
 - **Community DAO votes are immutable once closed.** `DAOVote.revoke_vote` requires
   `!is_closed()`, so a closed tally cannot be altered afterwards.
 - **Time-bounded execution.** A passed vote must be applied within `vote_timeout` key blocks
-  of its close height — 960 blocks, roughly two days — or `apply_vote_subject` aborts with
+  of its close height (960 blocks, roughly two days), or `apply_vote_subject` aborts with
   `VOTE_RESULT_TIMEOUTED`. Stale proposals cannot be resurrected when circumstances change,
   and the short window limits how far `total_supply()` can move between close and execution.
 - **Single execution.** The `votes` map stores an applied flag; a second call aborts with
@@ -113,10 +113,10 @@ are verifiable directly against the naming system. See [AddressLink](/contracts/
 
 ## Related
 
-- [Deployed Addresses](/contracts/addresses) — what is deployed, per network
-- [DAO](/contracts/dao) — the vote execution gates described above
-- [BondingCurveExponential](/contracts/bonding-curve) — the solvency property in detail
-- [Token risks](/tokens/risks) — the same picture for someone deciding how much to put in
-- [Wallet security](/wallets/security) — key handling, the risk most users actually face
-- [Registry and Poll](/contracts/governance-contracts) — the æternity governance contracts and the off-chain tally
-- [AffiliationTreasury](/contracts/affiliation-treasury) — the reward threshold and the payout window
+- [Deployed Addresses](/contracts/addresses): what is deployed, per network
+- [DAO](/contracts/dao): the vote execution gates described above
+- [BondingCurveExponential](/contracts/bonding-curve): the solvency property in detail
+- [Token risks](/tokens/risks): the same picture for someone deciding how much to put in
+- [Wallet security](/wallets/security): key handling, the risk most users actually face
+- [Registry and Poll](/contracts/governance-contracts): the æternity governance contracts and the off-chain tally
+- [AffiliationTreasury](/contracts/affiliation-treasury): the reward threshold and the payout window

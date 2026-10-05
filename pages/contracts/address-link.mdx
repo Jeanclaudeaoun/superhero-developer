@@ -5,9 +5,9 @@ description: "The identity contract: provider-keyed links from an address to an 
 
 # AddressLink
 
-`AddressLink` is Superhero's identity contract. It maps an address to a `map(provider, value)`
-— one value per provider, such as an X handle, a nostr public key or a preferred AENS name —
-with a reverse index for resolving a value back to an address and a per-address nonce
+`AddressLink` is Superhero's identity contract. It maps an address to a `map(provider, value)`,
+holding one value per provider (an X handle, a nostr public key, a preferred AENS name). It
+also keeps a reverse index for resolving a value back to an address and a per-address nonce
 sequence for signed writes.
 
 A link can be owned by a bare account, by an AENS name (a *principal*), or by a DID with a
@@ -48,7 +48,7 @@ record state =
 ## Providers
 
 A provider id is a namespace owned by an account. `register_provider(provider)` claims it,
-and only the owner may write links under it — any other caller aborts with
+and only the owner may write links under it. Any other caller aborts with
 `NOT_PROVIDER_OWNER`. Provider ids are at most ten lowercase `a-z` characters
 (`/^[a-z]{1,10}$/`), which is why the AENS provider is spelled `prefaens`.
 
@@ -137,9 +137,9 @@ Every event carries an `address` topic and a `string` in `data`. On the link eve
 
 ## Related
 
-- [Superhero ID](/identity/superhero-id) — the identity system from a user's point of view
-- [Chain names](/identity/chain-names) — AENS names, which are verifiable without this contract
-- [X verification](/identity/x-verification) — the claim-sign-submit flow in the app
-- [AddressLink](/identity/address-link) — the identity-section view of linking
-- [Profile API](/api-reference/profile) — the endpoints in the table above
-- [Events](/contracts/events) — the `AddressLink` topic hashes in the cross-contract catalogue
+- [Superhero ID](/identity/superhero-id): the identity system from a user's point of view
+- [Chain names](/identity/chain-names): AENS names, which are verifiable without this contract
+- [X verification](/identity/x-verification): the claim-sign-submit flow in the app
+- [AddressLink](/identity/address-link): the identity-section view of linking
+- [Profile API](/api-reference/profile): the endpoints in the table above
+- [Events](/contracts/events): the `AddressLink` topic hashes in the cross-contract catalogue

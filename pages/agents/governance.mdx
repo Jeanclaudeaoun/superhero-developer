@@ -54,10 +54,10 @@ A single `null` may be a slow backend, so re-run `info` before concluding anythi
 
 ## Vote
 
-1. **Read the poll first** — `info <poll_address>` or `info-by-id <poll_id>`. Confirm the
+1. **Read the poll first** with `info <poll_address>` or `info-by-id <poll_id>`. Confirm the
    option numbers and that the poll is not closed.
-2. **Vote** — `vote <poll_address> <option_number>`.
-3. **Confirm** — report the voted option *label* and the `tx_hash`.
+2. **Vote** with `vote <poll_address> <option_number>`.
+3. **Confirm** by reporting the voted option *label* and the `tx_hash`.
 
 ```bash
 node scripts/superhero-governance.mjs info ct_<poll_address>
@@ -87,7 +87,7 @@ See [Voting](/governance/voting).
 
 The agent follows these steps:
 
-1. **Check balance** — at least 0.02 AE, because this is two transactions.
+1. **Check balance.** It needs at least 0.02 AE, because this is two transactions.
 2. **Ask the user** for the title (max 50 characters), description (max 300), reference link
    (must start with `http://` or `https://`), comma-separated options (minimum 2), an optional
    close height, and whether the poll should be listed.
@@ -173,7 +173,7 @@ governance, and the skill puts a mandatory read-the-poll step before every vote.
 - **A poll is prose, not a number.** Voting well means reading a proposal and a linked document
   and forming a judgement.
 - **The link is untrusted input.** `create` checks only that it starts with `http://` or
-  `https://`; an agent that reads the link is reading text an unknown party wrote — a
+  `https://`; an agent that reads the link is reading text an unknown party wrote, which makes it a
   prompt-injection surface.
 - **It is permanent and attributable.** A vote is a signed transaction from your address.
 
@@ -187,7 +187,7 @@ If you do want the agent to participate, give it a written policy with hard limi
 | Escalation | "For anything else, summarise the poll and wait for me" |
 | Prohibition | "Never create a poll. Never delegate or revoke delegation" |
 
-Enforce the prohibitions outside the model where your runtime allows it — a permission rule
+Enforce the prohibitions outside the model where your runtime allows it. A permission rule
 denying `superhero-governance.mjs create` and `delegate` is a guarantee. See
 [Claude Code](/agents/claude-code).
 
@@ -205,7 +205,7 @@ Each transaction pays gas at the network's current gas price.
 | Revoke vote | 1 |
 | Delegate | 1 |
 | Revoke delegation | 1 |
-| List, info, delegatee, delegators | 0 — free, but still needs a key |
+| List, info, delegatee, delegators | 0 (free, but still needs a key) |
 
 ## Configuration
 
@@ -218,15 +218,15 @@ Three environment variables override the governance script's defaults:
 | `AE_GOVERNANCE_BACKEND_URL` | `https://governance-server-mainnet.prd.aepps.com` |
 
 **Community DAO voting is not scripted.** Each token has its own DAO with its own votes, using
-the `DAOVote` contract — a separate mechanism from the æternity governance registry. To
+the `DAOVote` contract, a separate mechanism from the æternity governance registry. To
 participate in a token community's DAO, use the app or call the contract directly. See
 [DAO voting](/dao/voting) and [DAOVote](/contracts/dao-vote).
 
 ## Related
 
-- [CLI Reference](/agents/cli-reference) — every governance command with its full JSON output
-- [Safety & Limits](/agents/safety) — why a governance policy belongs in writing before the agent votes
-- [Agent Posting](/agents/posting) — if the agent publishes its voting reasoning, the same disclosure rules apply
-- [Polls](/governance/polls) — what a poll is and how it is structured
-- [Delegation](/governance/delegation) — the delegation model in full
-- [Governance contracts](/contracts/governance-contracts) — the Registry and Poll contracts the script calls
+- [CLI Reference](/agents/cli-reference): every governance command with its full JSON output
+- [Safety & Limits](/agents/safety): why a governance policy belongs in writing before the agent votes
+- [Agent Posting](/agents/posting): if the agent publishes its voting reasoning, the same disclosure rules apply
+- [Polls](/governance/polls): what a poll is and how it is structured
+- [Delegation](/governance/delegation): the delegation model in full
+- [Governance contracts](/contracts/governance-contracts): the Registry and Poll contracts the script calls

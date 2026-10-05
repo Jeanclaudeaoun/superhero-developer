@@ -89,8 +89,8 @@ So `trending_score` on a token record can be up to two hours behind, and on a qu
 considerably more. `trending_score_update_at` tells you exactly how stale your copy is.
 
 `GET /api/tokens/{address}/score` **recomputes** the score on the spot and returns the full
-breakdown — every signal's `raw`, `cap` and `normalized` value, the two component scores, the decay
-multiplier, and the final result — and writes the fresh value back to the token record. Use it when
+breakdown (every signal's `raw`, `cap` and `normalized` value, the two component scores, the decay
+multiplier, and the final result) and writes the fresh value back to the token record. Use it when
 you want the current score rather than the cached one, or to see which signal is carrying a token.
 
 ## Where it comes from
@@ -101,9 +101,9 @@ you want the current score rather than the cached one, or to see which signal is
 | `GET /api/tokens/{address}/trending-eligibility` | Whether the token clears the trending gate, and by how much |
 | `trending_score` on the token record | The cached value, in `GET /api/tokens` and `GET /api/tokens/{address}` |
 | `trending_score_update_at` | Timestamp of the last recalculation |
-| `order_by=trending_score` | Sorts a token list by it, descending — and applies the eligibility gate |
+| `order_by=trending_score` | Sorts a token list by it, descending, and applies the eligibility gate |
 
-The score is stored as `decimal(10,6)` — six decimal places of a number between 0 and 1. A token
+The score is stored as `decimal(10,6)`: six decimal places of a number between 0 and 1. A token
 that has never been scored sits at `0`.
 
 ## The eligibility gate
@@ -128,7 +128,7 @@ a couple of hours to appear.
 If no token at all clears the gate, the controller drops the filter and returns the unfiltered list,
 so an empty eligible set produces an ungated response rather than an empty one.
 
-`GET /api/tokens/{address}/trending-eligibility` returns the breakdown for a single token —
+`GET /api/tokens/{address}/trending-eligibility` returns the breakdown for a single token:
 `holders_count`, `post_count`, `trade_count`, the three thresholds, and a `passes` object saying
 which of them the token clears. Call it when a token you expect to see is missing from the trending
 list.
@@ -136,7 +136,7 @@ list.
 If you are building on the list endpoint:
 
 - Use `order_by=trending_score` when you want the trending set.
-- Do **not** use it when you want to find a specific token by name — a token that plainly exists can be absent from the gated result.
+- Do **not** use it when you want to find a specific token by name. A token that plainly exists can be absent from the gated result.
 
 ## Ranking
 
@@ -162,14 +162,14 @@ entry:
 | Aggressive | 40% | 20% of balance | 7 | every 2h |
 
 The score is between 0 and 1; pick entry thresholds in that range. Relative or rank-based entry
-rules — "in the top ten by trending score", "score has risen 50% since the last cycle" — hold
+rules, such as "in the top ten by trending score" or "score has risen 50% since the last cycle", hold
 whatever the scale is. For an absolute bar, pull the current trending list
 (`GET /api/tokens?order_by=trending_score&limit=100`) and look at the distribution first.
 
 Never act on the score alone. The pre-buy checklist:
 
 1. Read the score: `node scripts/superhero-trending.mjs token-info ct_...`
-2. Check the trade flow: `node scripts/superhero-transactions.mjs token ct_... 30` — many small buyers is organic, one large buyer is a pump with exit risk.
+2. Check the trade flow: `node scripts/superhero-transactions.mjs token ct_... 30`. Many small buyers suggest organic demand; one large buyer suggests a pump with exit risk.
 3. Check price performance: `node scripts/superhero-trending.mjs performance ct_...`
 
 ## Reading it from the CLI
@@ -185,14 +185,14 @@ node scripts/superhero-trending.mjs token-info ct_<sale_address>
 node scripts/superhero-trending.mjs performance ct_<sale_address>
 ```
 
-`tokens` accepts an alternative ordering as its second argument — `market_cap`, `holders_count`,
-`price`, `created_at`, `name`, `treasury` or `rank` — which is a useful cross-check. A token that is
-top-ten by trending score and nowhere by holder count is telling you something.
+`tokens` accepts an alternative ordering as its second argument (`market_cap`, `holders_count`,
+`price`, `created_at`, `name`, `treasury` or `rank`), which is a useful cross-check. A token that is
+top-ten by trending score and nowhere by holder count deserves a closer look.
 
 ## Related
 
-- [Reading a Token Page](/tokens/token-page) — the other signals to weigh the score against
-- [Transaction History](/tokens/transactions) — the trade flow that confirms or contradicts a rising score
-- [Risks](/tokens/risks) — why momentum signals are double-edged on a bonding curve
-- [Trending API](/api-reference/trending) — the endpoints behind the trending list, with the full signal-by-signal derivation
-- [Agent trading strategies](/agents/strategies) — the full strategy templates
+- [Reading a Token Page](/tokens/token-page): the other signals to weigh the score against
+- [Transaction History](/tokens/transactions): the trade flow that confirms or contradicts a rising score
+- [Risks](/tokens/risks): why momentum signals are double-edged on a bonding curve
+- [Trending API](/api-reference/trending): the endpoints behind the trending list, with the full signal-by-signal derivation
+- [Agent trading strategies](/agents/strategies): the full strategy templates

@@ -11,7 +11,7 @@ follow a real proposal on-chain.
 
 ## The lifecycle
 
-1. Trading fees accumulate in the DAO treasury — **0.5% of every buy** on the community's
+1. Trading fees accumulate in the DAO treasury: **0.5% of every buy** on the community's
    bonding curve.
 2. Any holder at or above the community threshold opens a vote through
    `DAO.add_vote(metadata)`, paying **555 AE** to the DAO.
@@ -23,7 +23,7 @@ follow a real proposal on-chain.
    `DAO.apply_vote_subject(vote_seq_id)`. Any account can trigger it.
 7. Voters call `withdraw()` to reclaim their locked tokens.
 
-## Step 1 — deployment
+## Step 1: deployment
 
 The community's contracts are deployed together by the factory:
 
@@ -51,9 +51,9 @@ zero. The boolean is the **applied** flag: `apply_vote_subject` requires it to b
 (`VOTE_ALREADY_APPLIED` otherwise) and sets it to `true` once the subject executes. Read the map
 with `votes()`, or the whole record with `get_state()`.
 
-`vote_timeout` is set once at deployment to `(60 / 3) * 24 * 2` — 960 key-blocks.
+`vote_timeout` is set once at deployment to `(60 / 3) * 24 * 2`, which is 960 key-blocks.
 
-## Step 2 — funding
+## Step 2: funding
 
 The token sale forwards the DAO's share of each buy by calling:
 
@@ -69,7 +69,7 @@ and [Replaceable DAOs](/dao/replaceable-dao).
 The other source of treasury funds is the 555 AE paid by whoever opens a vote. It is a
 donation to the DAO, not a refundable deposit.
 
-## Step 3 — opening a proposal
+## Step 3: opening a proposal
 
 ```text
 stateful payable entrypoint add_vote(metadata: DAOVote.metadata) : (int, DAOVote)
@@ -101,7 +101,7 @@ payable stateful entrypoint add_vote(metadata : DAOVote.metadata) =
           "ADD_VOTE_TOKEN_HOLDER_MISSMATCH")
 ```
 
-- **Exactly 555 AE.** `Call.value` must equal `555 * 10^18` aettos — attaching more fails
+- **Exactly 555 AE.** `Call.value` must equal `555 * 10^18` aettos. Attaching more fails
   the same way as attaching less.
 - **The caller's balance is read at call time**, live from the AEX-9 contract. There is no
   snapshot height and no holding period.
@@ -121,10 +121,10 @@ CommunityManagement.minimum_token_threshold() : int
 
 Reach that contract from the DAO with `DAO.get_community_management()`, which returns an
 `option(CommunityManagement)`. The value is in the token's smallest unit, so divide by
-`10^decimals` — read `decimals` from the token's `meta_info()` — before comparing it to a
+`10^decimals` (read `decimals` from the token's `meta_info()`) before comparing it to a
 displayed balance. A `ChangeMinimumTokenThreshold` vote changes it.
 
-## Step 4 — voting
+## Step 4: voting
 
 Each `DAOVote` contract holds its own ballot:
 
@@ -144,7 +144,7 @@ and whether they have withdrawn.
 
 Voting requires an AEX-9 allowance and locks your tokens. See [Voting](/dao/voting).
 
-## Step 5 — the outcome
+## Step 5: the outcome
 
 When `Chain.block_height` reaches `close_height`, `is_closed()` returns true and
 `final_vote_state()` stops returning `None`. `apply_vote_subject` then checks:
@@ -163,7 +163,7 @@ Both thresholds are needed. A proposal with 100% approval and 4% turnout does no
   closing and execution mints new supply and can push a passed vote below the 10% quorum.
   This is why the execution window is short.
 
-## Step 6 — execution
+## Step 6: execution
 
 ```text
 stateful entrypoint apply_vote_subject(vote_seq_id: int) : unit
@@ -174,15 +174,15 @@ or script can call `apply_vote_subject` with the vote's sequential id. The DAO c
 result itself before acting.
 
 The window is `vote.close_height() + state.vote_timeout >= Chain.block_height`, otherwise
-`VOTE_RESULT_TIMEOUTED`. `vote_timeout` is 960 key-blocks — about two days — and is readable
+`VOTE_RESULT_TIMEOUTED`. `vote_timeout` is 960 key-blocks (about two days) and is readable
 with `vote_timeout()`.
 
 **A passed vote that is not applied in time does nothing.** The treasury is not paid out, the
 moderator is not appointed, and the 555 AE is not returned. Plan for somebody to call
-`apply_vote_subject` promptly — the vote's page in the app shows an Apply action once the
+`apply_vote_subject` promptly. The vote's page in the app shows an Apply action once the
 vote is applicable.
 
-## Step 7 — withdrawal
+## Step 7: withdrawal
 
 After the closing height, every voter calls `withdraw()` on the vote contract to unlock their
 tokens. Withdrawing does not change the recorded outcome. Tokens stay locked until their owner
@@ -202,9 +202,9 @@ is read.
 
 ## Related
 
-- [Proposals and Vote Subjects](/dao/proposals) — what you can put in a proposal.
-- [Voting](/dao/voting) — the allowance step and the locking behaviour.
-- [Quorum and Thresholds](/dao/quorum-and-thresholds) — every constant, with the key-block arithmetic.
-- [The Treasury](/dao/treasury) — reading a DAO's balance on-chain and through the API.
-- [DAO contract reference](/contracts/dao) — the full entrypoint table.
-- [Open a community's DAO](https://superhero.com/trends/daos) — the live list.
+- [Proposals and Vote Subjects](/dao/proposals): what you can put in a proposal.
+- [Voting](/dao/voting): the allowance step and the locking behaviour.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds): every constant, with the key-block arithmetic.
+- [The Treasury](/dao/treasury): reading a DAO's balance on-chain and through the API.
+- [DAO contract reference](/contracts/dao): the full entrypoint table.
+- [Open a community's DAO](https://superhero.com/trends/daos): the live list.

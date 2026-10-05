@@ -16,15 +16,15 @@ rate-limited.
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/tokens` | `order_by`, `order_direction`, `collection`, `limit`, `page`, `search`, `owner_address`, `creator_address`, `factory_address` | Paginated `TokenDto` list |
-| `GET /api/tokens/{address}` | — | One `TokenDto` |
+| `GET /api/tokens/{address}` | None | One `TokenDto` |
 | `GET /api/tokens/{address}/holders` | `limit`, `page` | Paginated holder rows |
 | `GET /api/tokens/{address}/transactions` | `interval`, `start_date`, `end_date`, `convertTo`, `mode` | Aggregated trade series |
-| `GET /api/tokens/{address}/history` | `interval`, `convertTo`, `limit`, `page` | OHLC candles — a bare array |
-| `GET /api/tokens/{address}/performance` | — | Four price-movement windows |
-| `GET /api/tokens/{address}/performance-raw` | — | Alias of `performance`, kept for backward compatibility |
+| `GET /api/tokens/{address}/history` | `interval`, `convertTo`, `limit`, `page` | OHLC candles, as a bare array |
+| `GET /api/tokens/{address}/performance` | None | Four price-movement windows |
+| `GET /api/tokens/{address}/performance-raw` | None | Alias of `performance`, kept for backward compatibility |
 | `GET /api/tokens/{address}/rankings` | `limit`, `page` | Neighbouring tokens by rank |
-| `GET /api/tokens/{address}/score` | — | Trending-score breakdown. Recomputes and persists the score |
-| `GET /api/tokens/{address}/trending-eligibility` | — | Whether the token qualifies for the trending list |
+| `GET /api/tokens/{address}/score` | None | Trending-score breakdown. Recomputes and persists the score |
+| `GET /api/tokens/{address}/trending-eligibility` | None | Whether the token qualifies for the trending list |
 | `GET /api/tokens/preview/{address}` | `interval` | Lightweight preview for cards |
 | `GET /api/tokens/preview/{address}/sparkline.svg` | `interval`, `background`, `height`, `width` | An SVG image, not JSON |
 
@@ -88,7 +88,7 @@ List rows may also carry `collection_rank`, the token's position within its coll
 - **`sale_address`** is the bonding-curve sale contract you buy from and sell into. The rest of
   the API keys on it: `token_address` on `/api/transactions`, the WebSocket channels, the
   portfolio PnL map and the DAO routes all mean the sale address.
-- **`address`** is the AEX-9 token contract that holds balances — what a wallet displays and
+- **`address`** is the AEX-9 token contract that holds balances. It is what a wallet displays and
   what the middleware's `/v3/aex9/{address}` endpoint takes.
 
 When in doubt, use `sale_address`.
@@ -102,7 +102,7 @@ Wherever a value has a price, the API returns all nine currencies at once:
   "brl": 0.0071, "cad": 0.0018, "chf": 0.001, "gbp": 0.00097, "xau": 0.0000004 }
 ```
 
-**Every key is on the same scale as `ae`** — `usd` is `ae * rate.usd`, and likewise for the
+**Every key is on the same scale as `ae`**: `usd` is `ae * rate.usd`, and likewise for the
 rest. On `market_cap_data` every key is in aettos, so `market_cap_data.usd / 1e18` is the USD
 market cap. Rates refresh every ten minutes; when unavailable every key except `ae` is `null`.
 
@@ -119,10 +119,10 @@ market cap. Rates refresh every ten minutes; when unavailable every key except `
 
 | Field | Unit |
 | --- | --- |
-| `price` | AE — the sale contract's price for one token |
-| `sell_price` | AE — the sale contract's sell return for one token |
+| `price` | AE, the sale contract's price for one token |
+| `sell_price` | AE, the sale contract's sell return for one token |
 | `total_supply` | token base units |
-| `market_cap` | aettos — `total_supply * price` |
+| `market_cap` | aettos (`total_supply * price`) |
 | `dao_balance` | aettos |
 | `circulating_supply` | token base units |
 | `decimals` | string |
@@ -147,8 +147,8 @@ Decimal.from(holder.balance).div(10 ** (parseInt(token.decimals) || 18))
 | `order_by` | Sorts on |
 | --- | --- |
 | `name`, `price`, `created_at`, `holders_count`, `rank`, `trending_score` | The column of that name |
-| `market_cap` | `rank`, with the direction flipped — see below |
-| `treasury` | `dao_balance` — the DAO's AE balance in aettos |
+| `market_cap` | `rank`, with the direction flipped (see below) |
+| `treasury` | `dao_balance`, the DAO's AE balance in aettos |
 
 `order_direction` is `ASC` or `DESC`. `order_by=treasury&order_direction=DESC` is "richest
 treasuries first".
@@ -160,7 +160,7 @@ treasuries first".
 | `owner_address` | Tokens with a non-zero holder row for this `ak_...` |
 | `creator_address` | Tokens created by this `ak_...` |
 | `factory_address` | Tokens from a specific factory deployment |
-| `limit`, `page` | `limit` defaults to 100 and is capped at 100 — outside 1–100 it is a 400 |
+| `limit`, `page` | `limit` defaults to 100 and is capped at 100. Outside 1–100 it is a 400 |
 
 - An unknown `order_by` falls back to `market_cap` and an unknown `order_direction` to `DESC`,
   without an error.
@@ -258,7 +258,7 @@ reached the end when a page comes back empty.
 | --- | --- | --- |
 | `interval` | `3600` | Candle width **in seconds** |
 | `convertTo` | `ae` | One of the nine currency codes |
-| `limit`, `page` | — | Standard pagination; `limit=100` is typical |
+| `limit`, `page` | None | Standard pagination; `limit=100` is typical |
 
 Each element carries `timeOpen`, `timeClose`, `timeHigh`, `timeLow` and a `quote`:
 
@@ -282,7 +282,7 @@ Each element carries `timeOpen`, `timeClose`, `timeHigh`, `timeLow` and a `quote
 ```
 
 **Candle units differ from `TokenDto` units.** `volume` and `total_supply` are in **whole
-tokens**, and `market_cap` is in **AE** — not aettos and not base units. `open`, `high`, `low`
+tokens**, and `market_cap` is in **AE**, not aettos and not base units. `open`, `high`, `low`
 and `close` are buy prices in the `convertTo` currency. `open` is set to the previous candle's
 `close` so the series is continuous.
 
@@ -350,9 +350,9 @@ Values are illustrative. Caps, weights and decay constants are shared by every t
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — pagination, the `limit` cap and the full unit table
-- [Transactions API](/api-reference/transactions) — the trade records behind `tx_count` and the price series
-- [Accounts API](/api-reference/accounts) — the same tokens from the holder's side, with portfolio value and PnL
-- [WebSocket API](/api-reference/websocket) — push updates for `TokenDto` instead of polling
-- [Trending & Topics](/api-reference/trending) — the trending-score formula behind `trending_score`
-- [Bonding curve](/tokens/bonding-curve) — why buy price and sell price differ
+- [API Conventions](/api-reference/conventions): pagination, the `limit` cap and the full unit table
+- [Transactions API](/api-reference/transactions): the trade records behind `tx_count` and the price series
+- [Accounts API](/api-reference/accounts): the same tokens from the holder's side, with portfolio value and PnL
+- [WebSocket API](/api-reference/websocket): push updates for `TokenDto` instead of polling
+- [Trending & Topics](/api-reference/trending): the trending-score formula behind `trending_score`
+- [Bonding curve](/tokens/bonding-curve): why buy price and sell price differ

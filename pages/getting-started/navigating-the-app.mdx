@@ -35,7 +35,7 @@ in place of that action. The **Wallet** column below says which actions those ar
 | `/trends/leaderboard` | Leaderboards | No |
 | `/trends/invite` | Invite links and the affiliate program | **Yes** |
 | `/trends/visx` | The trend cloud visualisation | No |
-| `/trends` | Redirects to `/trends/tokens` | — |
+| `/trends` | Redirects to `/trends/tokens` | n/a |
 
 The **list** is `/trends/daos`; a **single DAO** is `/trends/dao/:saleAddress`. The parameter is a
 **sale address**, not the AEX-9 token address.
@@ -44,7 +44,7 @@ The **list** is `/trends/daos`; a **single DAO** is `/trends/dao/:saleAddress`. 
 
 | Path | What it is | Wallet |
 | --- | --- | --- |
-| `/chat` | Chat inbox — all, communities and DMs | **Yes** |
+| `/chat` | Chat inbox: all, communities and DMs | **Yes** |
 | `/chat/:saleAddress` | A token-gated community room | **Yes** |
 | `/chat/:saleAddress/info` | Room info and members | **Yes** |
 | `/chat/dm/:address` | A direct-message thread | **Yes** |
@@ -76,15 +76,15 @@ All four render the same Governance view; the path selects the tab.
 | `/defi/explore/pools` | All pools | No |
 | `/defi/explore/pools/:poolAddress` | One pool's detail | No |
 | `/defi/explore/transactions` | Recent DEX transactions | No |
-| `/defi` | Redirects to `/defi/swap` | — |
-| `/defi/bridge` | Currently redirects to `/defi/swap` | — |
-| `/defi/buy-ae-with-eth` | Currently redirects to `/defi/swap` | — |
+| `/defi` | Redirects to `/defi/swap` | n/a |
+| `/defi/bridge` | Currently redirects to `/defi/swap` | n/a |
+| `/defi/buy-ae-with-eth` | Currently redirects to `/defi/swap` | n/a |
 
 ## Wallet, utility and reference
 
 | Path | What it is | Wallet |
 | --- | --- | --- |
-| `/wallet` | The Superhero Wallet product page — features, downloads and a wallet FAQ | No |
+| `/wallet` | The Superhero Wallet product page: features, downloads and a wallet FAQ | No |
 | `/tx-queue/:id` | Callback landing page for deep-link signing results | Part of a signing flow |
 | `/get-ae` | Ways to get AE: earn, exchanges and swap providers | No |
 | `/meet/:room?` | Video conference room | No |
@@ -109,7 +109,7 @@ Old links keep working:
 | `/trending/dao/:saleAddress` and its vote path | the matching `/trends/dao/*` path |
 | `/trending/accounts/:address` | `/trends/accounts/:address` |
 | `/user/:address` | `/users/:address` |
-| `/post/:slug/comment/:id` | `/post/:id` — a comment is itself a post |
+| `/post/:slug/comment/:id` | `/post/:id`; a comment is itself a post |
 | `/buy-ae` | `/get-ae` |
 | `/swap` | `/defi/swap` |
 
@@ -120,8 +120,8 @@ Anything else renders the not-found page.
 
 ## Related
 
-- [Quickstart](/getting-started/quickstart) — the five-minute path through the routes above.
-- [Connecting a Wallet](/wallets/connecting) — what happens when you press Connect, and what `/tx-queue/:id` is for.
-- [Your First Trade](/getting-started/first-trade) — the token page's tabs, in detail.
-- [The Token Page](/tokens/token-page) — everything on `/trends/tokens/:tokenName`.
-- [superhero.com](https://superhero.com) — the app itself.
+- [Quickstart](/getting-started/quickstart): the five-minute path through the routes above.
+- [Connecting a Wallet](/wallets/connecting): what happens when you press Connect, and what `/tx-queue/:id` is for.
+- [Your First Trade](/getting-started/first-trade): the token page's tabs, in detail.
+- [The Token Page](/tokens/token-page): everything on `/trends/tokens/:tokenName`.
+- [superhero.com](https://superhero.com): the app itself.

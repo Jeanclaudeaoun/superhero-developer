@@ -5,8 +5,8 @@ description: "What it means for a post to live in a smart contract: the data mod
 
 # On-Chain Social
 
-A Superhero post is a smart contract call. Not a row in a database that is later anchored to a
-chain — the text itself is an argument to `post_without_tip` on the Tipping v3 contract, stored in
+A Superhero post is a smart contract call, not a row in a database that is later anchored to a
+chain. The text itself is an argument to `post_without_tip` on the Tipping v3 contract, stored in
 contract state and keyed by an integer.
 
 ## The data model
@@ -16,12 +16,12 @@ Each post is a `PostWithoutTip` variant holding two things:
 | Field | Type | Contents |
 | --- | --- | --- |
 | `tip_meta.sender` | `address` | The author. `Call.caller` for a direct post, the recovered signer for a delegated one |
-| `tip_meta.title` | `string` | The post text — the whole body, not a headline |
+| `tip_meta.title` | `string` | The post text (the whole body, not a headline) |
 | `tip_meta.timestamp` | `int` | `Chain.timestamp` at the moment of posting |
 | `media` | `list(string)` | Media URLs or identifiers attached to the post |
 
 Posts live in a map indexed by a monotonically increasing integer `tip_id`, which the entrypoint
-returns — a deterministic, append-only ordering of every post ever published. `get_state()` returns
+returns. This gives a deterministic, append-only ordering of every post ever published. `get_state()` returns
 the whole map, so anyone can reconstruct the complete post history without trusting an indexer.
 
 The contract has exactly three entrypoints. There is no edit, and there is no delete.
@@ -41,7 +41,7 @@ conventions change how a post is interpreted:
 
 **Comments are posts.** A comment is an ordinary `post_without_tip` whose first media entry is
 `comment:PARENT_POST_ID`. Clients that render a post strip any `comment:` entry out of the media
-list before displaying attachments. There is no separate comment contract and no reply field —
+list before displaying attachments. There is no separate comment contract and no reply field;
 threading is a client convention over an on-chain string.
 
 **Mentions are serialized.** The web composer expands a display-name mention into a storage form of
@@ -77,8 +77,8 @@ records you as the author. The contract verifies it cryptographically:
 
 1. Concatenate the post title and media into a single string.
 2. Blake2b-hash it.
-3. Prepend the æternity signed-message prefix — the literal `"aeternity Signed Message:\n"` with a
-   fixed 28-byte header — producing a 60-byte payload.
+3. Prepend the æternity signed-message prefix (the literal `"aeternity Signed Message:\n"` with a
+   fixed 28-byte header) to produce a 60-byte payload.
 4. Blake2b-hash that payload.
 5. Verify the digest against the supplied signature and author address with `Crypto.verify_sig`.
 
@@ -100,13 +100,13 @@ for a balance before an agent posts. See [AE & Gas](/aeternity/ae-and-gas) and
 | --- | --- | --- |
 | Post text | Yes | `Tipping.aes` v3 contract state |
 | Post author and timestamp | Yes | Same |
-| Comment text and its parent link | Yes | Same — a post with a `comment:` media entry |
+| Comment text and its parent link | Yes | Same: a post with a `comment:` media entry |
 | Media **URLs** | Yes | The `media` list |
 | Media **files** | No | Whatever host the URL points at. If that host disappears, the post survives and the image does not |
 | Tips | Yes | AE transfers on-chain, summarised by the API at `GET /api/tips/posts/[postId]/summary` |
 | Preferred `.chain` name, X handle, Nostr key, bio, website | Yes | `AddressLink` contract state, as provider links |
 | Avatar image | No | A URL stored in the profile record |
-| Chat messages | No | Nostr events on `wss://relay.superhero.chat`, and Quali.chat rooms at `app.quali.chat` |
+| Chat messages | No | Nostr events on `wss://relay.superhero.chat` |
 | Feed ordering, search, pagination | No | The indexer behind `api.superhero.com` |
 | Trending score, market cap, charts | No | Indexer-derived; no contract reads them |
 | Notifications | No | A socket.io feed from the backend |
@@ -122,7 +122,7 @@ Your posts are yours for good. No entrypoint alters or removes a post, no admin 
 future version of Superhero can rewrite your history. That is the design goal: what you publish
 cannot be censored or quietly edited, and anyone can verify it.
 
-Good to know before you post:
+Before you post, keep in mind:
 
 - **Posts are public.** Everyone can read them, which is what makes them verifiable.
 - **Your address is your identity.** All your posts are linked to it. On-chain activity is
@@ -155,29 +155,28 @@ stateful entrypoint mute_user_id(user_id : string) =
 The key convention belongs to the client that writes it. If you build a client that honours these
 lists, read the existing set before assuming `ak_` addresses.
 
-**Write thresholds.** The same contract holds a `minimum_token_threshold` — the minimum balance of
+**Write thresholds.** The same contract holds a `minimum_token_threshold`, the minimum balance of
 the community's token required for write access in that community. It raises the cost of spamming a
 community without granting anyone the power to erase what is already there.
 
-Both levers are governed rather than administered. Muting requires `require_moderator()` —
+Both levers are governed rather than administered. Muting requires `require_moderator()`, meaning
 membership of `moderator_accounts`. Everything else requires `require_owner()`, and the owner is the
 community's DAO. Moderators are appointed and removed by DAO vote (`AddModerator`,
 `DeleteModerator`) and the threshold is changed by DAO vote (`ChangeMinimumTokenThreshold`); a
 moderator cannot appoint another moderator or move the threshold. Each of those votes carries the
 full DAO cost and quorum: 555 AE to open, two weeks in key-blocks, 55% approval, 10% participation.
-Every moderation change is deliberate and approved by the community.
 
 `is_private` is fixed by `init` at community creation; no entrypoint changes it and it is not among
 the vote subjects. A community's private/public setting is permanent.
 
-Superhero offers **community-level visibility control**, while the protocol keeps every post intact
-and verifiable.
+Superhero controls visibility per community, while the protocol keeps every post intact and
+verifiable.
 
 ## Related
 
-- [Posting](/social/posting) — the practical guide, including hashtags, mentions and media.
-- [Delegated & Gasless Posting](/social/delegated-posting) — the signature scheme above, with code.
-- [Comments](/social/comments) — the `comment:` convention and how threads are reconstructed.
-- [Moderation](/social/moderation) — moderators, mute lists and write thresholds in detail.
-- [Tipping (v3)](/contracts/tipping) — the full contract reference, entrypoints and events.
-- [æScan explorer](https://aescan.io) — look up the Tipping contract and read the post history yourself.
+- [Posting](/social/posting): the practical guide, including hashtags, mentions and media.
+- [Delegated & Gasless Posting](/social/delegated-posting): the signature scheme above, with code.
+- [Comments](/social/comments): the `comment:` convention and how threads are reconstructed.
+- [Moderation](/social/moderation): moderators, mute lists and write thresholds in detail.
+- [Tipping (v3)](/contracts/tipping): the full contract reference, entrypoints and events.
+- [æScan explorer](https://aescan.io): look up the Tipping contract and read the post history yourself.

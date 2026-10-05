@@ -7,7 +7,7 @@ description: "Provide liquidity, earn the 0.3% swap fee, value your position, an
 
 Providing liquidity means depositing both sides of a pair into a pool and receiving LP tokens
 that represent your share of it. In exchange you earn the 0.3% fee on every swap that routes
-through your pool — all of it unless the factory's protocol-fee switch is on. You also take on
+through your pool, all of it unless the factory's protocol-fee switch is on. You also take on
 impermanent loss, worked through below with real numbers.
 
 Manage positions at `https://superhero.com/defi/pool`: the add or remove form is on the left and
@@ -35,7 +35,7 @@ yourShare = lpMinted / totalSupply × 100
 The `min` is why an off-ratio deposit wastes the larger side: the smaller ratio sets the mint.
 
 Minimum amounts are your desired amounts minus your slippage tolerance, clamped to at least one
-aetto. The deadline is `Date.now()` plus your configured minutes, in milliseconds — every router
+aetto. The deadline is `Date.now()` plus your configured minutes, in milliseconds. Every router
 entrypoint checks `require(deadline >= Chain.timestamp, "AedexV2Router: EXPIRED")`, and Sophia's
 `Chain.timestamp` is unix time in milliseconds.
 
@@ -113,7 +113,7 @@ The contracts carry a protocol-fee switch of the kind Uniswap V2 has. It is off 
   `set_fee_to` or hand the role on with `set_fee_to_setter`; anyone else gets
   `AedexV2Factory: FORBIDDEN`.
 - **Each pair asks the factory on liquidity events only.** `mint_fee` runs at the top of `mint`
-  and `burn` — never during a swap — and reads `factory.fee_to()`.
+  and `burn` (never during a swap) and reads `factory.fee_to()`.
 
 When that returns `Some(fee_to)`, the pair mints new LP tokens to it:
 
@@ -141,8 +141,8 @@ providers keep the whole 0.3%.
 
 `k_last` holds `reserve0 * reserve1` as of immediately after the most recent liquidity event, is
 written only while the fee is on, and is zeroed the first time `mint_fee` runs with the fee off.
-While the switch is off, `k_last()` reads `0` on every pair that has seen a liquidity event —
-a cheap way to check the regime from outside. For the current value of `k`, multiply the two
+While the switch is off, `k_last()` reads `0` on every pair that has seen a liquidity event,
+which is a cheap way to check the regime from outside. For the current value of `k`, multiply the two
 reserves.
 
 ## The pair contract
@@ -154,13 +154,13 @@ is a plain entrypoint:
 | --- | --- |
 | `get_reserves()` | A record of `reserve0`, `reserve1` and `block_timestamp_last` |
 | `total_supply()` | LP tokens outstanding, including the locked `min_liquidity` |
-| `minimum_liquidity()` | The pair's locked floor — 1000 unless overridden at creation |
+| `minimum_liquidity()` | The pair's locked floor: 1000 unless overridden at creation |
 | `k_last()` | The fee bookmark above; `0` while the protocol fee is off |
 | `price0_cumulative_last()`, `price1_cumulative_last()` | TWAP accumulators |
 | `token0()`, `token1()` | The two token contracts, sorted by contract address |
 | `factory()` | The factory that created this pair |
 | `meta_info()` | The LP token's own `name`, `symbol` and `decimals` |
-| `aex9_extensions()` | `["allowances"]` — LP tokens are not mintable or burnable from outside |
+| `aex9_extensions()` | `["allowances"]`: LP tokens are not mintable or burnable from outside |
 
 The LP token's metadata is composed from the two underlying tokens: `name` is
 `"<A name> vs <B name>"`, `symbol` is `"<A symbol>/<B symbol>"`, and `decimals` is always **18**
@@ -169,7 +169,7 @@ regardless of what the two sides use.
 **Reserves are a cache.** `reserve0` and `reserve1` are a snapshot the pair rewrites at the end of
 every `mint`, `burn`, `swap` and `sync`. The authoritative numbers are the pair's actual AEX-9
 balances, and the two diverge whenever tokens arrive at the pair address without an entrypoint
-call — `swap` relies on exactly that gap to work out what you paid in. Two entrypoints reconcile
+call. `swap` relies on exactly that gap to work out what you paid in. Two entrypoints reconcile
 them, and anyone may call either:
 
 - `sync()` raises reserves to match balances, so a stray transfer becomes everyone's.
@@ -177,8 +177,8 @@ them, and anyone may call either:
 
 Tokens sent directly to a pair address are therefore not a donation to the pool: until somebody
 calls `sync`, anyone can take them with `skim`. Always add liquidity through the router.
-`burn` divides by balances rather than reserves — `amount0 = liquidity * balance0 / total_supply`
-— and under normal conditions the two are equal.
+`burn` divides by balances rather than reserves (`amount0 = liquidity * balance0 / total_supply`),
+and under normal conditions the two are equal.
 
 **The price accumulators are oracle inputs.** On the first state change in each new block
 timestamp, the pair adds the reserve ratio in UQ112x112 fixed point, multiplied by the elapsed
@@ -195,7 +195,7 @@ and its power is limited to `set_fee_to` and `set_fee_to_setter`.
 1. Press **Remove** on a position card.
 2. Choose how much to withdraw. A full removal uses your raw on-chain LP balance, so no dust is
    left behind by rounding.
-3. Approve the **LP token** for the router — removal needs an allowance on the pair contract
+3. Approve the **LP token** for the router. Removal needs an allowance on the pair contract
    itself, not on the two underlying tokens.
 4. Confirm.
 
@@ -205,7 +205,7 @@ and its power is limited to `set_fee_to` and `set_fee_to_setter`.
 | Token + native AE | `remove_liquidity_ae(token, liquidity, amount_token_min, amount_ae_min, to, deadline)` |
 
 The allowance goes on the pair contract because the router calls
-`pair.transfer_allowance(Call.caller, pair.address, liquidity)` — it moves your LP tokens to the
+`pair.transfer_allowance(Call.caller, pair.address, liquidity)`. It moves your LP tokens to the
 pair itself, and the pair burns whatever it finds in its own balance.
 
 `remove_liquidity_ae` is `remove_liquidity` with the router as the recipient, followed by
@@ -220,7 +220,7 @@ Slippage above 100% or below 0 is rejected client-side on both add and remove.
 
 Impermanent loss is the gap between what your deposit is worth inside a pool and what the same
 tokens would be worth if you had held them. It appears whenever the *relative* price of the two
-assets moves, and it is a loss against holding, not an absolute loss — the pool can be up in
+assets moves, and it is a loss against holding, not an absolute loss: the pool can be up in
 dollar terms while underperforming a wallet.
 
 ### Why it happens
@@ -252,7 +252,7 @@ Position value in the pool
   plus              +   141.42 USDC
                     =   282.84 USDC
 
-Had you simply held
+Had you just held
   1,000 WAE × 0.20  =   200.00 USDC
   plus 100 USDC     +   100.00 USDC
                     =   300.00 USDC
@@ -261,7 +261,7 @@ Impermanent loss  =  282.84 − 300.00  =  −17.16 USDC
                   =  −5.72% against holding
 ```
 
-You went in with 1,000 WAE and came out with 707 — the pool sold your appreciating asset all the
+You went in with 1,000 WAE and came out with 707. The pool sold your appreciating asset all the
 way up. You ended up with more USDC, but not enough to compensate.
 
 ### The general formula
@@ -286,7 +286,7 @@ d = 5.00                →  −25.46%
 
 ### Fees are the other side of the trade
 
-Impermanent loss is the cost of providing liquidity; the swap fee is the revenue — the full 0.3%
+Impermanent loss is the cost of providing liquidity; the swap fee is the revenue: the full 0.3%
 while the protocol-fee switch is off, 0.25% if it is turned on. A pool with heavy volume and a
 stable price ratio is profitable; a pool with thin volume and a volatile ratio is not. Before
 committing, compare the pair's volume against its price movement on
@@ -307,8 +307,8 @@ committing, compare the pair's volume against its price movement on
 
 ## Related
 
-- [Swapping](/defi/swap) — the trades your pool earns fees from, and where price impact comes from.
-- [Wrapped AE](/defi/wrapped-ae) — why an "AE pool" is really a WAE pool.
-- [Exploring the DEX](/defi/explore) — check a pair's depth and volume before providing.
-- [Token risks](/tokens/risks) — the risks of the underlying assets you would be pooling.
-- [What is impermanent loss? (Uniswap Labs)](https://support.uniswap.org/hc/en-us/articles/20904453751693-What-is-Impermanent-Loss) — the same mechanism on a constant-product AMM.
+- [Swapping](/defi/swap): the trades your pool earns fees from, and where price impact comes from.
+- [Wrapped AE](/defi/wrapped-ae): why an "AE pool" is really a WAE pool.
+- [Exploring the DEX](/defi/explore): check a pair's depth and volume before providing.
+- [Token risks](/tokens/risks): the risks of the underlying assets you would be pooling.
+- [What is impermanent loss? (Uniswap Labs)](https://support.uniswap.org/hc/en-us/articles/20904453751693-What-is-Impermanent-Loss): the same mechanism on a constant-product AMM.

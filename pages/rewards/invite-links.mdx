@@ -7,12 +7,12 @@ description: "Create AE-funded invite links, share them safely, revoke the unuse
 
 An invite link is a one-time secret key wrapped in a URL, backed by AE you have locked in the
 AffiliationTreasury contract. Whoever opens the link claims the AE and becomes your level-1
-invitee — which is how you start earning from the [affiliation system](/rewards/affiliation).
+invitee, which is how you start earning from the [affiliation system](/rewards/affiliation).
 
 > **Invite links contain one-time secrets.**
 >
 > The link is not an identifier. It carries the **secret key** of a funded account, in the
-> URL fragment. Anyone who reads the link can claim the AE — no wallet of yours is needed and
+> URL fragment. Anyone who reads the link can claim the AE. No wallet of yours is needed and
 > no confirmation is asked of you.
 >
 > - **Never paste an invite link into a shared channel**, a group chat, an issue tracker or a
@@ -20,7 +20,7 @@ invitee — which is how you start earning from the [affiliation system](/reward
 > - **Never commit one to a repository**, and never write one into a log file, a shell
 >   history, an error report or a screenshot.
 > - **The app never persists the secret.** Generated links are held in memory and cleared on
->   reload. If you close the dialog without copying, the secret is gone — the AE stays locked
+>   reload. If you close the dialog without copying, the secret is gone. The AE stays locked
 >   on-chain and the only way to get it back is to revoke the code.
 > - **Treat a leaked link as spent.** If one escapes, revoke it immediately.
 
@@ -45,12 +45,12 @@ https://superhero.com#invite_code=<secret key>
 1. Open [https://superhero.com/trends/invite](https://superhero.com/trends/invite) and
    connect your wallet.
 2. Find the **Generate Invites** card.
-3. Enter **Amount per invite (AE)** — the AE the recipient will claim — and **Number of
+3. Enter **Amount per invite (AE)** (the AE the recipient will claim) and **Number of
    invites**.
 4. Press **Generate invite links** and confirm the transaction. All the links in one batch
    are registered in a single `register_invitation_code` call.
 5. A dialog opens with the links. **Copy them now.** The dialog will not close until you tick
-   "I have copied the invitation links" — escape, clicking outside and the close button are
+   "I have copied the invitation links". Escape, clicking outside and the close button are
    all blocked.
 
 ## What it costs
@@ -65,7 +65,7 @@ plus       = the æternity transaction fee for the call itself
 ```
 
 `redemption_fee_cover` is **0.001 AE** (`10n ** 15n` aettos) in both the web app and the CLI,
-and that is also the contract's minimum — `register_invitation_code` aborts with
+and that is also the contract's minimum: `register_invitation_code` aborts with
 `MINIMUM_REDEMPTION_AND_FEE_NOT_MEET` below `10 ^ 15` aettos. It funds the one-time account so
 the recipient can pay for their own redemption transaction, which is signed by the invite's
 key rather than the recipient's wallet. See
@@ -78,7 +78,7 @@ Ten links of 1 AE each cost 10.01 AE plus gas.
 - Fund your wallet for `(amount + 0.001) × count` plus the transaction fee. The app's form
   checks your balance against `amount × count` only.
 
-## Claiming — the recipient's side
+## Claiming: the recipient's side
 
 The recipient opens the link and sees a card showing the gift amount and your address. They
 connect a wallet and press **Claim reward**. The call is
@@ -103,7 +103,7 @@ Revoke any link that leaked, or any that nobody claimed and you want the AE back
 - **From the CLI:** `node scripts/superhero-invite.mjs revoke <invite_address>`.
 
 All three call `revoke_invitation_code(invitation_address)` with your wallet. The address is
-the public address of the one-time account, not the secret — it is safe to handle and it is
+the public address of the one-time account, not the secret. It is safe to handle and it is
 what the invitation list shows you.
 
 Revoking returns the `invitation_amount` to your wallet; the 0.001 AE fee cover was sent to
@@ -111,7 +111,7 @@ the one-time address at registration and is not part of the refund. Revoking ten
 1 AE links returns 10 AE, and costs a transaction fee.
 
 There is **no expiry**. An `invitation_codes` entry is the tuple
-`(inviter, invitation_amount, is_redeemed)` — it carries no timestamp, and no entrypoint
+`(inviter, invitation_amount, is_redeemed)`. It carries no timestamp, and no entrypoint
 prunes the map. An unclaimed link stays claimable indefinitely, which is why revoking a leaked
 one matters.
 
@@ -132,7 +132,7 @@ The **Your Invitations** list shows every code you registered, with one of three
 
 The list is assembled from two sources:
 
-- **Middleware transaction history** — the app pages through the middleware's
+- **Middleware transaction history**: the app pages through the middleware's
   `/v3/transactions` endpoint, filtered to the invitations contract and to your address as
   the caller, and keeps the calls whose function name is `register_invitation_code` or
   `revoke_invitation_code`:
@@ -145,7 +145,7 @@ The list is assembled from two sources:
   **mainnet** treasury; the testnet treasury is
   `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK`. On testnet, use the API below or a
   middleware query against the testnet address.
-- **Superhero's API** — `GET /api/invitations` with an `inviter` filter, paginated, which
+- **Superhero's API**: `GET /api/invitations` with an `inviter` filter, paginated, which
   returns claim status per invitation. The response fields are `receiver_address` (the
   one-time invite address), `claimed`, `claimer_address`, `claimed_at` and `claim_tx_hash`.
   It accepts `order_by` of `amount` or `created_at`, `order_direction` of `ASC` or `DESC`,
@@ -165,7 +165,7 @@ recoverable by revoking.
 
 The agent skill ships `scripts/superhero-invite.mjs`, which talks to the same contract. It
 requires `AE_PRIVATE_KEY` in the environment and runs against `https://mainnet.aeternity.io`.
-Run it from the skill's root directory — it reads `./contracts/CommunityFactory.aci.json` by
+Run it from the skill's root directory, because it reads `./contracts/CommunityFactory.aci.json` by
 relative path.
 
 ```bash
@@ -199,17 +199,17 @@ ring gets you paid sooner than a deep chain.
 
 Rewards accumulate in 30-day periods and `withdraw()` pays the current and previous period,
 so withdraw monthly once you qualify. The Collect Rewards card tracks the gate and the live
-`get_accumulated_rewards` balance — see [Claiming Rewards](/rewards/claiming) and
+`get_accumulated_rewards` balance. See [Claiming Rewards](/rewards/claiming) and
 [The Affiliation System](/rewards/affiliation).
 
 ## Related
 
-- [The Affiliation System](/rewards/affiliation) — the contract these links write to, the
+- [The Affiliation System](/rewards/affiliation): the contract these links write to, the
   four-level split, and the `redemption_fee_cover` mechanism.
-- [Claiming Rewards](/rewards/claiming) — both sides of claiming: the recipient's gift and
+- [Claiming Rewards](/rewards/claiming): both sides of claiming: the recipient's gift and
   your own `withdraw()`.
-- [Superhero Rewards Program](/rewards/rewards-program) — the other program on the same page.
-- [Invitations and affiliations API](/api-reference/invitations-and-affiliations) — the REST
+- [Superhero Rewards Program](/rewards/rewards-program): the other program on the same page.
+- [Invitations and affiliations API](/api-reference/invitations-and-affiliations): the REST
   surface behind the invitation list.
-- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — generate, track and
+- [Refer & Earn on superhero.com](https://superhero.com/trends/invite): generate, track and
   revoke links here.

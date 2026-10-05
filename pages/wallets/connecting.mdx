@@ -14,20 +14,20 @@ with it, and sends every transaction there for you to approve.
 | --- | --- | --- |
 | Browser extension | In-page message connection, discovered by the SDK's wallet detector | Desktop browsers with Superhero Wallet installed |
 | Wallet app or web wallet | Deep link with a callback URL | Mobile, or desktop when no extension answers |
-| Built-in wallet | No transport — the signer runs in the page | Installed PWA with an on-device vault |
+| Built-in wallet | No transport; the signer runs in the page | Installed PWA with an on-device vault |
 
 The first two are external custody: the wallet holds the key and Superhero only ever receives a
 signed result. The third is documented in [The Built-In Wallet](/wallets/built-in-wallet).
 
 **None of them is WalletConnect.** The æternity connection path is the AEX-2 `postMessage` RPC from
-`@aeternity/aepp-sdk` — no project id, no pairing URI, no relay. If you are writing a wallet to
+`@aeternity/aepp-sdk`, with no project id, pairing URI or relay. If you are writing a wallet to
 connect to superhero.com, implement the AEX-2 side.
 
 ## The extension handshake
 
 Pressing **Connect** runs this sequence:
 
-1. Any previous session is torn down — persisted wallet info, the active account and the account
+1. Any previous session is torn down: persisted wallet info, the active account and the account
    list are cleared, and the SDK is disconnected.
 2. The app opens a browser message connection and starts the SDK's **wallet detector**, which
    listens for a wallet announcing itself on the page.
@@ -60,13 +60,13 @@ superhero://<action>?…                     ← tried first on mobile
 https://wallet.superhero.com/<action>?…    ← desktop, and the mobile fallback after 1.5s
 ```
 
-On mobile the app tries the custom scheme and starts a 1.5-second timer; if the page loses focus —
-meaning the native app took over — the timer is cancelled. If it fires, the hosted web wallet opens
+On mobile the app tries the custom scheme and starts a 1.5-second timer; if the page loses focus
+(meaning the native app took over), the timer is cancelled. If it fires, the hosted web wallet opens
 instead. On desktop the web wallet URL is opened directly in a new window.
 
 For the connect action, the app passes `x-success` and `x-cancel` callbacks pointing back at the
 current page, with `address` and `networkId` placeholders the wallet fills in. On return, the app
-validates the address and installs it as a **static account** — a read-only account that lets the
+validates the address and installs it as a **static account**, a read-only account that lets the
 app show balances and portfolio data.
 
 A static account is not a signing session. Signing still routes through the wallet, and
@@ -82,12 +82,12 @@ whose only job is to accept the wallet's result and hand it to whichever tab ask
 | `transaction`, `signedTransaction`, `signed_tx` or `tx` | The signed transaction, accepted only if it starts with `tx_` |
 | `signature` | A message signature |
 | `status` | `completed` marks the queue entry done; completed with neither result present is recorded as cancelled |
-| `returnUrl` | Where to send the user afterwards — **same-origin only**; anything else falls back to `/` |
+| `returnUrl` | Where to send the user afterwards. **Same-origin only**; anything else falls back to `/` |
 
 The route writes the result into the shared transaction queue, then hands off over a broadcast
 channel to the originating tab. If that tab acknowledges within 1.5 seconds, this window closes
-(or navigates to the return path). If nothing acknowledges — Android Chrome sometimes opens the
-callback in a temporary tab — the queue page completes message-signing requests itself and
+(or navigates to the return path). If nothing acknowledges (Android Chrome sometimes opens the
+callback in a temporary tab), the queue page completes message-signing requests itself and
 refreshes the account and profile caches.
 
 Message-signing requests are the ones that travel this way: profile updates, `.chain` name claims,
@@ -125,9 +125,9 @@ The connect popup lists the four permissions an æpp can ask for:
 
 | Permission | What the popup says |
 | --- | --- |
-| `address` | "View your address" — your current account address |
-| `addressList` | "View your address list" — every account address |
-| `networks` | "Use available networks" — Mainnet and Testnet |
+| `address` | "View your address": your current account address |
+| `addressList` | "View your address list": every account address |
+| `networks` | "Use available networks": Mainnet and Testnet |
 | `transactions` | "Propose transactions. You are in charge of confirming them." |
 
 A connection lets an æpp *propose*. Nothing in the set grants spending.
@@ -145,15 +145,15 @@ storage. Every field starts `false` or `0`:
 | `dailySpendLimit` / `transactionSignLimit` | Sign transactions up to a daily AE ceiling without asking | No |
 | `transactionSignSpent` / `transactionSignFirstAskedOn` | Running total and the 24-hour window it resets in | Bookkeeping |
 
-The checkbox grants exactly one standing permission — a silent reconnect — and leaves everything
+The checkbox grants exactly one standing permission, a silent reconnect, and leaves everything
 else prompting. The other switches live in **More → Settings → Permissions**, where you can edit a
 host's record or add one by hand; the wallet's own copy there reads "Use this feature with caution
 and only for platforms you trust."
 
 The standing record maps onto RPC methods one-for-one: `connect` and `subscribeAddress` read
 `address`; `address` (list accounts) reads `addressList`; `signMessage` reads `messageSign`; and
-`sign` runs the daily-limit check. Anything else — `signTypedData`, `signDelegation`,
-`unsafeSign` — has no standing-permission path and always opens a confirmation.
+`sign` runs the daily-limit check. Anything else (`signTypedData`, `signDelegation`,
+`unsafeSign`) has no standing-permission path and always opens a confirmation.
 
 Two more guards:
 
@@ -171,7 +171,7 @@ you, in the wallet.
 ## Switching accounts
 
 With a live RPC session, the wallet pushes address changes to the app and the active account
-follows your wallet's selection. Without the RPC connection — a restored read-only session —
+follows your wallet's selection. Without the RPC connection, as in a restored read-only session,
 switching accounts in the extension goes unnoticed by the app; reconnect to fix it.
 
 Per-account caches (balance, AEX-9 balances, recent DEX activity, liquidity positions) are keyed by
@@ -188,7 +188,7 @@ offers exactly that network. There is no in-app switcher; change the network in 
 
 Disconnect does all of the following, in order, so that a refresh does not silently reconnect:
 
-1. Removes the persisted session keys from local storage — `account:activeAccount`,
+1. Removes the persisted session keys from local storage: `account:activeAccount`,
    `wallet:walletInfo`, `wallet:balance`, `dex:recentActivities` and `liquidityPositions`.
 2. Stops any in-flight wallet detection and closes the message connection.
 3. Drops the cached wallet reference.
@@ -197,13 +197,13 @@ Disconnect does all of the following, in order, so that a refresh does not silen
 5. Disconnects the SDK.
 
 Disconnecting is a local action. It does not revoke anything on chain, and it does not remove a
-built-in wallet's vault from the device — that is a separate, deliberate erase.
+built-in wallet's vault from the device. That is a separate, deliberate erase.
 
 ## Related
 
-- [Choosing a Wallet](/wallets/choosing-a-wallet) — which of these paths you should be on.
-- [The Built-In Wallet](/wallets/built-in-wallet) — the case where there is no transport at all.
-- [Troubleshooting](/wallets/troubleshooting) — detection windows, stale sessions and read-only reconnects, as symptoms.
-- [Navigating the App](/getting-started/navigating-the-app) — which parts of superhero.com need a connected account.
-- [Web Wallet](/wallets/web-wallet) — the two transports a hosted wallet has, and the deep-link routes.
-- [Connect an æpp to a wallet](https://sdk.aeternity.io/latest/guides/connect-aepp-to-wallet/) — the SDK guide for the RPC protocol underneath all of this.
+- [Choosing a Wallet](/wallets/choosing-a-wallet): which of these paths you should be on.
+- [The Built-In Wallet](/wallets/built-in-wallet): the case where there is no transport at all.
+- [Troubleshooting](/wallets/troubleshooting): detection windows, stale sessions and read-only reconnects, as symptoms.
+- [Navigating the App](/getting-started/navigating-the-app): which parts of superhero.com need a connected account.
+- [Web Wallet](/wallets/web-wallet): the two transports a hosted wallet has, and the deep-link routes.
+- [Connect an æpp to a wallet](https://sdk.aeternity.io/latest/guides/connect-aepp-to-wallet/): the SDK guide for the RPC protocol underneath all of this.

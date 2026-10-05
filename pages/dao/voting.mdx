@@ -33,7 +33,7 @@ DAOVote.vote_state = map(DAOVote.vote_option, DAOVote.amount)
 ```
 
 Your `amount` is added to the total under `true` or `false`. Ten times the tokens is ten
-times the weight — no quadratic discount, no cap, no time-weighting, no minimum.
+times the weight. There is no quadratic discount, cap, time-weighting or minimum.
 
 The per-voter record is:
 
@@ -41,7 +41,7 @@ The per-voter record is:
 DAOVote.vote_accounts = map(address, (DAOVote.amount, DAOVote.vote_option, bool))
 ```
 
-— the amount you staked, which way you voted, and whether you have withdrawn.
+Each entry holds the amount you staked, which way you voted, and whether you have withdrawn.
 
 ### One vote per address
 
@@ -63,7 +63,7 @@ transactions, and your weight is out of the tally in between.
 This is the opposite of an [æternity governance poll](/governance/voting), where calling
 `vote` again overwrites your choice.
 
-`amount` is not checked against your balance directly — the `transfer_allowance` call fails if
+`amount` is not checked against your balance directly; the `transfer_allowance` call fails if
 you stake more than you hold or more than you have approved.
 
 ## The allowance step
@@ -94,7 +94,7 @@ The relevant AEX-9 entrypoints:
 | `reset_allowance(for_account)` | Remove the allowance entirely |
 | `allowance_for_caller(from_account)` | Read the allowance granted to you by another account |
 
-`allowance` takes a record — `allowance_accounts` is `from_account` plus `for_account` — and
+`allowance` takes a record (`allowance_accounts` is `from_account` plus `for_account`) and
 returns `None` when no allowance exists. Calling `create_allowance` when one already exists
 fails; calling `change_allowance` when none exists fails too, so handle the two cases
 separately.
@@ -133,7 +133,7 @@ await vote.vote(true, amount);
 ```
 
 Both transactions have to confirm. If the allowance transaction succeeds and the vote
-transaction fails, the allowance is left standing — harmless, but reset it with
+transaction fails, the allowance is left standing. That is harmless, but reset it with
 `reset_allowance` if you would rather not leave a live approval in place.
 
 ### From the app
@@ -160,23 +160,23 @@ of its own; it ends when you end it.
 | --- | --- | --- |
 | When | While the vote is still open | After the closing height |
 | Enforced by | `require(!is_closed(), "VOTE_ALREADY_CLOSED")` | `require(is_closed(), "VOTE_NOT_CLOSED")` |
-| Effect on the tally | Removes your stake from the total | None — the result is already fixed |
+| Effect on the tally | Removes your stake from the total | None; the result is already fixed |
 | Effect on your record | Your entry is deleted; you count as not having voted | Your vote stands, marked as withdrawn |
 | Can you vote again | Yes, while the vote is open | No, the vote is closed |
 | Tokens | Returned | Returned |
-| Repeatable | Yes — revoke, vote, revoke again | No: `AMOUNT_ALREADY_WITHDRAWN` on the second call |
+| Repeatable | Yes: revoke, vote, revoke again | No: `AMOUNT_ALREADY_WITHDRAWN` on the second call |
 | Event emitted | `RevokeVote(address, option, amount)` | `Withdraw(address, amount)` |
 
 Both windows are enforced on chain. `is_closed()` is `Chain.block_height >= state.close_height`,
 and the two entrypoints assert opposite sides of it, so exactly one of them works at any
 height. A revoke transaction signed just before `close_height` and mined just after it
-reverts, and you must call `withdraw()` instead — do not leave a revoke to the last few blocks.
+reverts, and you must call `withdraw()` instead. Do not leave a revoke to the last few blocks.
 
 **Revoking is a governance action**: it pulls your weight out of the tally, so a proposal that
 was passing can stop passing. **Withdrawing is housekeeping**: the outcome is settled and
 `final_vote_state()` returns it, and taking your tokens back cannot change it. Withdrawal does
 not depend on how the vote went or whether the subject was ever applied, and nothing does it
-for you — tokens left in a closed vote contract stay locked until their owner calls
+for you. Tokens left in a closed vote contract stay locked until their owner calls
 `withdraw`.
 
 ## Reading a vote
@@ -221,9 +221,9 @@ contract state. See [Contract events](/contracts/events).
 
 ## Related
 
-- [Quorum and Thresholds](/dao/quorum-and-thresholds) — what your stake has to add up to for a proposal to pass.
-- [Proposals and Vote Subjects](/dao/proposals) — what you are voting on, and how to read a subject.
-- [How DAOs Work](/dao/overview) — where voting sits in the lifecycle.
-- [Voting on governance polls](/governance/voting) — the other system, where nothing is locked.
-- [AEX standards](/aeternity/aex-standards) — the AEX-9 allowance mechanism this depends on.
-- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the fungible-token standard, including the allowance entrypoints.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds): what your stake has to add up to for a proposal to pass.
+- [Proposals and Vote Subjects](/dao/proposals): what you are voting on, and how to read a subject.
+- [How DAOs Work](/dao/overview): where voting sits in the lifecycle.
+- [Voting on governance polls](/governance/voting): the other system, where nothing is locked.
+- [AEX standards](/aeternity/aex-standards): the AEX-9 allowance mechanism this depends on.
+- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md): the fungible-token standard, including the allowance entrypoints.

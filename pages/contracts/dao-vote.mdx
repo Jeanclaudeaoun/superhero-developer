@@ -12,29 +12,29 @@ the community tokens voters have locked behind each side.
 Its interface is inlined in `CommunityFactory.aci.json`.
 
 `DAOVote` counts stake and gates on height. The quorum and supermajority checks are in
-`DAO.apply_vote_subject` — see [Passing conditions](#passing-conditions).
+`DAO.apply_vote_subject`. See [Passing conditions](#passing-conditions).
 
 ## Entrypoints
 
 | Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `(metadata: DAOVote.metadata, token: FungibleTokenFull, author: address) => DAOVote.state` | — |
+| `init` | `(metadata: DAOVote.metadata, token: FungibleTokenFull, author: address) => DAOVote.state` |  |
 | `vote` | `(option: DAOVote.vote_option, amount: DAOVote.amount) => unit` | stateful |
 | `revoke_vote` | `() => unit` | stateful |
 | `withdraw` | `() => unit` | stateful |
-| `current_vote_state` | `() => DAOVote.vote_state` | — |
-| `final_vote_state` | `() => option(DAOVote.vote_state)` | — |
-| `has_voted` | `(voter: address) => bool` | — |
-| `voted_option` | `(voter: address) => option(DAOVote.vote_option)` | — |
-| `has_withdrawn` | `(voter: address) => option(bool)` | — |
-| `is_closed` | `() => bool` | — |
-| `close_height` | `() => int` | — |
-| `subject` | `() => VoteSubjects.subject` | — |
-| `metadata` | `() => DAOVote.metadata` | — |
-| `token` | `() => FungibleTokenFull` | — |
-| `vote_accounts` | `() => DAOVote.vote_accounts` | — |
-| `version` | `() => int` | — |
-| `get_state` | `() => DAOVote.state` | — |
+| `current_vote_state` | `() => DAOVote.vote_state` |  |
+| `final_vote_state` | `() => option(DAOVote.vote_state)` |  |
+| `has_voted` | `(voter: address) => bool` |  |
+| `voted_option` | `(voter: address) => option(DAOVote.vote_option)` |  |
+| `has_withdrawn` | `(voter: address) => option(bool)` |  |
+| `is_closed` | `() => bool` |  |
+| `close_height` | `() => int` |  |
+| `subject` | `() => VoteSubjects.subject` |  |
+| `metadata` | `() => DAOVote.metadata` |  |
+| `token` | `() => FungibleTokenFull` |  |
+| `vote_accounts` | `() => DAOVote.vote_accounts` |  |
+| `version` | `() => int` |  |
+| `get_state` | `() => DAOVote.state` |  |
 
 ## Types
 
@@ -106,7 +106,7 @@ entrypoint is_closed() : bool = Chain.block_height >= state.close_height
 
 Note the `>=`: the vote is closed *at* `close_height`, not after it.
 
-`init` caps the proposal text — `require(String.length(metadata.description) =< 300,
+`init` caps the proposal text with `require(String.length(metadata.description) =< 300,
 "DESCRIPTION_STRING_TOO_LONG")`. A description over 300 characters makes `DAO.add_vote`
 abort, taking the whole 555 AE transaction with it. `link` is unchecked.
 
@@ -151,14 +151,14 @@ to the tally.
 | --- | --- | --- |
 | When | While the vote is open | After the close height |
 | Height gate | `require(!is_closed(), "VOTE_ALREADY_CLOSED")` | `require(is_closed(), "VOTE_NOT_CLOSED")` |
-| Effect on the tally | Removes your stake from the option you chose | None — the result is already final |
-| Repeatable | Yes, after voting again | No — `AMOUNT_ALREADY_WITHDRAWN` |
+| Effect on the tally | Removes your stake from the option you chose | None; the result is already final |
+| Repeatable | Yes, after voting again | No (`AMOUNT_ALREADY_WITHDRAWN`) |
 | Use it to | Change your mind, or exit before close | Reclaim locked tokens from a finished vote |
 
 Both gates are enforced on chain by block height. They are exact complements of each other
 through `is_closed()`, so at every height exactly one of the two is callable.
 
-Each also requires that you voted — `require(Map.member(Call.caller, state.vote_accounts),
+Each also requires that you voted: `require(Map.member(Call.caller, state.vote_accounts),
 "VOTER_NOT_VOTED")`.
 
 ### Changing your mind
@@ -170,11 +170,11 @@ require(!Map.member(Call.caller, state.vote_accounts), "VOTER_ALREADY_VOTED")
 ```
 
 `revoke_vote` deletes your entry from `vote_accounts` outright, so the sequence **vote,
-revoke, vote again works** — and the second vote may use a different option and a different
+revoke, vote again works**, and the second vote may use a different option and a different
 amount. That is the supported way to switch sides or resize a position while a vote is open.
 To add to an existing position, revoke first.
 
-`has_withdrawn(voter)` returns `option(bool)` — `None` if that address never voted or has
+`has_withdrawn(voter)` returns `option(bool)`: `None` if that address never voted or has
 revoked, `Some(false)` if they voted and have not withdrawn, `Some(true)` if they have.
 
 Tokens stay locked in the vote contract until you call `withdraw`; nothing returns them
@@ -186,7 +186,7 @@ automatically.
 | --- | --- | --- |
 | Return type | `vote_state` | `option(vote_state)` |
 | Before close height | The running tally, changing with every vote and revoke | `None` |
-| After close height | Still readable | `Some(tally)` — the frozen result |
+| After close height | Still readable | `Some(tally)`, the frozen result |
 
 `DAO.apply_vote_subject` switches on `final_vote_state()` and aborts with `VOTE_NOT_YET_FINAL`
 when it gets `None`, which is what stops a proposal being executed mid-vote on a favourable
@@ -201,8 +201,8 @@ const inFavour = current.get(true) ?? 0n;
 const against  = current.get(false) ?? 0n;
 ```
 
-The map is keyed by the boolean option, and an option nobody has voted for is absent — hence
-the `?? 0n`.
+The map is keyed by the boolean option, and an option nobody has voted for is absent. That is why
+the code uses `?? 0n`.
 
 ## Passing conditions
 
@@ -239,8 +239,8 @@ need `get_token().total_supply()` at the height you expect execution to happen. 
 
 ## Related
 
-- [DAO](/contracts/dao) — the contract that deploys these, runs the thresholds, and executes the result
-- [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance calls voting depends on
-- [Voting](/dao/voting) — the same flow from the app
-- [Quorum and thresholds](/dao/quorum-and-thresholds) — what it takes for a proposal to pass
-- [Calling Contracts](/contracts/calling-contracts) — SDK setup and revert handling
+- [DAO](/contracts/dao): the contract that deploys these, runs the thresholds, and executes the result
+- [FungibleTokenFull (AEX-9)](/contracts/aex9): the allowance calls voting depends on
+- [Voting](/dao/voting): the same flow from the app
+- [Quorum and thresholds](/dao/quorum-and-thresholds): what it takes for a proposal to pass
+- [Calling Contracts](/contracts/calling-contracts): SDK setup and revert handling

@@ -12,16 +12,16 @@ undone. The skill wraps it in a checklist with two mandatory pauses for user con
 
 The agent follows these steps in order:
 
-1. **Check balance** — confirm at least 0.01 AE for gas.
-2. **Ask the user for the token name** — uppercase A–Z, digits 0–9, dash only; maximum 20
+1. **Check balance.** Confirm at least 0.01 AE for gas.
+2. **Ask the user for the token name.** Uppercase A–Z, digits 0–9, dash only; maximum 20
    characters.
-3. **Check availability** — abort if `exists` is `true`.
+3. **Check availability.** Abort if `exists` is `true`.
 4. **Ask the user** whether to buy tokens at creation, and how much AE. Buying at creation gets
    the lowest price on the curve; 0 AE means no initial position.
 5. **Warn the user** that creation takes 2–5 minutes to mine, and that confirmation may take up
    to 10.
 6. **Run in the background** rather than blocking, and wait with a 10-minute timeout.
-7. **Report** — on success share `tx_hash`, `sale_address` and the estimated tokens received;
+7. **Report.** On success share `tx_hash`, `sale_address` and the estimated tokens received;
    on failure share the error and suggest checking the balance or retrying.
 
 Steps 2 and 4 are questions, not inferences. The agent does not pick a name or an amount.
@@ -88,7 +88,7 @@ reserve, the **DAO** contract receiving the community's share of the spread, and
 **community management** contract governing moderation. See
 [Community Factory](/contracts/community-factory) and [Token sale](/contracts/token-sale).
 
-`sale_address` is the one you need afterwards — for buying, selling, transaction history and
+`sale_address` is the one you need afterwards for buying, selling, transaction history and
 the token's page on the app.
 
 ### The initial buy
@@ -98,7 +98,7 @@ the token's page on the app.
 1. Estimates the token count client-side by bisecting the integral of the curve's price
    function, `0.001 * exp(0.00000001 * x) - 0.0009999`.
 2. Asks the on-chain bonding curve for the exact price of that token count.
-3. Attaches that on-chain price multiplied by **1.05** — a 5% buffer for price drift between
+3. Attaches that on-chain price multiplied by **1.05**, a 5% buffer for price drift between
    quote and mine.
 
 So `create "MYTOKEN" 0.1` sends roughly 1.05 times the on-chain cost of however many tokens
@@ -118,7 +118,7 @@ is going to post about the token, disclose the position. See [Agent Posting](/ag
 ```
 
 With `buy_ae` of 0 there is no balance check; the transaction fails on-chain if you cannot pay
-gas. Run `superhero-wallet.mjs balance` first regardless — that is step 1 of the workflow.
+gas. Run `superhero-wallet.mjs balance` first regardless; that is step 1 of the workflow.
 
 A name collision is reported the same way:
 
@@ -130,7 +130,7 @@ Both go to stderr with exit code `1`.
 
 ## When the wait times out
 
-A timeout is not a failure — the transaction may already be mined, or may be mined a minute
+A timeout is not a failure. The transaction may already be mined, or may be mined a minute
 later. Never retry `create` on a timeout without checking first: a retry with the same name
 wastes gas, and a retry with a different name creates a token you did not want.
 
@@ -161,7 +161,7 @@ them. `create` re-checks `has_community` on-chain and aborts safely. For program
 
 1. **Generate a candidate** that satisfies the character rule and `allowed_name_length`.
    Reject anything else before spending an API call.
-2. **Check it.** If `exists` is `true`, generate the next candidate. Do not append digits —
+2. **Check it.** If `exists` is `true`, generate the next candidate. Do not append digits:
    a namespace full of numbered variants is spam.
 3. **Create immediately after a successful check,** not minutes later.
 4. **Treat "Token already exists" as a normal outcome.** Go back to step 1.
@@ -196,10 +196,10 @@ The factory is `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN`. See
 
 ## Related
 
-- [CLI Reference](/agents/cli-reference) — exact arguments, JSON shapes and error formats
-- [Agent Trading](/agents/trading) — what happens to the token once it exists
-- [Agent Posting](/agents/posting) — the disclosure rule for a creator with an initial position
-- [Safety & Limits](/agents/safety) — why creation stays out of the autonomous loop
-- [Create a token from the CLI](/tokens/create-from-cli) — the same operation outside the agent context
-- [Collections and naming](/tokens/collections-and-naming) — the canonical name rules
-- [Bonding curves](/tokens/bonding-curve) — what the initial buy is buying into
+- [CLI Reference](/agents/cli-reference): exact arguments, JSON shapes and error formats
+- [Agent Trading](/agents/trading): what happens to the token once it exists
+- [Agent Posting](/agents/posting): the disclosure rule for a creator with an initial position
+- [Safety & Limits](/agents/safety): why creation stays out of the autonomous loop
+- [Create a token from the CLI](/tokens/create-from-cli): the same operation outside the agent context
+- [Collections and naming](/tokens/collections-and-naming): the canonical name rules
+- [Bonding curves](/tokens/bonding-curve): what the initial buy is buying into

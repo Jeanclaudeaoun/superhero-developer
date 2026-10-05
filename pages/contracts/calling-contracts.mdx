@@ -36,7 +36,7 @@ contracts/
 
 ## A complete example
 
-This script reads a token sale's price and then buys from it. It is runnable as written —
+This script reads a token sale's price and then buys from it. It is runnable as written:
 set `AE_PRIVATE_KEY` and pass a sale address.
 
 ```javascript
@@ -113,7 +113,7 @@ console.log('events:', result.decodedEvents.map((e) => e.name));
 | `MemoryAccount(secretKey)` | Holds the key in process memory and signs locally. Nothing is sent to a remote signer. |
 | `new Node(url)` | Points at a node's HTTP API. Mainnet `https://mainnet.aeternity.io`, testnet `https://testnet.aeternity.io`. |
 | `Contract.initialize` | Needs `aci` plus `address`. Pass `onNode` always, and `onAccount` only when you intend to sign. Without `onAccount` the instance can still do read calls. |
-| `.decodedResult` | Every call returns a result envelope. `decodedResult` is the value, already decoded against the ACI — integers come back as `BigInt`, records as plain objects, maps as `Map`. |
+| `.decodedResult` | Every call returns a result envelope. `decodedResult` is the value, already decoded against the ACI: integers come back as `BigInt`, records as plain objects, maps as `Map`. |
 | `{ amount }` | The AE attached to a payable call, in aettos (1 AE = 10^18 aettos). |
 | `omitUnknown: true` | Drops call-option keys the SDK does not recognise instead of throwing. Set it on every write. |
 
@@ -123,7 +123,7 @@ The ACI drives argument encoding, so pass JavaScript values that match the Sophi
 
 | Sophia type | Pass |
 | --- | --- |
-| `int` | a `BigInt`, a `number`, or a decimal string — strings are safest above 2^53 |
+| `int` | a `BigInt`, a `number`, or a decimal string (strings are safest above 2^53) |
 | `string` | a string |
 | `bool` | a boolean |
 | `address` | an `ak_...` string |
@@ -134,7 +134,7 @@ The ACI drives argument encoding, so pass JavaScript values that match the Sophi
 | `option(t)` | `undefined` for `None`, the bare value for `Some` |
 
 A `Map` is required where the ACI says `map`. `create_community` takes
-`meta_info : map(string, string)`, so pass `new Map()` — an object literal fails to encode.
+`meta_info : map(string, string)`, so pass `new Map()`. An object literal fails to encode.
 
 Variants use the one-key-object form. To create a DAO payout vote:
 
@@ -192,9 +192,9 @@ Two caveats:
 - **State moves.** A buy that lands after several other buys in the same micro block touches
   different map entries and can use more gas than the dry run measured. The 30% margin above
   is a starting point, not a guarantee.
-- **`create_community` is expensive.** It deploys four contracts in one transaction — a
+- **`create_community` is expensive.** It deploys four contracts in one transaction (a
   `CommunityManagement`, a `DAO`, an `AffiliationBondingCurveTokenSale`, and the AEX-9 token
-  the sale creates in its own `init` — then makes three more cross-contract calls to wire them
+  the sale creates in its own `init`), then makes three more cross-contract calls to wire them
   together, and optionally performs an initial buy on top. Do not trim its gas limit
   aggressively; let the SDK use its default unless you have measured repeatedly.
 
@@ -218,7 +218,7 @@ for (const e of result.decodedEvents) {
 // PriceChange ct_sale...   [ previous_price, next_price ]
 ```
 
-A single buy emits `Mint` **twice** — once from the community token and once from the
+A single buy emits `Mint` twice, once from the community token and once from the
 ProtocolDAO token. Distinguish them by `e.contract.address`:
 
 ```javascript
@@ -269,7 +269,7 @@ Two failure modes that are **not** reverts and need separate handling:
 - **Insufficient balance.** The transaction is rejected before execution. Check
   `aeSdk.getBalance(address)` first.
 - **Not mined.** `await` on a write resolves when the transaction is mined by default. Pass
-  `waitMined: false` to get the hash immediately and poll yourself — useful for
+  `waitMined: false` to get the hash immediately and poll yourself. This is useful for
   `create_community`, so a UI can navigate to a pending token page straight away.
 
 ## Selling needs an allowance first
@@ -321,9 +321,9 @@ await factory.has_community(collectionId, 'MYTOKEN');
 
 ## Related
 
-- [Deployed Addresses](/contracts/addresses) — the addresses these examples need, and how to resolve them at runtime
-- [Events](/contracts/events) — the full event catalogue and how to read events you did not submit
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the buy and sell entrypoints in detail
-- [FungibleTokenFull (AEX-9)](/contracts/aex9) — the allowance model the sell flow depends on
-- [Agent CLI reference](/agents/cli-reference) — ready-made scripts for buying, selling, creating tokens and inviting
-- [æternity JavaScript SDK contract guide](https://docs.aeternity.com/developer-documentation/aepp-sdk-js/docs/guides/contracts) — the upstream reference for `Contract.initialize` and call options
+- [Deployed Addresses](/contracts/addresses): the addresses these examples need, and how to resolve them at runtime
+- [Events](/contracts/events): the full event catalogue and how to read events you did not submit
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale): the buy and sell entrypoints in detail
+- [FungibleTokenFull (AEX-9)](/contracts/aex9): the allowance model the sell flow depends on
+- [Agent CLI reference](/agents/cli-reference): ready-made scripts for buying, selling, creating tokens and inviting
+- [æternity JavaScript SDK contract guide](https://docs.aeternity.com/developer-documentation/aepp-sdk-js/docs/guides/contracts): the upstream reference for `Contract.initialize` and call options

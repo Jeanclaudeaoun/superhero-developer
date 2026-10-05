@@ -29,7 +29,7 @@ Four values are fixed, so you never need a node to know them:
 | `fee_percentage()` | `500` | passthrough to `AffiliationTreasury.get_affiliation_fee_percentage()` |
 | `fee_precision()` | `100000` | passthrough to `AffiliationTreasury.get_affiliation_fee_precision()` |
 
-`fee_percentage() / fee_precision()` is `500 / 100000` — **0.5%**. Divide the two rather than
+`fee_percentage() / fee_precision()` is `500 / 100000`, or 0.5%. Divide the two rather than
 hardcoding 0.005; both are passthroughs and a treasury redeployment could move them.
 
 ## Entrypoints
@@ -40,22 +40,22 @@ hardcoding 0.005; both are passthroughs and a treasury redeployment could move t
 | `create_collection` | `(collection_name: string, allowed_name_length: int, allowed_name_chars: list(CommunityFactory.allowedNameChars)) => string` | stateful, payable |
 | `create_community` | `(collection_name: string, name: string, initial_buy_count: int, is_private: bool, meta_info: CommunityManagement.meta_info) => tuple(DAO, TokenSale, CommunityManagement)` | stateful, payable |
 | `mint_protocol_dao_token` | `(buy_value: int, receiver: address) => unit` | stateful |
-| `has_community` | `(collection_name: string, name: string) => bool` | — |
-| `get_token_sale` | `(collection_name: string, name: string) => TokenSale` | — |
-| `token_contract` | `(collection_name: string, name: string) => FungibleTokenFull` | — |
-| `get_community_management` | `(token_sale: TokenSale) => CommunityManagement` | — |
-| `token_sale_registry` | `(collection_name: string) => CommunityFactory.token_sale_registry` | — |
-| `community_management` | `() => CommunityFactory.community_management` | — |
-| `allowed_name_length` | `(collection_name: string) => int` | — |
-| `allowed_name_chars` | `(collection_name: string) => list(CommunityFactory.allowedNameChars)` | — |
-| `bonding_curve` | `() => BondingCurve` | — |
-| `affiliation_treasury` | `() => AffiliationTreasury` | — |
-| `protocol_dao_token` | `() => FungibleTokenFull` | — |
-| `fee_percentage` | `() => int` | — |
-| `fee_precision` | `() => int` | — |
-| `factory_type` | `() => string` | — |
-| `version` | `() => int` | — |
-| `get_state` | `() => CommunityFactory.state` | — |
+| `has_community` | `(collection_name: string, name: string) => bool` |  |
+| `get_token_sale` | `(collection_name: string, name: string) => TokenSale` |  |
+| `token_contract` | `(collection_name: string, name: string) => FungibleTokenFull` |  |
+| `get_community_management` | `(token_sale: TokenSale) => CommunityManagement` |  |
+| `token_sale_registry` | `(collection_name: string) => CommunityFactory.token_sale_registry` |  |
+| `community_management` | `() => CommunityFactory.community_management` |  |
+| `allowed_name_length` | `(collection_name: string) => int` |  |
+| `allowed_name_chars` | `(collection_name: string) => list(CommunityFactory.allowedNameChars)` |  |
+| `bonding_curve` | `() => BondingCurve` |  |
+| `affiliation_treasury` | `() => AffiliationTreasury` |  |
+| `protocol_dao_token` | `() => FungibleTokenFull` |  |
+| `fee_percentage` | `() => int` |  |
+| `fee_precision` | `() => int` |  |
+| `factory_type` | `() => string` |  |
+| `version` | `() => int` |  |
+| `get_state` | `() => CommunityFactory.state` |  |
 
 ## Types
 
@@ -93,7 +93,7 @@ const chars = await factory.allowed_name_chars(collectionId).then((r) => r.decod
 // [ { CharRangeFromTo: [ 65n, 90n ] }, { CharRangeFromTo: [ 48n, 57n ] }, { SingleChar: [ 45n ] } ]
 ```
 
-`CommunityManagement.meta_info` is `map(string, string)` — free-form key/value metadata with
+`CommunityManagement.meta_info` is `map(string, string)`: free-form key/value metadata with
 no schema enforced on chain. The Superhero app writes four keys when it creates a token:
 
 | Key | Value |
@@ -104,7 +104,7 @@ no schema enforced on chain. The Superhero app writes four keys when it creates 
 | `twitter` | an X handle or URL |
 
 All four are optional and the contract validates none of them. Pass a `Map`, not an
-object — an empty `new Map()` is valid.
+object. An empty `new Map()` is valid.
 
 ## Events
 
@@ -116,7 +116,7 @@ datatype event =
                  // collection id, creator
 ```
 
-`CreateCommunity` is the single best source for the three per-community addresses — capture
+`CreateCommunity` is the single best source for the three per-community addresses. Capture
 it instead of making three follow-up reads.
 
 ## Creating a collection
@@ -141,7 +141,7 @@ Superhero API are typed as `${string}-${Encoded.AccountAddress}`. Creating a col
 name already exists aborts with `collection_ALREADY_EXISTS` (note the lowercase first letter).
 
 Any account may register a collection, with any naming rules. The collections the Superhero
-app lists on mainnet — `WORDS`, `CHINESE`, `ARABIC` and `RUSSIAN` — are a curated set
+app lists on mainnet (`WORDS`, `CHINESE`, `ARABIC` and `RUSSIAN`) are a curated set
 maintained in the API.
 
 ## Creating a community
@@ -152,7 +152,7 @@ maintained in the API.
    (`NAME_ALREADY_REGISTERED`), and validates it against the collection's length
    (`NAME_TOO_LONG`) and character rules (`NAME_NOT_ALLOWED_CHAR`).
 2. Deploys a `CommunityManagement` contract with the caller as the initial moderator, a
-   minimum token threshold of `10 ^ 18` — one whole token — and your `is_private` and
+   minimum token threshold of `10 ^ 18` (one whole token), and your `is_private` and
    `meta_info`.
 3. Deploys a `DAO` with no token sale set, pointing back at the factory.
 4. Deploys an `AffiliationBondingCurveTokenSale`, which in turn deploys the community's AEX-9
@@ -185,7 +185,7 @@ const [daoAddress, tokenSaleAddress, communityManagementAddress] = result.decode
 `initial_buy_count` is a **token count in base units**, not an AE amount. Community tokens use
 18 decimals, so buying 5 whole tokens means passing `5 * 10^18`.
 
-To go the other way — "I want to spend 0.1 AE" — invert the bonding curve in two steps:
+To go the other way ("I want to spend 0.1 AE"), invert the bonding curve in two steps:
 
 ```javascript
 // 1. Estimate a token count from an AE amount with client-side curve math.
@@ -232,8 +232,8 @@ let protocol_dao_token_multiplier = 1000
 ```
 
 A 1 AE buy mints 1,000 ProtocolDAO tokens to the buyer. The base is the net AE the buyer
-paid — `Call.value` minus any overpayment refund — which includes the affiliation fee, not
-just the curve price.
+paid (`Call.value` minus any overpayment refund), which includes the affiliation fee as well
+as the curve price.
 
 **An initial buy at creation also mints them.** The sale skips its callback when the caller is
 the factory, and `create_community` performs the mint itself instead:
@@ -256,8 +256,8 @@ The factory refunds overpayment before the buy, against
 
 ## Related
 
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the sale contract this factory deploys
-- [CommunityManagement](/contracts/community-management) — the `meta_info` map and moderator model
-- [Collections and naming](/tokens/collections-and-naming) — the naming rules from a user's point of view
-- [Create a token from the CLI](/tokens/create-from-cli) — a working end-to-end creation flow
-- [Deployed Addresses](/contracts/addresses) — factory addresses and runtime resolution
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale): the sale contract this factory deploys
+- [CommunityManagement](/contracts/community-management): the `meta_info` map and moderator model
+- [Collections and naming](/tokens/collections-and-naming): the naming rules from a user's point of view
+- [Create a token from the CLI](/tokens/create-from-cli): a working end-to-end creation flow
+- [Deployed Addresses](/contracts/addresses): factory addresses and runtime resolution

@@ -26,7 +26,7 @@ Live at `https://superhero.com/chat`.
 | Direct messages | NIP-04 encrypted events, kind 4 |
 | Default relay | `wss://relay.superhero.chat` |
 
-The relay — not a contract — is the authority on who is in a room. For token rooms that
+The relay, not a contract, is the authority on who is in a room. For token rooms that
 authority is exercised by a bot the API controls, which adds and removes members as balances
 change.
 
@@ -34,7 +34,7 @@ change.
 
 | Route | Purpose |
 | --- | --- |
-| `/chat` | Inbox — All, Communities and DMs tabs, each with a count |
+| `/chat` | Inbox with All, Communities and DMs tabs, each with a count |
 | `/chat/dm/:address` | A direct message thread |
 | `/chat/:saleAddress` | A token's community room |
 | `/chat/:saleAddress/info` | Room info: metadata, members, mute |
@@ -50,14 +50,14 @@ m/44'/1237'/0'/0/<accountIndex>
 ```
 
 Coin type 1237 is the registered Nostr type, and the account index matches the active æternity
-account's index — so your npub is identical on web and mobile without any sync.
+account's index, so your npub is identical on web and mobile without any sync.
 
 The derivation runs the same user-verification step the transaction signer uses (passphrase or
 passkey), unseals the mnemonic transiently, derives only the Nostr key, and returns only that
-key — never the mnemonic, the seed, or the æternity spending key. Above it sits a NIP-07-shaped
+key. It never returns the mnemonic, the seed, or the æternity spending key. Above it sits a NIP-07-shaped
 identity provider (`getPublicKey`, `signEvent`, `nip04Encrypt`, `nip04Decrypt`) that keeps the
 secret key in a closure. Once the session locks, the provider refuses to sign. Read-only flows
-— public room history and metadata — work with no identity at all.
+(public room history and metadata) work with no identity at all.
 
 ## Linking your Nostr key to your address
 
@@ -75,7 +75,7 @@ POST /api/address-links/nostr/unclaim/submit   -> { txHash }
 ```
 
 **Two proofs are required.** The `signature` is the æternity wallet's signature over the exact
-`message` string — 128 lowercase hex characters, no prefix — proving the address consents. The
+`message` string (128 lowercase hex characters, no prefix), proving the address consents. The
 `nostr_event` is a JSON-serialised Nostr event proving control of the key: kind `22242`, empty
 tags, the claim message verbatim as `content`, Schnorr-signed. The backend rejects the submit
 if the event's kind is wrong, its `content` does not match the expected link message, its
@@ -113,8 +113,8 @@ used for NIP-42 AUTH on private rooms.
 The API runs a reactive pipeline off the middleware's live transaction stream:
 
 1. AEX-9 `Transfer` events on community token contracts are applied to a balance ledger of raw
-   base units, clamped at zero. **Every** transfer is indexed — plain wallet-to-wallet, DEX
-   swap, airdrop — not only bonding-curve buys and sells, so a balance cannot go stale because
+   base units, clamped at zero. **Every** transfer is indexed, including plain wallet-to-wallet
+   transfers, DEX swaps and airdrops as well as bonding-curve buys and sells, so a balance cannot go stale because
    the tokens moved outside the curve.
 2. A balance change, a `CommunityManagement` state change (threshold, moderator set, muted set
    or privacy flag), or a Nostr link change each trigger a recheck.
@@ -152,8 +152,8 @@ The composer derives its gate from those fields:
 | `readable` is true | none | Post |
 | The room is absent from the list | `not-eligible` | Buy the token |
 
-Provisioning is not instant. The client polls while a room is `pending_add` — every 5 seconds
-for the first minute, then every 15 seconds, backing off to roughly 10 minutes — and fires one
+Provisioning is not instant. The client polls while a room is `pending_add` (every 5 seconds
+for the first minute, then every 15 seconds, backing off to roughly 10 minutes) and fires one
 `recheck` so a desync heals on its own.
 
 ### Muting a room
@@ -175,8 +175,8 @@ canonicalRoomMuteHash(true,  undefined) = sha256("muted=1;mute_all=-")
 canonicalRoomMuteHash(false, false)     = sha256("muted=0;mute_all=0")
 ```
 
-`mute_all` is tri-state on the wire — `true`, `false`, or omitted meaning "leave the
-account-wide switch alone" — and the absent case serializes as `-` so it cannot collide with
+`mute_all` is tri-state on the wire: `true`, `false`, or omitted, meaning "leave the
+account-wide switch alone". The absent case serializes as `-` so it cannot collide with
 either boolean. The message string must match the backend byte for byte. On an expired or
 consumed nonce the client retries once with a fresh challenge.
 
@@ -184,8 +184,8 @@ consumed nonce the client retries once with a fresh challenge.
 
 `NOSTR_RELAY_URLS` is a comma-separated list of `wss://` origins. It defaults to
 `wss://relay.superhero.chat`, so chat works out of the box; a runtime value overrides it. Each
-entry passes a scheme guard — `wss://` always, `ws://` only on `localhost`, `127.0.0.1` or
-`[::1]` — and is de-duplicated by origin. A malformed or insecure entry is dropped. With no
+entry passes a scheme guard (`wss://` always, `ws://` only on `localhost`, `127.0.0.1` or
+`[::1]`) and is de-duplicated by origin. A malformed or insecure entry is dropped. With no
 usable relay, the chat entry points render an unavailable notice.
 
 `/chat/settings/relays` lists the configured relays with per-relay read and write toggles, a
@@ -207,19 +207,6 @@ Nothing is on chain and nothing is on a Superhero server.
 | Relay connection timeout | 5 s |
 | Online-status timeout | 5 min |
 
-## Quali.chat rooms
-
-Besides the in-app Nostr chat, each token page links out to rooms on Quali.chat:
-
-| Surface | Technology | Where |
-| --- | --- | --- |
-| In-app chat | Nostr, NIP-29 and NIP-04, relay `wss://relay.superhero.chat` | `/chat` and its sub-routes |
-| Quali.chat rooms | Matrix — `m.room.message` events, `m.text` message types, rooms addressed as `#ROOM:quali.chat` | Linked from the token page |
-
-The token page offers a public room and a holders-only private room on `app.quali.chat`, named
-from the token's name and address. Those are outbound links to a separate product, not the
-Nostr client.
-
 ## What chat is not
 
 - **Not permanent.** A relay can drop history, go away, or refuse to serve you. Nothing is
@@ -232,11 +219,11 @@ Nostr client.
 
 ## Related
 
-- [SuperheroID](/identity/superhero-id) — the profile's `nostr` field and how it is linked.
-- [Moderation](/social/moderation) — the `CommunityManagement` state the eligibility pipeline
+- [SuperheroID](/identity/superhero-id): the profile's `nostr` field and how it is linked.
+- [Moderation](/social/moderation): the `CommunityManagement` state the eligibility pipeline
   reads, and what a mute does to a room.
-- [Notifications](/social/notifications) — `room-membership` and `room-messages` are two of the
+- [Notifications](/social/notifications): `room-membership` and `room-messages` are two of the
   notification types.
-- [Tokens overview](/tokens/overview) — a room exists because a token does.
-- [NIP-29: relay-based groups](https://github.com/nostr-protocol/nips/blob/master/29.md) — the
+- [Tokens overview](/tokens/overview): a room exists because a token does.
+- [NIP-29: relay-based groups](https://github.com/nostr-protocol/nips/blob/master/29.md): the
   specification behind community rooms.

@@ -12,13 +12,13 @@ having chosen it.
 
 ## Which build this is
 
-It is the web build of Superhero Wallet — the same wallet as the browser extension and the native
+It is the web build of Superhero Wallet: the same wallet as the browser extension and the native
 apps, served differently. Three consequences of "it is a web page":
 
 - Its storage is `localStorage` on the `wallet.superhero.com` origin, with the seed phrase
   encrypted under a key derived from your wallet password. Clearing site data for that origin
   removes the wallet from this browser; your seed phrase brings it back.
-- It is installable as a PWA. Installing it does not change what it can do — an installed PWA is
+- It is installable as a PWA. Installing it does not change what it can do. An installed PWA is
   still the web build.
 - It is the deep-link endpoint every other Superhero surface points at.
 
@@ -54,7 +54,7 @@ bnb, avalanche, polygonPos and dogecoin. In particular you can:
 | --- | --- | --- | --- |
 | Announce itself to any æpp page automatically | Yes, via a content script | **No** | No |
 | Be embedded by an æpp in an iframe | Not applicable | **Yes** | No |
-| Be addressed by an æpp over the `x-success` deep-link API | No — an extension has no public URL | **Yes**, this is the canonical endpoint | Yes, via `superhero://` and universal links |
+| Be addressed by an æpp over the `x-success` deep-link API | No, an extension has no public URL | **Yes**, this is the canonical endpoint | Yes, via `superhero://` and universal links |
 | Ledger over WebUSB | Chromium only | **Yes** (Chromium only in practice) | No |
 | AirGap Vault pairing and signing | Yes | **Yes** | Yes |
 | Unlock with biometrics | No | **No** | Yes |
@@ -64,7 +64,7 @@ bnb, avalanche, polygonPos and dogecoin. In particular you can:
 
 The first row is the one that matters. **A hosted page cannot inject itself into someone else's
 site.** The extension runs a content script on every page that proxies AEX-2 messages between the
-æpp and the wallet, so an æpp finds the extension simply by listening. The web build can only be
+æpp and the wallet, so an æpp finds the extension by listening. The web build can only be
 reached two ways:
 
 - **Embedded as an iframe.** When it detects a parent window, it opens a message connection to the
@@ -78,7 +78,7 @@ Biometric unlock and the dæpp browser are native-only features.
 
 ### AirGap works here
 
-Cold signing from an AirGap Vault is available in the web build, not only in the installed
+Cold signing from an AirGap Vault is available in the web build as well as in the installed
 surfaces. Pairing and signing are QR-based, and every screen that shows a QR code also accepts the
 `airgap-wallet://?ur=…` string pasted by hand, so it works in a browser with no camera. Set AirGap
 Vault to **QR code V3**; V2 payloads will not deserialize. AirGap accounts can sign transactions
@@ -117,13 +117,13 @@ Both need no install:
   on every signature.
 
 If you want one wallet used by several æpps, take the web wallet. If you want the shortest path
-into Superhero on a device you will keep using, take the built-in wallet — after reading what its
+into Superhero on a device you will keep using, take the built-in wallet, after reading what its
 storage does and does not survive in [The Built-In Wallet](/wallets/built-in-wallet).
 
 ## Related
 
-- [Connecting a Wallet](/wallets/connecting) — the fallback chain that lands you here, and the callback route that brings results back.
-- [Choosing a Wallet](/wallets/choosing-a-wallet) — the full comparison.
-- [Browser Extension](/wallets/superhero-wallet-extension) — the install-once alternative on desktop.
-- [Claim Your .chain Name](/getting-started/claim-name) — the sponsored claim, and where extra names are claimed.
-- [Superhero Wallet](https://wallet.superhero.com/) — the wallet itself.
+- [Connecting a Wallet](/wallets/connecting): the fallback chain that lands you here, and the callback route that brings results back.
+- [Choosing a Wallet](/wallets/choosing-a-wallet): the full comparison.
+- [Browser Extension](/wallets/superhero-wallet-extension): the install-once alternative on desktop.
+- [Claim Your .chain Name](/getting-started/claim-name): the sponsored claim, and where extra names are claimed.
+- [Superhero Wallet](https://wallet.superhero.com/): the wallet itself.

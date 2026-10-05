@@ -19,7 +19,7 @@ The two systems use separate contracts, separate voting power and separate parts
 | Contracts | `DAO.aes`, `DAOVote.aes` | `Registry.aes`, `Poll.aes` |
 | Scope | One community token's treasury | The æternity ecosystem as a whole |
 | Voting power | That community's AEX-9 token balance | AE balance, plus delegated AE |
-| Tokens locked while voting | Yes — an AEX-9 allowance locks your stake | No |
+| Tokens locked while voting | Yes. An AEX-9 allowance locks your stake | No |
 | Ballot shape | Binary: in favour or against | Any list of at least two options |
 | Outcome | Executes an on-chain action | Signalling; no automatic execution |
 | Where in the app | `/trends/daos` and `/trends/dao/:saleAddress` | `/voting` |
@@ -44,7 +44,7 @@ A community's contracts are deployed together, in one transaction, by
 
 ## The lifecycle
 
-1. Trading fees accumulate in the DAO treasury — 0.5% of every buy.
+1. Trading fees accumulate in the DAO treasury: 0.5% of every buy.
 2. A holder at or above the community threshold opens a vote, paying **555 AE** to the DAO.
 3. The vote stays open for **two weeks**, measured in key-blocks.
 4. Holders vote for or against by locking tokens in the vote contract.
@@ -56,19 +56,19 @@ A community's contracts are deployed together, in one transaction, by
 
 ## In this section
 
-- [How DAOs Work](/dao/overview) — the full lifecycle, the contracts involved, and what happens at each step.
-- [The Treasury](/dao/treasury) — where the money comes from, how to read the balance, and what the 555 AE payment does.
-- [Proposals and Vote Subjects](/dao/proposals) — the closed set of things a DAO can decide, with the exact parameter shapes.
-- [Voting](/dao/voting) — casting a vote, the AEX-9 allowance step, and what locking your tokens means.
-- [Quorum and Thresholds](/dao/quorum-and-thresholds) — every number in one reference table.
-- [Moderators and Write Thresholds](/dao/moderators) — how governance controls who can post in a community.
-- [Replaceable DAOs](/dao/replaceable-dao) — the interface a custom DAO must satisfy, and the migration path.
-- [The ProtocolDAO Token](/dao/protocol-dao) — the platform-wide token minted on every buy.
+- [How DAOs Work](/dao/overview): the full lifecycle, the contracts involved, and what happens at each step.
+- [The Treasury](/dao/treasury): where the money comes from, how to read the balance, and what the 555 AE payment does.
+- [Proposals and Vote Subjects](/dao/proposals): the closed set of things a DAO can decide, with the exact parameter shapes.
+- [Voting](/dao/voting): casting a vote, the AEX-9 allowance step, and what locking your tokens means.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds): every number in one reference table.
+- [Moderators and Write Thresholds](/dao/moderators): how governance controls who can post in a community.
+- [Replaceable DAOs](/dao/replaceable-dao): the interface a custom DAO must satisfy, and the migration path.
+- [The ProtocolDAO Token](/dao/protocol-dao): the platform-wide token minted on every buy.
 
 ## Related
 
-- [Governance and Voting](/governance) — æternity-wide stake-weighted polls at `/voting`.
-- [DAO contract reference](/contracts/dao) — every `DAO.aes` entrypoint and signature.
-- [DAO Vote contract reference](/contracts/dao-vote) — every `DAOVote.aes` entrypoint and signature.
-- [Bonding curve](/tokens/bonding-curve) — how the buy and sell prices that generate treasury fees are computed.
-- [Browse every DAO](https://superhero.com/trends/daos) — the live list of community treasuries.
+- [Governance and Voting](/governance): æternity-wide stake-weighted polls at `/voting`.
+- [DAO contract reference](/contracts/dao): every `DAO.aes` entrypoint and signature.
+- [DAO Vote contract reference](/contracts/dao-vote): every `DAOVote.aes` entrypoint and signature.
+- [Bonding curve](/tokens/bonding-curve): how the buy and sell prices that generate treasury fees are computed.
+- [Browse every DAO](https://superhero.com/trends/daos): the live list of community treasuries.

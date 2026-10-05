@@ -17,17 +17,17 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | `GET /api/transactions` | `token_address`, `account_address`, `includes`, `limit`, `page` | Paginated trade rows |
 | `GET /api/transactions/by-hash` | `tx_hash` | One trade row |
 | `GET /api/tokens/{address}/transactions` | `interval`, `start_date`, `end_date`, `convertTo`, `mode` | Aggregated series for one token |
-| `GET /api/debug/failed-transactions` | — | The 500 most recent indexer failures |
+| `GET /api/debug/failed-transactions` | None | The 500 most recent indexer failures |
 
-These are Superhero trade records, not raw chain transactions. For arbitrary chain history —
-transfers, contract calls, name transactions — use the middleware; see
+These are Superhero trade records, not raw chain transactions. For arbitrary chain history
+(transfers, contract calls, name transactions), use the middleware; see
 [Node & Middleware](/api-reference/node-and-middleware).
 
 ## `GET /api/transactions`
 
 | Parameter | Notes |
 | --- | --- |
-| `token_address` | A token sale address, AEX-9 address **or name** — resolved through the same lookup as `/api/tokens/{address}` |
+| `token_address` | A token sale address, AEX-9 address **or name**, resolved through the same lookup as `/api/tokens/{address}` |
 | `account_address` | Filter to trades made by this `ak_...`. A malformed address is a 400 |
 | `includes` | Only `token`. Inlines the full token object on each row |
 | `limit`, `page` | `limit` defaults to 100 and is capped at 100 |
@@ -60,19 +60,19 @@ each row even without `includes=token`.
 | --- | --- | --- |
 | `tx_hash` | string | `th_...`, the primary key |
 | `sale_address` | string | `ct_...` of the token sale contract this trade hit |
-| `tx_type` | string | `buy`, `sell` or `create_community` — see below |
+| `tx_type` | string | `buy`, `sell` or `create_community` (see below) |
 | `block_height` | number | Height of the including block |
 | `address` | string | The trader's `ak_...` |
 | `verified` | boolean | The indexer settled this row: no revalidation pending and the transaction is at least 5 hours old |
 | `volume` | string | Token quantity traded, in **whole tokens** |
 | `protocol_reward` | string | Protocol-fee mint attached to the trade, in **whole tokens** |
 | `amount` | `PriceDto` | Total spent (buy) or received (sell), in **AE** |
-| `unit_price` | `PriceDto` | `amount / volume` — the realised price per token, in **AE** |
+| `unit_price` | `PriceDto` | `amount / volume`, the realised price per token, in **AE** |
 | `previous_buy_price` | `PriceDto` or null | Curve buy price before this trade, in **AE** |
 | `buy_price` | `PriceDto` | Curve buy price after this trade, in **AE** |
 | `sell_price` | `PriceDto` or null | Legacy field |
 | `total_supply` | string | Token supply after the trade, in **whole tokens** |
-| `market_cap` | `PriceDto` or null | `buy_price * total_supply` — in **AE**, not aettos |
+| `market_cap` | `PriceDto` or null | `buy_price * total_supply`, in **AE**, not aettos |
 | `created_at` | string | ISO 8601, the micro-block time |
 
 With `includes=token`, a `token` object carrying the full token row is added.
@@ -84,7 +84,7 @@ Nothing on a trade row needs dividing by 1e18, even though the field names repea
 
 - `volume`, `protocol_reward` and `total_supply` are in **whole tokens**, not base units.
 - `amount`, `unit_price`, `buy_price` and `previous_buy_price` are in **AE**.
-- `market_cap` is in **AE** — whereas `TokenDto.market_cap` is in aettos. The two differ by
+- `market_cap` is in **AE**, whereas `TokenDto.market_cap` is in aettos. The two differ by
   1e18.
 
 ## `tx_type`
@@ -97,7 +97,7 @@ Nothing on a trade row needs dividing by 1e18, even though the field names repea
 | `sell` | A sale back into the curve |
 | `create_community` | Token creation. Carries the creator's initial purchase, so it has a non-zero `volume` and `amount` and counts as a buy |
 
-Nothing else — a DEX swap, an AE transfer, a governance vote — is indexed here, and reverted
+Nothing else (a DEX swap, an AE transfer, a governance vote) is indexed here, and reverted
 transactions are skipped, so every row is a trade that succeeded.
 
 **Treat `create_community` as a buy.** PnL, volume and trending all use
@@ -122,7 +122,7 @@ hash as a path segment: `GET /api/dex/transactions/{txHash}`.
 
 ## `GET /api/tokens/{address}/transactions`
 
-Aggregated rather than row-level — what charts are built from.
+These are aggregated rather than row-level, and charts are built from them.
 
 | Parameter | Notes |
 | --- | --- |
@@ -135,7 +135,7 @@ Aggregated rather than row-level — what charts are built from.
 curl -s "https://api.superhero.com/api/tokens/SUPERHERO/transactions?interval=3600&mode=aggregated&convertTo=usd"
 ```
 
-For OHLC candles, `GET /api/tokens/{address}/history` is the better endpoint — see
+For OHLC candles, `GET /api/tokens/{address}/history` is the better endpoint. See
 [Tokens](/api-reference/tokens).
 
 ## Live trades
@@ -174,9 +174,9 @@ the indexer failed on it.
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — the units table and the shared pagination envelope
-- [Tokens API](/api-reference/tokens) — the `TokenDto` that `includes=token` inlines
-- [Accounts API](/api-reference/accounts) — the aggregated PnL these trades roll up into
-- [WebSocket API](/api-reference/websocket) — push instead of poll for the same records
-- [Node & Middleware](/api-reference/node-and-middleware) — chain history beyond Superhero trades
-- [æScan](https://aescan.io/) — the block explorer for resolving a `tx_hash`
+- [API Conventions](/api-reference/conventions): the units table and the shared pagination envelope
+- [Tokens API](/api-reference/tokens): the `TokenDto` that `includes=token` inlines
+- [Accounts API](/api-reference/accounts): the aggregated PnL these trades roll up into
+- [WebSocket API](/api-reference/websocket): push instead of poll for the same records
+- [Node & Middleware](/api-reference/node-and-middleware): chain history beyond Superhero trades
+- [æScan](https://aescan.io/): the block explorer for resolving a `tx_hash`

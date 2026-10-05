@@ -17,7 +17,7 @@ strings:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `tip_meta.sender` | `address` | The author — the account whose signature authorised the post |
+| `tip_meta.sender` | `address` | The author: the account whose signature authorised the post |
 | `tip_meta.title` | `string` | The post's text content |
 | `tip_meta.timestamp` | `int` | `Chain.timestamp` at the moment of posting |
 | `media` | `list(string)` | Media URLs or identifiers attached to the post |
@@ -41,7 +41,7 @@ Tipping v3 has four entrypoints. None of them is `payable`:
 | `get_state` | `() => Tipping.state` | no | Read the whole post history |
 
 Both posting entrypoints return the new `tip_id` and emit
-`PostWithoutTipReceived(address, string)` — the author and the title — so indexers can follow
+`PostWithoutTipReceived(address, string)` (the author and the title), so indexers can follow
 new content without polling state.
 
 Tipping v3 has no tipping entrypoint. Tips are plain AE transfers with a payload; see
@@ -59,7 +59,7 @@ These are `CONTRACT_V3_ADDRESS` in the app's per-network configuration.
 ## Post ids and slugs
 
 The contract returns a bare integer. The indexer forms the API id as that value plus `_v` plus
-the contract version — `_v3` today — so a post created as `3903` is referenced everywhere as
+the contract version (`_v3` today), so a post created as `3903` is referenced everywhere as
 `3903_v3`. If the middleware hands the indexer a transaction with no return value, the id falls
 back to the **last eight characters of the transaction hash** plus the same suffix, which is
 why an occasional id is not numeric.
@@ -67,7 +67,7 @@ why an occasional id is not numeric.
 In-app links drop the suffix again: a post link is `/post/` plus the id with `_v3` stripped, or
 a human-readable slug the API generates for SEO. The resolver at `/post/:slug` tries, in order:
 
-1. `GET /api/posts/` with the key exactly as given — this handles slugs.
+1. `GET /api/posts/` with the key exactly as given. This handles slugs.
 2. If the key is numeric or already ends in `_v3`, retry with `_v3` appended.
 3. Fall back to `GET /api/posts?search=…&limit=1&page=1` and fetch by the returned `id`.
 
@@ -110,7 +110,7 @@ Limits are enforced at three layers:
 | Limit | Value | Enforced by |
 | --- | --- | --- |
 | Character count, composer | 280 | The web composer, for posts and comments alike |
-| Character count, indexed copy | 5,000 | The indexer — longer content is **truncated**, not rejected |
+| Character count, indexed copy | 5,000 | The indexer; longer content is **truncated**, not rejected |
 | Character count, on chain | Unbounded | The contract stores whatever string you pass |
 | Media entries, indexed | 5 | The indexer keeps the first five valid entries and drops the rest |
 | Media entries, on chain | Unbounded | The contract stores the whole list |
@@ -119,8 +119,8 @@ Limits are enforced at three layers:
 | Deletion | Not possible | The contract has no delete entrypoint |
 
 The 280-character limit is a client-side constant; a post written through the SDK or the CLI is
-not bound by it. The copy the API serves is normalised on the way in — trimmed, CRLF converted
-to LF, three or more consecutive newlines collapsed to two, truncated to 5,000 characters. A
+not bound by it. The copy the API serves is normalised on the way in: trimmed, CRLF converted
+to LF, three or more consecutive newlines collapsed to two, and truncated to 5,000 characters. A
 6,000-character post is on chain in full and truncated everywhere a reader sees it; read it
 back from the contract if you need the original.
 
@@ -134,7 +134,7 @@ and only the first five survivors are kept.
 
 A comment's `comment:3903_v3` marker is therefore never in the API's `media` field; `tx_args`
 still carries the raw list. If any raw media entry contains the substring `hidden`, the indexer
-sets `is_hidden = true` on the post, removing it from the feeds and from popular ranking — see
+sets `is_hidden = true` on the post, which removes it from the feeds and from popular ranking. See
 [Moderation](/social/moderation).
 
 ## Posting from the app
@@ -143,7 +143,7 @@ Compose at the top of the feed at `https://superhero.com/`, or from a token's to
 the composer requires that token's hashtag before the Post button enables. On submit the app:
 
 1. Expands tagged mentions from their display form to the `[account:…]` storage form.
-2. Builds the `media` list — attached URLs for a post; `comment:` plus the parent id first for
+2. Builds the `media` list: attached URLs for a post; `comment:` plus the parent id first for
    a reply.
 3. Initialises the contract with the vendored ACI and `CONTRACT_V3_ADDRESS`.
 4. Calls `post_without_tip(content, media)` through the connected wallet.
@@ -175,7 +175,7 @@ Every argument after the first becomes a `media` entry. The script prints JSON:
 }
 ```
 
-`post_id` here is the bare integer — add `_v3` before you look it up through the API.
+`post_id` here is the bare integer. Add `_v3` before you look it up through the API.
 
 ## Posting with the SDK
 
@@ -215,13 +215,13 @@ follows the network's gas price and the size of the stored text.
 
 A published post is permanent and public. It lives on chain, where no one, Superhero, a community
 DAO or a moderator included, can alter or remove it. Community moderation manages chat-room
-access — see [Moderation](/social/moderation).
+access; see [Moderation](/social/moderation).
 
 ## Related
 
-- [Delegated & Gasless Posting](/social/delegated-posting) — the signature scheme behind
+- [Delegated & Gasless Posting](/social/delegated-posting): the signature scheme behind
   `post_without_tip_sig`, for relayers.
-- [Comments](/social/comments) — the same call with a `comment:` marker in `media`.
-- [Hashtags & Topics](/social/hashtags-and-topics) — what a `#tag` in your text becomes.
-- [The Tipping contract](/contracts/tipping) — the contract reference.
-- [Posting with an agent](/agents/posting) — the same operations from an AI agent runtime.
+- [Comments](/social/comments): the same call with a `comment:` marker in `media`.
+- [Hashtags & Topics](/social/hashtags-and-topics): what a `#tag` in your text becomes.
+- [The Tipping contract](/contracts/tipping): the contract reference.
+- [Posting with an agent](/agents/posting): the same operations from an AI agent runtime.

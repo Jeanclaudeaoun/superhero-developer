@@ -16,7 +16,7 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/accounts` | `search`, `order_by`, `order_direction`, `has_nostr`, `limit`, `page` | Paginated account rows |
-| `GET /api/accounts/{address}` | — | One account aggregate |
+| `GET /api/accounts/{address}` | None | One account aggregate |
 | `GET /api/accounts/search` | `q`, `limit` | Typeahead matches |
 | `GET /api/accounts/chain-names` | `addresses` | Batch address to `.chain` name map |
 | `GET /api/accounts/by-nostr` | `pubkeys` | Nostr pubkey to account map |
@@ -115,8 +115,8 @@ a brand-new trader can be found by exact address.
 | `order_direction` | `ASC` or `DESC`, default `DESC` |
 | `search` | Case-insensitive match on the token's name |
 | `factory_address` | Restrict to one factory. **Without it the list is restricted to the current factory** |
-| `creator_address` | Switches modes — see below |
-| `owner_address` | Switches modes — see below |
+| `creator_address` | Switches modes (see below) |
+| `owner_address` | Switches modes (see below) |
 | `limit`, `page` | `limit` defaults to 100, must be 1–100 |
 
 Each item is a holder row with a `token` object attached, carrying a freshly computed `rank`:
@@ -130,15 +130,15 @@ Each item is a holder row with a `token` object attached, carrying a freshly com
 }
 ```
 
-`balance` is in **token base units** — divide by 10 raised to the token's `decimals`. Because
+`balance` is in **token base units**. Divide by 10 raised to the token's `decimals`. Because
 `limit` is capped at 100, an unfiltered fetch returns the top 100 holdings by balance; use
 `search` to narrow.
 
 ### `creator_address` and `owner_address` change the query
 
 Pass either and the endpoint lists **tokens the path address created or owns**, regardless of
-balance, with whatever balance exists (or the string `"0"`). The value acts only as a flag — the
-filter is on the **path** address — so pass the same address as the path.
+balance, with whatever balance exists (or the string `"0"`). The value acts only as a flag (the
+filter is on the **path** address), so pass the same address as the path.
 
 ```bash
 # Tokens the account holds
@@ -158,12 +158,12 @@ Returns a **bare JSON array** of snapshots.
 | `endDate` | now | ISO 8601. Capped at the current time |
 | `interval` | `86400` | Snapshot spacing **in seconds**; 86400 is daily. Must be a positive integer |
 | `convertTo` | `ae` | One of the nine currency codes; anything else is a 400 |
-| `include` | — | Comma-separated. `pnl` adds aggregate `total_pnl`; `pnl-range` switches to daily-window PnL instead of cumulative |
+| `include` | None | Comma-separated. `pnl` adds aggregate `total_pnl`; `pnl-range` switches to daily-window PnL instead of cumulative |
 
 Snapshots are reconstructed at request time: the range is walked in `interval`-second steps
 (future timestamps dropped, at most 100,000 points), each timestamp is resolved to a block
 height, and the AE balance, token holdings and PnL are computed at that height. Every point costs
-work, so this is the slowest endpoint in the API — bound it with `startDate` and `endDate`.
+work, so this is the slowest endpoint in the API. Bound it with `startDate` and `endDate`.
 History reaches back to the factory's deployment height.
 
 | Field | Type | Meaning |
@@ -181,7 +181,7 @@ History reaches back to the factory's deployment height.
 | `total_pnl` | `TotalPnlDto` | Only when `include` requests it |
 | `tokens_pnl` | object | Per-token breakdown keyed by `sale_address`. **Only** from `/portfolio/tokens/history` |
 
-These are plain numbers already in AE and USD — no 1e18 division.
+These are plain numbers already in AE and USD, so there is no 1e18 division.
 
 `TotalPnlDto`:
 
@@ -224,7 +224,7 @@ Realized trading quality over a date range. `startDate` defaults to 30 days ago 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `top_win` | `PnlAmountDto` | Largest single realized gain from any sell in the range |
-| `unrealized_profit` | `PnlAmountDto` | Current unrealized profit across all tokens still held — all-time holdings, not date-filtered |
+| `unrealized_profit` | `PnlAmountDto` | Current unrealized profit across all tokens still held. Covers all-time holdings, not date-filtered |
 | `win_rate` | number | Percentage of sells in the range that produced a positive gain |
 | `avg_duration_seconds` | number | Average hold time from first buy to sell |
 | `total_trades` | number | Sell transactions in the range |
@@ -258,7 +258,7 @@ Items carry `address`, `chain_name`, `aum_usd`, `pnl_usd`, `roi_pct`, `mdd_pct`,
 `sell_count`, `volume_usd`, `created_tokens_count`, `owned_trends_count` and
 `portfolio_value_usd_sparkline` (an array of `[timestamp, value]` pairs).
 
-`mdd_pct` is **maximum drawdown as a positive percentage** — the largest `(peak - value) / peak`
+`mdd_pct` is **maximum drawdown as a positive percentage**: the largest `(peak - value) / peak`
 along the sparkline, times 100. 0 means the portfolio never fell from a peak; larger is worse,
 which is why `sortDir` defaults to `ASC` for it.
 
@@ -269,8 +269,8 @@ seconds, and `meta.timeFilter.start` / `end` reflect when the cache entry was fi
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — the date-parameter casing split and the leaderboard's `meta`
-- [Tokens API](/api-reference/tokens) — the `TokenDto` nested inside each holding
-- [Transactions API](/api-reference/transactions) — the individual trades these aggregates are built from
-- [Profile API](/api-reference/profile) — writing to the `links` block
-- [Portfolio](/tokens/portfolio) — what these numbers mean for a trader
+- [API Conventions](/api-reference/conventions): the date-parameter casing split and the leaderboard's `meta`
+- [Tokens API](/api-reference/tokens): the `TokenDto` nested inside each holding
+- [Transactions API](/api-reference/transactions): the individual trades these aggregates are built from
+- [Profile API](/api-reference/profile): writing to the `links` block
+- [Portfolio](/tokens/portfolio): what these numbers mean for a trader

@@ -66,7 +66,7 @@ Lists every pair, searchable by token name or symbol, with two sort keys:
 | `transactions_count` | Busiest pools first |
 | `created_at` | Newest pools first |
 
-A `?tokenAddress=` query parameter filters to pools containing that token — this is how a token
+A `?tokenAddress=` query parameter filters to pools containing that token. This is how a token
 detail page links through to its pools.
 
 ```text
@@ -92,9 +92,9 @@ and appending `/providers` returns the pairs that could serve those two tokens.
 
 A filterable feed of DEX transactions. Three filters combine:
 
-- **Transaction type** — one of the router functions below, or All.
-- **Pair address** — a `ct_` pair contract.
-- **Account address** — one wallet's activity.
+- **Transaction type**: one of the router functions below, or All.
+- **Pair address**: a `ct_` pair contract.
+- **Account address**: one wallet's activity.
 
 | Group | Types |
 | --- | --- |
@@ -121,8 +121,8 @@ nothing to index; the feed is a record of trades that happened.
 
 ## How the figures are computed
 
-**Windows.** Volume and price change come in three rolling windows — `24h`, `7d` and `30d`,
-measured back from the moment the summary was last recomputed — plus an all-time total.
+**Windows.** Volume and price change come in three rolling windows (`24h`, `7d` and `30d`,
+measured back from the moment the summary was last recomputed) plus an all-time total.
 
 **Everything is aggregated in AE, then converted.** Per-pair volumes are summed, converted to an
 AE amount using the pair's own reserve ratio and token decimals, and only then multiplied by the
@@ -170,7 +170,7 @@ See [the full comparison](/defi) on the DeFi overview.
 
 ## Related
 
-- [Swapping](/defi/swap) — pick a pair here, then trade it.
-- [Liquidity Pools](/defi/pools) — check a pool's depth and volume before providing.
-- [DEX API](/api-reference/dex) — the full REST reference for these endpoints.
-- [Bonding curves](/tokens/bonding-curve) — the other market, and why its prices differ.
+- [Swapping](/defi/swap): pick a pair here, then trade it.
+- [Liquidity Pools](/defi/pools): check a pool's depth and volume before providing.
+- [DEX API](/api-reference/dex): the full REST reference for these endpoints.
+- [Bonding curves](/tokens/bonding-curve): the other market, and why its prices differ.

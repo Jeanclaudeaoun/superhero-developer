@@ -31,8 +31,8 @@ Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityMan
 
 | Argument | Value at creation |
 | --- | --- |
-| `initial_moderator` | `Call.caller` — whoever created the community |
-| `minimum_token_threshold` | `10 ^ 18` — exactly one whole token (`decimals()` is `18`) |
+| `initial_moderator` | `Call.caller`, whoever created the community |
+| `minimum_token_threshold` | `10 ^ 18`, exactly one whole token (`decimals()` is `18`) |
 | `is_private` | Passed through from `create_community`; the web app sends `false` |
 | `meta_info` | Passed through from `create_community` |
 
@@ -47,19 +47,19 @@ Reach the contract from the DAO with `get_community_management()`, which returns
 
 | Change | Entrypoint | Authorised by |
 | --- | --- | --- |
-| Appoint a moderator | `add_moderator(moderator)` | DAO vote — `AddModerator` |
-| Remove a moderator | `delete_moderator(moderator)` | DAO vote — `DeleteModerator` |
-| Change the write threshold | `change_minimum_token_threshold(n)` | DAO vote — `ChangeMinimumTokenThreshold` |
-| Replace the metadata map | `change_meta_info(meta_info)` | DAO vote — `ChangeMetaInfo` |
+| Appoint a moderator | `add_moderator(moderator)` | DAO vote (`AddModerator`) |
+| Remove a moderator | `delete_moderator(moderator)` | DAO vote (`DeleteModerator`) |
+| Change the write threshold | `change_minimum_token_threshold(n)` | DAO vote (`ChangeMinimumTokenThreshold`) |
+| Replace the metadata map | `change_meta_info(meta_info)` | DAO vote (`ChangeMetaInfo`) |
 | Mute an account | `mute_user_id(user_id)` | A moderator |
 | Unmute an account | `unmute_user_id(user_id)` | A moderator |
-| Transfer ownership | `set_owner(owner)` | The owner — in practice only a `ChangeDAO` vote |
+| Transfer ownership | `set_owner(owner)` | The owner; in practice only a `ChangeDAO` vote |
 
-Moderators mute and unmute. Everything structural — who the moderators are, what the
-threshold is, what the community says about itself — is a token-holder decision that goes
+Moderators mute and unmute. Everything structural (who the moderators are, what the
+threshold is, what the community says about itself) is a token-holder decision that goes
 through a proposal and a two-week vote. A moderator cannot appoint another moderator, cannot
-change the threshold, and cannot remove themselves from the set. Day-to-day moderation is
-fast and delegated; the moderator roster is slow and collective.
+change the threshold, and cannot remove themselves from the set. Muting is
+quick and needs no vote, while changing the moderator roster needs a full proposal.
 
 The `owner` of `CommunityManagement` is the DAO, which is how a passed vote reaches these
 entrypoints. `set_owner` is not one of the seven vote subjects; the only path that calls it
@@ -79,12 +79,12 @@ Read it directly:
 CommunityManagement.minimum_token_threshold() : int
 ```
 
-The value is in the token's smallest unit. Divide by `10^decimals` — read `decimals` from the
-token's `meta_info()` — before comparing it to a balance shown in a wallet. Every community
+The value is in the token's smallest unit. Divide by `10^decimals` (read `decimals` from the
+token's `meta_info()`) before comparing it to a balance shown in a wallet. Every community
 starts at `10^18`, one whole token, until a `ChangeMinimumTokenThreshold` vote moves it.
 
 The contract stores the threshold and hands it out. The app and the backend enforce it for
-posting — see [Moderation](/social/moderation) — and `DAO.add_vote` enforces it for
+posting (see [Moderation](/social/moderation)), and `DAO.add_vote` enforces it for
 proposals, requiring the proposer's balance to clear it.
 
 ### Choosing one
@@ -126,7 +126,7 @@ contract. Moderation here is membership control, not content control. See
 [Moderation](/social/moderation).
 
 Muting is not governance. A moderator does not need a vote to mute, and a mute is not
-reversed by vote — only a moderator's `unmute_user_id` changes it.
+reversed by vote. Only a moderator's `unmute_user_id` changes it.
 
 ## The `is_private` flag
 
@@ -165,7 +165,7 @@ CommunityManagement.meta_info = map(string, string)
 ```
 
 A free-form string map holding the community's descriptive metadata. `change_meta_info`
-replaces it wholesale, through a `ChangeMetaInfo` vote — a proposal that means to change one
+replaces it wholesale, through a `ChangeMetaInfo` vote, so a proposal that means to change one
 key must carry every other key unchanged. There is no per-key update entrypoint.
 
 ## Events
@@ -188,9 +188,9 @@ later undone. See [Contract events](/contracts/events).
 
 ## Related
 
-- [Proposals and Vote Subjects](/dao/proposals) — the four subjects that reach this contract, with their parameter shapes.
-- [How DAOs Work](/dao/overview) — how a moderator appointment travels from proposal to execution.
-- [Quorum and Thresholds](/dao/quorum-and-thresholds) — the vote a moderator change has to clear.
-- [Moderation](/social/moderation) — how muting and the threshold are applied in the app.
-- [Community Management contract reference](/contracts/community-management) — the full entrypoint table.
-- [Replaceable DAOs](/dao/replaceable-dao) — a `ChangeDAO` migration transfers this contract's ownership too.
+- [Proposals and Vote Subjects](/dao/proposals): the four subjects that reach this contract, with their parameter shapes.
+- [How DAOs Work](/dao/overview): how a moderator appointment travels from proposal to execution.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds): the vote a moderator change has to clear.
+- [Moderation](/social/moderation): how muting and the threshold are applied in the app.
+- [Community Management contract reference](/contracts/community-management): the full entrypoint table.
+- [Replaceable DAOs](/dao/replaceable-dao): a `ChangeDAO` migration transfers this contract's ownership too.

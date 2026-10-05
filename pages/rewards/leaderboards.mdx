@@ -19,10 +19,10 @@ query parameter.
 
 | Metric | Parameter | What it measures | Sort direction |
 | --- | --- | --- | --- |
-| PnL | `pnl` | Profit and loss over the window, in USD | Descending — highest first |
+| PnL | `pnl` | Profit and loss over the window, in USD | Descending: highest first |
 | ROI | `roi` | Return on invested capital over the window, as a percentage | Descending |
-| AUM | `aum` | Assets under management — current portfolio value, in USD | Descending |
-| MDD | `mdd` | Maximum drawdown over the window, as a percentage | **Ascending** — smallest drawdown first |
+| AUM | `aum` | Assets under management: current portfolio value, in USD | Descending |
+| MDD | `mdd` | Maximum drawdown over the window, as a percentage | **Ascending**: smallest drawdown first |
 
 MDD is the one inversion: a small maximum drawdown is a good result, so the app sends
 `sortDir=ASC` for that metric and `DESC` for the other three. If you call the endpoint
@@ -46,8 +46,8 @@ The 7d and 30d boards measure portfolio *growth*, which a deposit inflates and a
 deflates. The All board measures return on invested capital. A wallet can rank very
 differently on each.
 
-For the All window, the window-based figures — the sparkline, the maximum drawdown, and the
-buy and sell counts — cover **the last 365 days**. Only PnL and ROI are all-time.
+For the All window, the window-based figures (the sparkline, the maximum drawdown, and the
+buy and sell counts) cover **the last 365 days**. Only PnL and ROI are all-time.
 
 ## Timeframes
 
@@ -78,11 +78,11 @@ and an unparseable date disables the query. When a custom range is applied, `win
 | `portfolio_value_usd_sparkline` | The inline sparkline, an array of point pairs |
 | `volume_usd` | Present in the response; not rendered on the card |
 
-Rank is computed client-side from the page offset — `(page − 1) × 15 + index + 1` — so it is
+Rank is computed client-side from the page offset (`(page − 1) × 15 + index + 1`), so it is
 the rank within the currently selected metric and window.
 
 For a custom range, `created_tokens_count` and `owned_trends_count` are always zero, while
-`volume_usd` is populated — the reverse of the fixed windows.
+`volume_usd` is populated: the reverse of the fixed windows.
 
 ## Who appears
 
@@ -96,7 +96,7 @@ below one US dollar. Pass `minAumUsd=0` to include them.
 
 Custom ranges bypass the snapshot and compute live. The candidate pool is then the top
 addresses by USD volume of buy and sell transactions **inside that range** rather than
-all-time — sized by `maxCandidates`, default 100, maximum 500.
+all-time, sized by `maxCandidates`, default 100, maximum 500.
 
 ## Which trades count
 
@@ -123,7 +123,7 @@ Base URL is Superhero's API: `https://api.superhero.com` on mainnet.
 | `sortBy` | `pnl`, `roi`, `aum`, `mdd`. Default `pnl`. |
 | `sortDir` | `ASC` or `DESC`. Defaults to `DESC`, except `sortBy=mdd` which defaults to `ASC`. |
 | `window` | `7d`, `30d`, `all`. Default `7d`. |
-| `points` | Number of sparkline points. **Ignored for `window` requests** — the snapshot fixes it at 8 for 7d, 12 for 30d and 24 for all. For a custom range it is clamped to 2–12, default 8. |
+| `points` | Number of sparkline points. **Ignored for `window` requests**: the snapshot fixes it at 8 for 7d, 12 for 30d and 24 for all. For a custom range it is clamped to 2–12, default 8. |
 | `startDate`, `endDate` | ISO-8601, both required together, end after start. Switches to the live path; mutually exclusive with `window`. |
 | `minAumUsd` | Integer, 0 or more. **Defaults to 1**, which excludes near-zero portfolios. |
 | `tradingOnly` | Boolean. Custom ranges only: bases PnL and ROI on realised trading PnL rather than portfolio value change. |
@@ -148,7 +148,7 @@ curl "https://api.superhero.com/api/accounts/leaderboard?sortBy=mdd&sortDir=ASC&
 ## Freshness
 
 **Server side**, a snapshot job runs every 10 minutes and recomputes all three windows in
-sequence — 7d, then 30d, then all — against a single reference timestamp captured at the
+sequence (7d, then 30d, then all) against a single reference timestamp captured at the
 start of the run. Each window's rows are replaced inside one transaction, so a read never sees
 a half-built board. A run still going when the next tick fires is skipped rather than queued.
 
@@ -162,7 +162,7 @@ windows is served from cache.
 
 ## How to climb it
 
-- Trade trend tokens regularly to build up volume — the top 100 by lifetime USD volume is the
+- Trade trend tokens regularly to build up volume. The top 100 by lifetime USD volume is the
   entry condition for every metric.
 - Keep PnL and ROI positive over time.
 - Own and hold trending tokens to grow AUM.
@@ -172,7 +172,7 @@ leaderboard place is a certain cost against an uncertain ranking.
 
 ## Related
 
-- [Rewards & Affiliation](/rewards) — the two reward programs, neither of which feeds this board.
-- [Portfolio](/tokens/portfolio) — how an individual account's holdings and performance are presented.
-- [Accounts API](/api-reference/accounts) — the wider account and leaderboard REST surface.
-- [Trading leaderboard on superhero.com](https://superhero.com/trends/leaderboard) — the live board with its filters.
+- [Rewards & Affiliation](/rewards): the two reward programs, neither of which feeds this board.
+- [Portfolio](/tokens/portfolio): how an individual account's holdings and performance are presented.
+- [Accounts API](/api-reference/accounts): the wider account and leaderboard REST surface.
+- [Trading leaderboard on superhero.com](https://superhero.com/trends/leaderboard): the live board with its filters.

@@ -20,7 +20,7 @@ converts the time periods into key-blocks.
 | Participation (quorum) | At least 10% of total supply **at execution time** | `(total_vote_stake * 100) / token_total_supply >= 10` |
 | Execution window | 960 key-blocks after the close, about 2 days | `vote.close_height() + state.vote_timeout >= Chain.block_height` |
 | Who can execute | Any account, via `DAO.apply_vote_subject(vote_seq_id)` | No caller check |
-| Ballot | Binary — in favour or against | `vote_option = bool` |
+| Ballot | Binary: in favour or against | `vote_option = bool` |
 | Voting power | Linear in tokens staked; tokens are locked while the vote stands | `vote_state[option] + amount` |
 | Description length | At most 300 characters | `String.length(metadata.description) =< 300` |
 | One vote per address | A second `vote` is rejected, not merged | `VOTER_ALREADY_VOTED` |
@@ -33,8 +33,8 @@ when applied.
 
 æternity separates leader election from transaction production. **Key-blocks** are the
 proof-of-work blocks, targeted at one every **three minutes**; micro-blocks carry the
-transactions and appear about every three seconds between them. Contract heights — including
-`DAOVote.close_height` and `DAO.vote_timeout` — are key-block heights, so compute with the
+transactions and appear about every three seconds between them. Contract heights, including
+`DAOVote.close_height` and `DAO.vote_timeout`, are key-block heights, so compute with the
 three-minute figure.
 
 ```text
@@ -81,7 +81,7 @@ approval      = stake_in_favour / (stake_in_favour + stake_against)   >= 0.55
 participation = (stake_in_favour + stake_against) / total_supply      >= 0.10
 ```
 
-Both are integer comparisons — `(x * 100) / y >= 55` and `(x * 100) / y >= 10` — so the
+Both are integer comparisons (`(x * 100) / y >= 55` and `(x * 100) / y >= 10`), so the
 percentages are floored before comparison. Exactly 55.0% and exactly 10.0% both pass; anything
 a fraction below either bar fails. Multiply before you divide if you check the outcome
 yourself.
@@ -98,7 +98,7 @@ A worked case, for a token with 1,000,000 tokens in supply:
 | Passes | 80,000 | 40,000 | 66.7% | 12.0% | Both cleared |
 | Fails on approval | 60,000 | 60,000 | 50.0% | 12.0% | Below 55% |
 | Fails on quorum | 40,000 | 0 | 100% | 4.0% | Below 10% |
-| Fails on both | 20,000 | 20,000 | 50.0% | 4.0% | — |
+| Fails on both | 20,000 | 20,000 | 50.0% | 4.0% | Below both |
 
 Unanimous support from a small turnout is still a failed proposal, and the 555 AE is still
 spent.
@@ -120,9 +120,9 @@ closing height.
 
 ## Related
 
-- [Voting](/dao/voting) — how stake is committed, and the allowance and locking mechanics.
-- [How DAOs Work](/dao/overview) — the lifecycle these thresholds gate.
-- [Proposals and Vote Subjects](/dao/proposals) — the closed set of subjects.
-- [The Treasury](/dao/treasury) — where the 555 AE ends up.
-- [Contract security](/contracts/security) — the governance-security reasoning behind the thresholds.
-- [Bitcoin-NG consensus](https://docs.aeternity.com/aeternity-core-concepts/protocol/consensus-mechanisms/next-generation-nakamoto-consensus-bitcoin-ng) — the three-minute key-block and three-second micro-block targets.
+- [Voting](/dao/voting): how stake is committed, and the allowance and locking mechanics.
+- [How DAOs Work](/dao/overview): the lifecycle these thresholds gate.
+- [Proposals and Vote Subjects](/dao/proposals): the closed set of subjects.
+- [The Treasury](/dao/treasury): where the 555 AE ends up.
+- [Contract security](/contracts/security): the governance-security reasoning behind the thresholds.
+- [Bitcoin-NG consensus](https://docs.aeternity.com/aeternity-core-concepts/protocol/consensus-mechanisms/next-generation-nakamoto-consensus-bitcoin-ng): the three-minute key-block and three-second micro-block targets.

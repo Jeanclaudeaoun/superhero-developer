@@ -5,8 +5,8 @@ description: "The notification feed, browser push, preferences and devices — e
 
 # Notifications
 
-Superhero has two independent notification systems. The **bell** is a server-side feed —
-someone replied, someone sent you AE, a room let you in — delivered over REST plus a socket and
+Superhero has two independent notification systems. The **bell** is a server-side feed
+(someone replied, someone sent you AE, a room let you in) delivered over REST plus a socket and
 optionally as an OS notification. The **transaction banner** is a purely local progress
 indicator for whatever you are signing right now. They share no code and no delivery path.
 
@@ -28,7 +28,7 @@ nonce: <nonce>
 | --- | --- |
 | `POST /api/notifications/{address}/feed/challenge` | Returns a `nonce` |
 | `POST /api/notifications/{address}/feed/session` | Send `nonce` and `signature`, receive `token` and `expiresAt` |
-| `GET /api/notifications/{address}/feed?limit=50` | The feed page — `items` and `nextCursor` |
+| `GET /api/notifications/{address}/feed?limit=50` | The feed page: `items` and `nextCursor` |
 | `GET /api/notifications/{address}/feed/unread-count` | The badge value |
 | `POST /api/notifications/{address}/feed/read` | Mark specific `ids` read, or all when omitted; returns the new unread total |
 
@@ -52,7 +52,7 @@ The in-memory list is capped at 200 items.
 | Field | Type |
 | --- | --- |
 | `id` | Number |
-| `type` | The notification type — see below |
+| `type` | The notification type (see below) |
 | `title` | Display title |
 | `body` | Display body |
 | `data` | An untyped bag of routing hints, or null |
@@ -86,14 +86,14 @@ mobile app:
 | `post-comment` | `/post/` plus `data.commentId`, falling back to `data.parentPostId` | `data.commenter` |
 | `incoming-transfer` | `/wallet` | `data.sender` |
 | `invitation-claimed` | `/wallet` | `data.claimer` |
-| `room-membership` | `/trends/tokens/` plus `data.saleAddress` | — |
-| `room-messages` | `/trends/tokens/` plus `data.saleAddress` | — |
-| `announcement` | None — the row renders as non-navigable | — |
+| `room-membership` | `/trends/tokens/` plus `data.saleAddress` | None |
+| `room-messages` | `/trends/tokens/` plus `data.saleAddress` | None |
+| `announcement` | None; the row renders as non-navigable | None |
 
 A reply opens the **comment**, not the parent: `/post/<commentId>` renders the comment with
 its ancestor chain above it. Post ids are stored as `<id>_v3` and every in-app post link drops
-the suffix, with the resolver re-adding it. The backend ships routing *hints* — a type plus
-ids — rather than a URL, because the mobile app has different routes.
+the suffix, with the resolver re-adding it. The backend ships routing *hints* (a type plus
+ids) rather than a URL, because the mobile app has different routes.
 
 ### What suppresses a notification
 
@@ -103,12 +103,12 @@ Every send passes three gates before a channel sees it; `post-comment` shows all
 2. **Preference.** The recipient's opt-out is checked before the rate cap, so an opted-out
    author does not spend their budget silently.
 3. **Per-recipient rate cap.** A fixed Redis window allows `NOTIF_POST_COMMENT_RATE_CAP`
-   comment notifications per `NOTIF_POST_COMMENT_RATE_WINDOW_SEC` — **20 per hour** by default.
+   comment notifications per `NOTIF_POST_COMMENT_RATE_WINDOW_SEC`, **20 per hour** by default.
    Past that, further comments are dropped until the window resets. If Redis is unreachable the
    notification is attempted anyway.
 
 `incoming-transfer` has its own floor, `NOTIF_MIN_AMOUNT_AETTOS`, an anti-dust threshold that
-defaults to `0` — off. A transfer event with no transaction hash is not dispatched.
+defaults to `0` (off). A transfer event with no transaction hash is not dispatched.
 
 ## Browser push
 
@@ -138,8 +138,8 @@ on start when needed.
 ### The service worker
 
 Push is handled by a dedicated worker at `/notifications-sw.js`, registered on demand with an
-origin-wide scope. It handles exactly three events — `push`, `notificationclick` and
-`pushsubscriptionchange` — and registers no `fetch` handler, so it cannot intercept requests
+origin-wide scope. It handles exactly three events (`push`, `notificationclick` and
+`pushsubscriptionchange`) and registers no `fetch` handler, so it cannot intercept requests
 on the origin it shares with the inline wallet.
 
 On `push` it reads a JSON payload of `title`, `body` and `data`, accepting the type from either
@@ -164,7 +164,7 @@ payload wins over the mapping after an origin check.
 ### The preference keys
 
 A preference key is a catalog `type`, and the six keys are exactly the types in the table
-above — `incoming-transfer`, `announcement`, `invitation-claimed`, `post-comment`,
+above: `incoming-transfer`, `announcement`, `invitation-claimed`, `post-comment`,
 `room-membership`, `room-messages`. The catalog is ordered, and the mobile preferences screen
 renders its rows in that order.
 
@@ -177,7 +177,7 @@ POST /api/notifications/{address}/preferences
 ```
 
 Only the types you list are changed; the rest keep their state. Unknown type strings are
-rejected against the catalog. The model is opt-out — a type with no stored row is enabled.
+rejected against the catalog. The model is opt-out: a type with no stored row is enabled.
 
 ### Devices are the mobile half
 
@@ -194,8 +194,8 @@ account-wide half of that switch turns `room-messages` notifications off everywh
 ## The transaction banner
 
 A distinct, entirely local system. It narrates whatever you are currently signing and
-confirming — "Publishing post", "Publishing reply", "Confirm in your wallet", "Confirming on
-blockchain" — and runs multi-step flows with explicit step counts. The sponsored `.chain` claim
+confirming ("Publishing post", "Publishing reply", "Confirm in your wallet", "Confirming on
+blockchain") and runs multi-step flows with explicit step counts. The sponsored `.chain` claim
 is the longest:
 
 ```text
@@ -217,9 +217,9 @@ mobile push if you have a registered device, and nothing in the web app. See
 
 ## Related
 
-- [Comments](/social/comments) — the `post-comment` type is the most common notification, and
+- [Comments](/social/comments): the `post-comment` type is the most common notification, and
   the `_v3` suffix rule explains its deep link.
-- [Chat](/social/chat) — `room-membership` and `room-messages`, and the per-room mute control.
-- [Tipping](/social/tipping) — an incoming tip arrives as a plain transfer.
-- [Invite links](/rewards/invite-links) — what produces an `invitation-claimed` notification.
-- [WebSocket API](/api-reference/websocket) — the app's other socket, for token activity.
+- [Chat](/social/chat): `room-membership` and `room-messages`, and the per-room mute control.
+- [Tipping](/social/tipping): an incoming tip arrives as a plain transfer.
+- [Invite links](/rewards/invite-links): what produces an `invitation-claimed` notification.
+- [WebSocket API](/api-reference/websocket): the app's other socket, for token activity.

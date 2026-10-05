@@ -6,7 +6,7 @@ description: "The pricing contract: entrypoints, curve constants, the fixed-poin
 # BondingCurveExponential
 
 `BondingCurveExponential.aes` computes every price in the token system. It holds no funds and
-no per-community state — one instance is shared by every community, and the token sale calls
+no per-community state. One instance is shared by every community, and the token sale calls
 into it through the `BondingCurve` interface.
 
 Resolve its address with `factory.bonding_curve()`. Use `BondingCurveExponential.aci.json`
@@ -52,8 +52,8 @@ Use `calculate_buy_price` and `calculate_sell_return` for quotes.
 | `minimum_count` | `1 * 10 ^ 12` | 10^12 aettos, i.e. 10^-6 of a token |
 | `sell_return_percentage` | `9950` | 99.50% |
 | `sell_return_precision` | `10000` | the denominator of that percentage |
-| `curve_type()` | `"TAYLOR_EXPONENTIAL_V1"` | — |
-| `supported_decimals()` | `18` | — |
+| `curve_type()` | `"TAYLOR_EXPONENTIAL_V1"` | n/a |
+| `supported_decimals()` | `18` | n/a |
 
 The closed-form curve these constants encode:
 
@@ -100,7 +100,7 @@ function calculate_price(total_supply : int, count : int) =
     + ((a * (mc2(next_supply_exponent) - mc2(current_supply_exponent))) / (k * decimals))
 ```
 
-`mc2(x)` is the Maclaurin series for `e^x` **starting at the quadratic term** — it omits the
+`mc2(x)` is the Maclaurin series for `e^x` starting at the quadratic term. It omits the
 `1` and the `x` term, because those cancel in the difference and are folded into the
 `initial_price * count / decimals` term:
 
@@ -125,7 +125,7 @@ Two things bound the series:
   before the iteration cap.
 
 The approximation error is negligible: the on-chain result and the closed form agree to within
-2e-16 AE at supply 0 and 1.4e-12 AE at supply 10,000,000 — far below one aetto of a per-token
+2e-16 AE at supply 0 and 1.4e-12 AE at supply 10,000,000, far below one aetto of a per-token
 price. Quote the closed form for explanation; call `calculate_buy_price` for money.
 
 `calculate_price` carries the only `require` on the curve: a `count` below `minimum_count`
@@ -153,7 +153,7 @@ const value = await curve.buy_curve(supply).then((r) => r.decodedResult);
 ```
 
 Keep it as a ratio of BigInts until the last possible moment. Never build a JavaScript
-`Number` out of either half — both can exceed 2^53:
+`Number` out of either half, because both can exceed 2^53:
 
 ```javascript
 import BigNumber from 'bignumber.js';
@@ -203,8 +203,8 @@ console.log({
 
 ## Related
 
-- [Bonding curve](/tokens/bonding-curve) — the conceptual explanation, with worked examples
-- [Curve parameters](/tokens/curve-parameters) — the same constants from a trader's point of view
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the contract that calls this one
-- [Calling Contracts](/contracts/calling-contracts) — how to run the snippets above
-- [Sophia standard library](https://docs.aeternity.com/aesophia/v7.0.1/sophia_features/) — where `Frac` is defined
+- [Bonding curve](/tokens/bonding-curve): the conceptual explanation, with worked examples
+- [Curve parameters](/tokens/curve-parameters): the same constants from a trader's point of view
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale): the contract that calls this one
+- [Calling Contracts](/contracts/calling-contracts): how to run the snippets above
+- [Sophia standard library](https://docs.aeternity.com/aesophia/v7.0.1/sophia_features/): where `Frac` is defined

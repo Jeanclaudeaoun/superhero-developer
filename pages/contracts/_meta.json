@@ -14,5 +14,8 @@
   "address-link": "AddressLink",
   "governance-contracts": "Registry & Poll",
   "events": "Events",
-  "security": "Security Model"
+  "security": "Security Model",
+  "profile-registry": {
+    "display": "hidden"
+  }
 }

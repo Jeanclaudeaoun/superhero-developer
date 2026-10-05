@@ -6,8 +6,8 @@ description: "Where to report a problem, and what to include so it can be acted 
 # Support
 
 Most Superhero problems are one of three things: a transaction that did not do what you expected, a
-client showing stale data, or a wallet that will not connect. Diagnose which one you have first — it
-decides where the report goes — then file it with enough detail to reproduce without a follow-up.
+client showing stale data, or a wallet that will not connect. Diagnose which one you have first, because it
+decides where the report goes. Then file it with enough detail to reproduce without a follow-up.
 
 ## Triage first
 
@@ -19,20 +19,20 @@ Work down this list before filing anything. Each step rules out a whole class of
 | Is the backend up? | The status panel in the app footer | The backend indicator goes red when the API has not answered for 60 seconds. A red indicator explains missing feeds, charts and token data |
 | Is your device online? | Same panel, blockchain indicator | Driven by the browser's own online state |
 | Is it the indexer lagging? | Compare the token page against the contract | Chain state is authoritative; the API can be behind it by a short interval |
-| Is it your wallet? | Try a different surface — extension, the app's built-in wallet, or `wallet.superhero.com` | Narrows a signing failure to one wallet |
+| Is it your wallet? | Try a different surface: extension, the app's built-in wallet, or `wallet.superhero.com` | Narrows a signing failure to one wallet |
 
 If the chain shows your transaction as successful and the app disagrees, it is a client or indexer
-issue — report it. If the chain shows it reverted, the error is on-chain — a slippage floor you
-crossed, a missing allowance, an insufficient balance — and
+issue, so report it. If the chain shows it reverted, the error is on-chain (a slippage floor you
+crossed, a missing allowance, an insufficient balance), and
 [Troubleshooting](/wallets/troubleshooting) is the better starting point.
 
 ## Where to report
 
 | What | Where |
 | --- | --- |
-| Bug or feedback about the web app, mobile apps or PWA | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues) — the app's "Send Feedback" button opens the same tracker |
+| Bug or feedback about the web app, mobile apps or PWA | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues). The app's "Send Feedback" button opens the same tracker |
 | Bug in the API, the indexer or a trending score | [github.com/superhero-com/superhero-api](https://github.com/superhero-com/superhero-api) |
-| Bug in the AI agent skill — scripts, guides, ACIs | [github.com/superhero-com/superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) |
+| Bug in the AI agent skill (scripts, guides, ACIs) | [github.com/superhero-com/superhero-agent-skill](https://github.com/superhero-com/superhero-agent-skill) |
 | Privacy or data-protection questions | `superherowallet@protonmail.com` |
 
 ## What to include
@@ -44,7 +44,7 @@ and your report will be actionable on the first read.
 
 - **What you expected, and what happened instead.** One sentence each. This is the single most
   useful line in any report.
-- **The transaction hash**, if a transaction was involved — even a failed one. Without it nobody can
+- **The transaction hash**, if a transaction was involved, even a failed one. Without it nobody can
   see what the chain did.
 - **Your account address** (`ak_…`). It is public on-chain already; including it costs you nothing
   and saves a round trip.
@@ -56,7 +56,7 @@ and your report will be actionable on the first read.
 
 - The **token name and its sale address** (`ct_…`).
 - The **amount** you entered and the **quote** the trade card showed.
-- Your **slippage setting** — the default is 1% in the token trade card, 5% on the DEX, and 3% in the
+- Your **slippage setting**. The default is 1% in the token trade card, 5% on the DEX, and 3% in the
   agent CLI, and a reverted sell is very often a slippage floor doing its job.
 - Whether the **allowance step** succeeded, if you were selling. A sell is two transactions; report
   both hashes.
@@ -64,7 +64,7 @@ and your report will be actionable on the first read.
 **For a posting problem, add:**
 
 - The **post ID** (the `…_v3` form) or the parent post ID if it was a comment.
-- Whether the post appeared on-chain. Check the transaction before assuming it was lost — an indexer
+- Whether the post appeared on-chain. Check the transaction before assuming it was lost. An indexer
   delay looks identical to a failed post in the feed.
 
 **For an agent problem, add:**
@@ -88,16 +88,16 @@ insists otherwise, that is the tell.
 
 ## Security disclosure
 
-If you have found a vulnerability in a contract, the app or the skill, disclose it privately first —
-do not open a public GitHub issue describing a live vulnerability in a contract that holds user
+If you have found a vulnerability in a contract, the app or the skill, disclose it privately first.
+Do not open a public GitHub issue describing a live vulnerability in a contract that holds user
 funds. Send it to `superherowallet@protonmail.com`. See [Security Model](/contracts/security) for
 what the protocol does and does not defend against.
 
 ## Related
 
-- [Troubleshooting](/wallets/troubleshooting) — the wallet and connection problems that account for most reports.
-- [Risks](/tokens/risks) — losses that are working as designed rather than bugs.
-- [Explorers](/aeternity/explorers) — how to read a transaction before reporting it.
-- [Fees & Slippage](/tokens/fees-and-slippage) — why a sell reverts, and how to stop it happening again.
-- [FAQ](/concepts/faq) — the 23 canonical answers, plus developer and agent questions.
-- [Official Links](/resources/links) — every official URL and contact.
+- [Troubleshooting](/wallets/troubleshooting): the wallet and connection problems that account for most reports.
+- [Risks](/tokens/risks): losses that are working as designed rather than bugs.
+- [Explorers](/aeternity/explorers): how to read a transaction before reporting it.
+- [Fees & Slippage](/tokens/fees-and-slippage): why a sell reverts, and how to stop it happening again.
+- [FAQ](/concepts/faq): the 23 canonical answers, plus developer and agent questions.
+- [Official Links](/resources/links): every official URL and contact.

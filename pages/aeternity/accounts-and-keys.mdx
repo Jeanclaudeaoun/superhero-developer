@@ -14,7 +14,7 @@ Identifiers are a raw byte array, base-encoded, with a prefix describing what th
 Base58 with a checksum is used for short identifiers meant to be read and pasted; base64 for
 longer binary payloads.
 
-### Base58 — the ones you paste
+### Base58: the ones you paste
 
 | Prefix | What it identifies | Where it shows up in Superhero |
 | --- | --- | --- |
@@ -28,10 +28,10 @@ longer binary payloads.
 | `cm_` | Commitment | The salted preclaim hash in AENS registration |
 | `ok_` | Oracle public key | Not used by Superhero |
 | `oq_` | Oracle query id | Not used by Superhero |
-| `ch_` | Channel id | State channels — not used by Superhero |
+| `ch_` | Channel id | State channels; not used by Superhero |
 | `pp_` | Peer public key | Node-to-node networking; never user-facing |
 
-### Base64 — the ones that appear in payloads
+### Base64: the ones that appear in payloads
 
 | Prefix | What it identifies |
 | --- | --- |
@@ -54,7 +54,7 @@ and passes without a prefix check. Other prefixes are not accepted as input.
 ## Keys
 
 æternity accounts are **Ed25519** keypairs. The public key, base58-encoded with a checksum and the
-`ak_` prefix, *is* the address — there is no account-creation transaction, and an address is
+`ak_` prefix, *is* the address. There is no account-creation transaction, and an address is
 valid the moment you generate the key. The same keypair signs delegated-posting messages, which
 contracts verify with `Crypto.verify_sig`.
 
@@ -62,7 +62,7 @@ contracts verify with `Crypto.verify_sig`.
 
 Superhero's tooling uses `@aeternity/aepp-sdk` v14. From v14, `MemoryAccount` takes the secret
 key as an `sk_`-prefixed encoded 32-byte secret, not raw hex. The web app's built-in wallet
-normalises older persisted values — raw hex, or a longer keypair payload — by taking the first
+normalises older persisted values (raw hex, or a longer keypair payload) by taking the first
 32 bytes and encoding them as `sk_`. The agent skill does not: it passes `AE_PRIVATE_KEY` straight
 to `new MemoryAccount(privateKey)`, so give it the `sk_` form.
 
@@ -92,7 +92,7 @@ const account = new AccountMnemonicFactory(mnemonic).initializeSync(index);
 console.log(account.address); // ak_...
 ```
 
-Use the SDK's factory rather than reimplementing BIP32 or SLIP-0010 by hand — BIP32 was written
+Use the SDK's factory rather than reimplementing BIP32 or SLIP-0010 by hand. BIP32 was written
 for secp256k1 and does not apply unchanged to Ed25519. See
 [Backup & recovery](/wallets/backup-and-recovery) and [Built-in wallet](/wallets/built-in-wallet).
 
@@ -103,13 +103,13 @@ for secp256k1 and does not apply unchanged to Ed25519. See
 - **`ct_` addresses are case-sensitive base58.** Uppercasing a sale address corrupts it; token
   symbols, by contrast, are uppercased for lookup.
 - **A `.chain` name is not an address.** Resolve it to an `ak_` through AENS before using it in a
-  transaction — see [AENS](/aeternity/aens).
+  transaction. See [AENS](/aeternity/aens).
 
 ## Related
 
-- [AENS](/aeternity/aens) — how `nm_` and `cm_` come into existence, and how names resolve to `ak_`.
-- [Wallet & keys for agents](/agents/wallet-and-keys) — generating and storing `AE_PRIVATE_KEY` for the agent skill.
-- [Wallet security](/wallets/security) — how to hold a key you care about.
-- [Explorers](/aeternity/explorers) — where each prefix takes you on æScan.
-- [æternity API encoding spec](https://github.com/aeternity/protocol/blob/master/node/api/api_encoding.md) — the authoritative list of every prefix and its base encoding.
-- [æternity JavaScript SDK quick start](https://sdk.aeternity.io/latest/quick-start/) — creating an account and signing with the v14 SDK.
+- [AENS](/aeternity/aens): how `nm_` and `cm_` come into existence, and how names resolve to `ak_`.
+- [Wallet & keys for agents](/agents/wallet-and-keys): generating and storing `AE_PRIVATE_KEY` for the agent skill.
+- [Wallet security](/wallets/security): how to hold a key you care about.
+- [Explorers](/aeternity/explorers): where each prefix takes you on æScan.
+- [æternity API encoding spec](https://github.com/aeternity/protocol/blob/master/node/api/api_encoding.md): the authoritative list of every prefix and its base encoding.
+- [æternity JavaScript SDK quick start](https://sdk.aeternity.io/latest/quick-start/): creating an account and signing with the v14 SDK.

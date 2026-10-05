@@ -7,11 +7,11 @@ description: "The post registry contract: data model, direct posting, and delega
 
 `Tipping.aes` is the content layer. Every post published through Superhero is a row in this
 contract's state, keyed by an increasing integer and attributed to an æternity address. Once
-mined, a post cannot be edited or deleted — moderation happens at the application layer, not
+mined, a post cannot be edited or deleted. Moderation happens at the application layer, not
 here.
 
 Despite the name, **v3 has no tipping entrypoints.** It declares four entrypoints, none of them
-payable. Tips on Superhero are spend transactions — see
+payable. Tips on Superhero are spend transactions. See
 [Tips are spend transactions](#tips-are-spend-transactions).
 
 | Network | Address |
@@ -25,16 +25,16 @@ The ACI is `Tipping_v3.aci.json`.
 
 | Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `() => Tipping.state` | — |
+| `init` | `() => Tipping.state` |  |
 | `post_without_tip` | `(title: string, media: list(string)) => int` | stateful |
 | `post_without_tip_sig` | `(title: string, media: list(string), author: address, sig: signature) => int` | stateful |
-| `get_state` | `() => Tipping.state` | — |
+| `get_state` | `() => Tipping.state` |  |
 
 Both posting entrypoints return the new `tip_id`. Neither is payable, so a post costs only the
 transaction fee and gas.
 
 `tip_id` is assigned as `Map.size(state.tips)`, so ids are dense and sequential from 0. There
-is no delete, so ids are never reused. The Superhero API serves them suffixed — post `0`
+is no delete, so ids are never reused. The Superhero API serves them suffixed: post `0`
 becomes `0_v3`.
 
 The contract does not constrain the length of `title`, the number of `media` entries, or their
@@ -51,10 +51,10 @@ Earlier versions of the contract family did tip on chain:
 
 | Version | Tip surface |
 | --- | --- |
-| `Tipping_v1` | `tip(url, title)`, `retip(tip_id)`, `pre_claim`, `claim` — oracle-backed URL tipping |
+| `Tipping_v1` | `tip(url, title)`, `retip(tip_id)`, `pre_claim`, `claim`: oracle-backed URL tipping |
 | `Tipping_v2` | adds `tip_token`, `tip_direct`, `tip_token_direct`, `retip_token` |
-| `Tipping_v3` | **none** — posting only |
-| `Tipping_v4` | `post_via_burn(title, media, token, token_amount)` — posting paid by burning an AEX-9 |
+| `Tipping_v3` | none (posting only) |
+| `Tipping_v4` | `post_via_burn(title, media, token, token_amount)`: posting paid by burning an AEX-9 |
 
 v3 is what Superhero's social layer runs against.
 
@@ -137,7 +137,7 @@ console.log('tip_id:', result.decodedResult.toString());
 console.log('tx:', result.hash);
 ```
 
-`media` is a plain array of strings. The contract does not validate or interpret them — they
+`media` is a plain array of strings. The contract does not validate or interpret them. They
 are opaque references that the frontend renders as links or embeds.
 
 ## Delegated posting
@@ -175,8 +175,8 @@ the title, in list order. The signed message is exactly:
 title ++ media[0] ++ media[1] ++ ... ++ media[n-1]
 ```
 
-In JavaScript, `title + media.join('')`. Inserting any delimiter — a newline, a comma, a null
-byte — produces a digest the contract rejects with `SIGNATURE_HAS_TO_MATCH_AUTHOR`.
+In JavaScript, `title + media.join('')`. Inserting any delimiter (a newline, a comma, a null
+byte) produces a digest the contract rejects with `SIGNATURE_HAS_TO_MATCH_AUTHOR`.
 
 ### The 28-byte prefix
 
@@ -185,12 +185,12 @@ framing:
 
 | Bytes | Meaning |
 | --- | --- |
-| `1a` | 26 — the length of the prefix string that follows |
+| `1a` | 26, the length of the prefix string that follows |
 | `61 65 74 65 72 6e 69 74 79 20 53 69 67 6e 65 64 20 4d 65 73 73 61 67 65 3a 0a` | `aeternity Signed Message:` followed by a newline, 26 ASCII bytes |
-| `20` | 32 — the length of the body that follows |
+| `20` | 32, the length of the body that follows |
 
 1 + 26 + 1 = 28 bytes of header, and the body is always the 32-byte inner Blake2b digest, so
-`Bytes.concat` produces exactly 60 bytes — hence `bytes(60)`.
+`Bytes.concat` produces exactly 60 bytes, hence `bytes(60)`.
 
 ### The full construction
 
@@ -226,9 +226,9 @@ takes an explicit `nonce` on every signed write.
 
 ## Related
 
-- [Posting](/social/posting) — what posting looks like from the app, and what the API adds on top
-- [Delegated posting](/social/delegated-posting) — the relayer flow end to end
-- [Tipping](/social/tipping) — the spend-with-payload mechanism
-- [Events](/contracts/events) — the topic hash for `PostWithoutTipReceived` and how to subscribe
-- [Calling Contracts](/contracts/calling-contracts) — SDK setup, gas, and reading revert reasons
-- [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract) — the contract family's source
+- [Posting](/social/posting): what posting looks like from the app, and what the API adds on top
+- [Delegated posting](/social/delegated-posting): the relayer flow end to end
+- [Tipping](/social/tipping): the spend-with-payload mechanism
+- [Events](/contracts/events): the topic hash for `PostWithoutTipReceived` and how to subscribe
+- [Calling Contracts](/contracts/calling-contracts): SDK setup, gas, and reading revert reasons
+- [aeternity/tipping-contract](https://github.com/aeternity/tipping-contract): the contract family's source

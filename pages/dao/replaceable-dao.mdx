@@ -23,7 +23,7 @@ A contract that implements all three entrypoints can be the target of a `ChangeD
 | --- | --- | --- |
 | `is_dao` | `() : bool` | Must return `true`. Blocks transfers to non-DAO addresses. |
 | `get_community_management` | `() : option(CommunityManagement)` | The linked community management contract, or `None`. |
-| `record_sale_transaction` | `(address, int) : unit` — stateful, payable | Receive sale proceeds with the buyer and buy price as arguments. |
+| `record_sale_transaction` | `(address, int) : unit`, stateful, payable | Receive sale proceeds with the buyer and buy price as arguments. |
 
 The stock `DAO.aes` implements all three, so a community's DAO can be replaced by another
 instance of the same implementation as well as by a custom one.
@@ -35,7 +35,7 @@ stateful payable entrypoint record_sale_transaction(buyer: address, buy_price: i
 ```
 
 The AE arrives with the call; the **buyer** and the **buy price** arrive as arguments. A
-replacement DAO can therefore act on income the moment it lands — split it between a treasury
+replacement DAO can therefore act on income the moment it lands: split it between a treasury
 and a rewards pool, credit it per buyer, forward a share to a partner contract. The token sale
 calls it with `protected = true`, so an aborting DAO does not block a trade, and calls it with
 zero value as a probe on `set_beneficiary`, so the entrypoint must accept zero-value calls.
@@ -45,7 +45,7 @@ zero value as a probe on `set_beneficiary`, so the entrypoint must accept zero-v
 `ChangeDAO` transfers ownership of the token sale, the beneficiary rights to all future
 proceeds, and the accumulated treasury, in one call. `is_dao()` returning `true` is a type
 check that the target is at least a DAO-shaped contract: an account address, the token
-address or an unrelated contract does not answer the call. It is not a trust check — any
+address or an unrelated contract does not answer the call. It is not a trust check, since any
 contract can implement `is_dao() = true`.
 
 ## Build a replacement DAO
@@ -57,7 +57,7 @@ contract can implement `is_dao() = true`.
    of the existing `AffiliationBondingCurveTokenSale`, and the owner of the existing
    `CommunityManagement`. If it does not expose equivalents of `add_vote` and
    `apply_vote_subject`, the community loses the ability to appoint moderators or change its
-   write threshold — those actions can only be reached by the sale's owner.
+   write threshold, because those actions can only be reached by the sale's owner.
 3. **Point it at the existing `CommunityManagement`.** `apply_vote_subject` asserts
    `get_community_management() == new_dao.get_community_management()` and aborts the whole
    migration with `NEW_DAO_HAS_TO_REFERENCE_SAME_COMMUNITY_MANAGEMENT` if they differ. The
@@ -81,7 +81,7 @@ A `ChangeDAO` proposal is an ordinary DAO vote:
    participating.
 4. Within roughly two days of closing, somebody calls `DAO.apply_vote_subject(vote_seq_id)`.
 5. The old DAO verifies `is_dao()` on the target, then transfers the treasury, the sale's
-   beneficiary and owner, and ownership of `CommunityManagement` — checking on the way that the
+   beneficiary and owner, and ownership of `CommunityManagement`. On the way it checks that the
    target references the same community management contract.
 
 If nobody applies it inside the window, the vote expires and nothing moves. The 555 AE is
@@ -102,7 +102,7 @@ spent and the proposal has to be reopened.
 
 Because `CommunityManagement.set_owner` is called in the same transaction, the
 `AddModerator`, `DeleteModerator`, `ChangeMinimumTokenThreshold` and `ChangeMetaInfo`
-subjects keep working after a migration — provided the replacement DAO implements equivalents
+subjects keep working after a migration, provided the replacement DAO implements equivalents
 of `add_vote` and `apply_vote_subject` to reach them.
 
 A community's governance history after a migration is split across two contracts, and the
@@ -115,7 +115,7 @@ new DAO's vote ids restart at zero.
 - **`is_dao()` proves nothing about intent.** Any contract can pass the check.
 - **The vote approves an address.** Unless the source is published and the deployed bytecode
   matches it, holders are approving the proposer's word.
-- **Governance is whatever the replacement implements** — possibly a single owner key.
+- **Governance is whatever the replacement implements**, and that could be a single owner key.
 - **The treasury moves in the same transaction.** There is no staged handover, trial period or
   clawback.
 
@@ -124,10 +124,10 @@ matches it, that the replacement implements proposals and voting, and who contro
 
 ## Related
 
-- [Proposals and Vote Subjects](/dao/proposals) — `ChangeDAO` alongside the other six subjects.
-- [The Treasury](/dao/treasury) — what `record_sale_transaction` does in the stock DAO.
-- [How DAOs Work](/dao/overview) — the vote and execution steps a migration passes through.
-- [Quorum and Thresholds](/dao/quorum-and-thresholds) — why a replacement DAO can use different constants.
-- [DAO contract reference](/contracts/dao) — the stock implementation a replacement stands in for.
-- [Moderators and Write Thresholds](/dao/moderators) — the `CommunityManagement` contract whose ownership the migration moves.
-- [Sophia and FATE](/aeternity/sophia-and-fate) — the language and VM a replacement DAO is written for.
+- [Proposals and Vote Subjects](/dao/proposals): `ChangeDAO` alongside the other six subjects.
+- [The Treasury](/dao/treasury): what `record_sale_transaction` does in the stock DAO.
+- [How DAOs Work](/dao/overview): the vote and execution steps a migration passes through.
+- [Quorum and Thresholds](/dao/quorum-and-thresholds): why a replacement DAO can use different constants.
+- [DAO contract reference](/contracts/dao): the stock implementation a replacement stands in for.
+- [Moderators and Write Thresholds](/dao/moderators): the `CommunityManagement` contract whose ownership the migration moves.
+- [Sophia and FATE](/aeternity/sophia-and-fate): the language and VM a replacement DAO is written for.

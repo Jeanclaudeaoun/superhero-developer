@@ -15,7 +15,7 @@ Superhero surfaces them at `https://superhero.com/voting`.
 | Contract | Mainnet | Testnet | ACI |
 | --- | --- | --- | --- |
 | Registry | `ct_ouZib4wT9cNwgRA1pxgA63XEUd8eQRrG8PcePDEYogBc1VYTq` | `ct_2nritSnqW6zooEL4g2SMW5pf12GUbrNyZ17osTLrap7wXiSSjf` | `RegistryWithEventsACI.json` |
-| Poll | one per poll, deployed on creation | — | `PollACI.json`, `PollBytecode.json` |
+| Poll | one per poll, deployed on creation | one per poll, deployed on creation | `PollACI.json`, `PollBytecode.json` |
 
 `version()` returns `1` on the original build of each contract and `2` on the compiler-6
 build; the logic is identical.
@@ -26,17 +26,17 @@ One deployed instance per network. It indexes polls and records delegations.
 
 | Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `() => Registry.state` | — |
+| `init` | `() => Registry.state` |  |
 | `add_poll` | `(poll: Poll, is_listed: bool) => int` | stateful |
 | `delegate` | `(delegatee: address) => unit` | stateful |
 | `revoke_delegation` | `() => unit` | stateful |
-| `polls` | `() => Registry.polls` | — |
-| `poll` | `(poll_id: int) => Registry.poll_data` | — |
-| `delegations` | `() => Registry.delegations` | — |
-| `delegatee` | `(account: address) => option(address)` | — |
-| `delegators` | `(account: address) => Registry.delegations` | — |
-| `created_height` | `() => int` | — |
-| `version` | `() => int` | — |
+| `polls` | `() => Registry.polls` |  |
+| `poll` | `(poll_id: int) => Registry.poll_data` |  |
+| `delegations` | `() => Registry.delegations` |  |
+| `delegatee` | `(account: address) => option(address)` |  |
+| `delegators` | `(account: address) => Registry.delegations` |  |
+| `created_height` | `() => int` |  |
+| `version` | `() => int` |  |
 
 ### Registry types
 
@@ -62,7 +62,7 @@ every poll contract. `add_poll` returns the new `poll_id`, which is `seq_id` at 
 registration.
 
 `is_listed` is a listing flag, not access control. An unlisted poll is still on chain, still
-readable, and still votable — it simply does not appear in the default listing.
+readable, and still votable. It just does not appear in the default listing.
 
 ### Registering a poll
 
@@ -108,19 +108,19 @@ poll's identity; the registry's integer id is a convenience.
 
 | Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `(metadata: Poll.metadata, vote_options: Poll.vote_option, close_height: option(int)) => Poll.state` | — |
+| `init` | `(metadata: Poll.metadata, vote_options: Poll.vote_option, close_height: option(int)) => Poll.state` |  |
 | `vote` | `(option: int) => unit` | stateful |
 | `revoke_vote` | `() => unit` | stateful |
-| `title` | `() => string` | — |
-| `metadata` | `() => Poll.metadata` | — |
-| `close_height` | `() => option(int)` | — |
-| `votes` | `() => Poll.votes` | — |
-| `has_voted` | `(voter: address) => bool` | — |
-| `voted_option` | `(voter: address) => option(int)` | — |
-| `is_author` | `(author: address) => bool` | — |
-| `is_closed` | `() => bool` | — |
-| `version` | `() => int` | — |
-| `get_state` | `() => Poll.state` | — |
+| `title` | `() => string` |  |
+| `metadata` | `() => Poll.metadata` |  |
+| `close_height` | `() => option(int)` |  |
+| `votes` | `() => Poll.votes` |  |
+| `has_voted` | `(voter: address) => bool` |  |
+| `voted_option` | `(voter: address) => option(int)` |  |
+| `is_author` | `(author: address) => bool` |  |
+| `is_closed` | `() => bool` |  |
+| `version` | `() => int` |  |
+| `get_state` | `() => Poll.state` |  |
 
 ### Poll types
 
@@ -143,7 +143,7 @@ record state =
   , author        : address }
 ```
 
-**`vote_option` is the whole option set, not one option.** It is `map(int, string)` — the
+**`vote_option` is the whole option set, not one option.** It is `map(int, string)`, the
 index-to-label table for the entire poll. The `vote(option: int)` entrypoint takes an index
 into it. (In `DAOVote`, `vote_option` is a single `bool`.)
 
@@ -162,7 +162,7 @@ datatype event =
 ```
 
 These collide by name with `DAOVote`'s `Vote` and `RevokeVote`, have different argument
-counts, and — being computed from the name — **the same middleware topic hash**. An indexer
+counts, and, because the hash is computed from the name, **the same middleware topic hash**. An indexer
 covering both governance polls and community DAOs must filter by contract address before
 decoding. See [Events](/contracts/events).
 
@@ -220,13 +220,13 @@ require(String.length(metadata.title) =< 50, "TITLE_STRING_TO_LONG")
 require(String.length(metadata.description) =< 300, "DESCRIPTION_STRING_TO_LONG")
 ```
 
-(The abort strings read `TO_LONG`, not `TOO_LONG` — match on that spelling.) Nothing on chain
+(The abort strings read `TO_LONG`, not `TOO_LONG`; match on that spelling.) Nothing on chain
 checks that `link` is a URL or that there are two or more options; a poll deployed with an
-empty `vote_options` map is legal and simply unvotable, because `vote` requires the index to
+empty `vote_options` map is legal but unvotable, because `vote` requires the index to
 be a member of it.
 
 A non-`None` close height must be in the future. Check it against the current top block
-height before deploying — a poll deployed already closed never accepts a vote.
+height before deploying, because a poll deployed already closed never accepts a vote.
 
 ## Voting
 
@@ -247,14 +247,14 @@ close height accepts votes indefinitely.
 `revoke_vote()` deletes the caller's entry from `votes` and emits `RevokeVote`.
 
 A closed poll's result is the state at its close height. The governance backend tallies at
-that height, from the event log and historical balances — see below.
+that height, from the event log and historical balances, as described below.
 
 ## Delegation and stake weighting
 
 The registry records delegation as a plain `map(address, address)`. `delegate(delegatee)`
 records you as delegating to that address; `revoke_delegation()` removes the entry.
 `delegatee(account)` reads one direction, `delegators(account)` the other. The one on-chain
-constraint is `require(Call.caller != delegatee, "CALLER_IS_DELEGATEE_DISALLOWED")` — you may
+constraint is `require(Call.caller != delegatee, "CALLER_IS_DELEGATEE_DISALLOWED")`: you may
 not delegate to yourself.
 
 **The contracts do not compute weighted results.**
@@ -274,14 +274,14 @@ The weighted outcome is computed off chain by the governance backend:
 
 | Poll | Snapshot height | Meaning |
 | --- | --- | --- |
-| Closed — `close_height` set and already reached | that `close_height` | a fixed historical snapshot |
-| Open — `close_height` set but still in the future | none | live, recomputed at every read |
-| Open-ended — `close_height = None` | none | live, forever |
+| Closed: `close_height` set and already reached | that `close_height` | a fixed historical snapshot |
+| Open: `close_height` set but still in the future | none | live, recomputed at every read |
+| Open-ended: `close_height = None` | none | live, forever |
 
 A **closed poll's tally is frozen at its close height**: every balance is read at that height,
 and the delegation map is reconstructed at that same height. A poll that is still open, or
 that can never close, is tallied against **current** balances and the **current** delegation
-map — the displayed result moves whenever anyone's balance does.
+map, so the displayed result moves whenever anyone's balance does.
 
 Two edge cases:
 
@@ -293,11 +293,11 @@ Two edge cases:
 
 For a closed poll, delegations are not read from `delegations()`. The backend pulls the
 registry's `Delegation` and `RevokeDelegation` events, keeps those at or below the snapshot
-height, sorts by height then nonce, and replays them into a map — set on `Delegation`, delete
-on `RevokeDelegation`. That is what makes a historical snapshot possible, since the contract
+height, sorts by height then nonce, and replays them into a map (set on `Delegation`, delete
+on `RevokeDelegation`). That is what makes a historical snapshot possible, since the contract
 only stores the current map.
 
-Weighting then walks the tree **upward** from each voter — who delegated *to* them — and sums
+Weighting then walks the tree **upward** from each voter (who delegated *to* them) and sums
 those accounts' balances recursively, so a chain `A -> B -> C` gives C both A's and B's stake.
 Three rules govern the walk:
 
@@ -316,19 +316,19 @@ the same height.
 
 Three consequences for anyone integrating:
 
-1. **A tally you compute yourself from `Poll.votes()` is unweighted** — it counts addresses,
+1. **A tally you compute yourself from `Poll.votes()` is unweighted.** It counts addresses,
    not stake, and it ignores delegation. It will not match what superhero.com shows.
 2. **The governance backend is the source of the weighted result.** Everything above is
-   reproducible from chain data; the contracts simply do not do it for you.
+   reproducible from chain data; the contracts do not do it for you.
 3. **An open-ended poll has no final result.** With `close_height = None` there is no
    snapshot, votes can still arrive, and existing votes can still be revoked. Treat such a
    poll as a rolling signal, not a decision.
 
 ## Related
 
-- [Polls](/governance/polls) — the same system for a non-developer audience
-- [Create a poll](/governance/create-a-poll) — a step-by-step walkthrough
-- [Delegation](/governance/delegation) — what delegating does to your weight
-- [DAOVote](/contracts/dao-vote) — the community DAO voting contract, which works quite differently
-- [Events](/contracts/events) — why the `Vote` name collision matters for indexers
-- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the contracts and the tally server
+- [Polls](/governance/polls): the same system for a non-developer audience
+- [Create a poll](/governance/create-a-poll): a step-by-step walkthrough
+- [Delegation](/governance/delegation): what delegating does to your weight
+- [DAOVote](/contracts/dao-vote): the community DAO voting contract, which works quite differently
+- [Events](/contracts/events): why the `Vote` name collision matters for indexers
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance): the contracts and the tally server

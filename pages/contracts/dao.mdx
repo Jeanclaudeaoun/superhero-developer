@@ -22,15 +22,15 @@ from the `CreateCommunity` event. Its interface is inlined in `CommunityFactory.
 | `apply_vote_subject` | `(vote_seq_id: int) => unit` | stateful |
 | `record_sale_transaction` | `(buyer: address, buy_price: int) => unit` | stateful, payable |
 | `set_token_sale` | `(token_sale: TokenSale) => unit` | stateful |
-| `votes` | `() => DAO.votes` | — |
-| `vote_timeout` | `() => int` | — |
-| `get_token` | `() => FungibleTokenFull` | — |
-| `get_token_sale` | `() => TokenSale` | — |
-| `get_community_management` | `() => option(CommunityManagement)` | — |
-| `factory` | `() => Factory` | — |
-| `is_dao` | `() => bool` | — |
-| `version` | `() => int` | — |
-| `get_state` | `() => DAO.state` | — |
+| `votes` | `() => DAO.votes` |  |
+| `vote_timeout` | `() => int` |  |
+| `get_token` | `() => FungibleTokenFull` |  |
+| `get_token_sale` | `() => TokenSale` |  |
+| `get_community_management` | `() => option(CommunityManagement)` |  |
+| `factory` | `() => Factory` |  |
+| `is_dao` | `() => bool` |  |
+| `version` | `() => int` |  |
+| `get_state` | `() => DAO.state` |  |
 
 ## Types
 
@@ -65,7 +65,7 @@ is checked exactly:
 require(Call.value == 555 * (10 ^ 18), "ADD_VOTE_DAO_DONATION_MISSMATCH")
 ```
 
-555 AE, no more and no less. The AE goes to the DAO treasury — unlike collection creation,
+555 AE, no more and no less. The AE goes to the DAO treasury. Unlike collection creation,
 where the 555 AE is burned, here the community keeps it. That is the anti-spam cost of
 opening a proposal.
 
@@ -123,7 +123,7 @@ datatype subject =
 ```
 
 In JavaScript each is a one-key object whose value is an array of the constructor's
-arguments — `{ VotePayoutAmount: ['ak_...', '1000000000000000000'] }`, and for the map-valued
+arguments: `{ VotePayoutAmount: ['ak_...', '1000000000000000000'] }`, and for the map-valued
 one, `{ ChangeMetaInfo: [new Map([['description', 'new text']])] }`.
 
 The Superhero app's create-vote form offers `VotePayout`, `ChangeDAO`, `AddModerator` and
@@ -145,7 +145,7 @@ switch(vote.final_vote_state())
 
 ### Quorum and supermajority
 
-`DAOVote.final_vote_state()` does no threshold arithmetic — it returns `Some(vote_state)` once
+`DAOVote.final_vote_state()` does no threshold arithmetic. It returns `Some(vote_state)` once
 `Chain.block_height >= close_height` and `None` before that. Every percentage check is in
 `DAO.apply_vote_subject`:
 
@@ -165,7 +165,7 @@ require(stake_percentage >= 10, "GREATER_10_PERCENT_STAKE_REQUIRED")
 
 - **The supermajority is measured against votes cast, not supply.** `in_favor_percentage` is
   `yes / (yes + no)`. Abstaining does not count against a proposal.
-- **Quorum is measured against `total_supply()` read at execution time** — not at vote
+- **Quorum is measured against `total_supply()` read at execution time,** not at vote
   creation and not at close height. Buys before execution raise the denominator; sells lower
   it. The short application window limits the effect.
 - **Both are integer divisions, truncated before comparison.** With 200 tokens of stake, 110
@@ -187,7 +187,7 @@ The full precondition set for execution, in the order the contract checks them:
 ### The execution window
 
 A vote that passed but was not applied within `vote_timeout` key blocks after its close height
-can no longer be applied — `apply_vote_subject` aborts with `VOTE_RESULT_TIMEOUTED` from then
+can no longer be applied: `apply_vote_subject` aborts with `VOTE_RESULT_TIMEOUTED` from then
 on. To retry, open the proposal again, at the cost of another 555 AE.
 
 The window is **960 key blocks**, set once in `init`:
@@ -207,8 +207,8 @@ passing, call `apply_vote_subject` yourself once the vote closes.
 
 `record_sale_transaction(buyer, buy_price)` is payable and is how the token sale pays the DAO
 its half of the spread on every buy. The buyer address and the price come along as arguments
-so a replacement DAO can implement its own split or accounting — that is the point of the
-`ReplaceableDAO` interface: proceeds arrive through a contract call rather than a bare
+so a replacement DAO can implement its own split or accounting. That is the point of the
+`ReplaceableDAO` interface, where proceeds arrive through a contract call rather than a bare
 `Chain.spend`.
 
 The stock `DAO.aes` accepts the AE and records nothing further; no event fires. For per-buy
@@ -235,7 +235,7 @@ require(get_community_management() == new_dao.get_community_management(),
 
 Only then does it hand community management's ownership over. A replacement DAO that resolves
 a different community management contract aborts the whole migration. This is an initial
-check only — once installed, a custom DAO can change it.
+check only. Once installed, a custom DAO can change it.
 
 ## `set_token_sale` is creator-only and one-shot
 
@@ -249,8 +249,8 @@ sale-needs-DAO / DAO-needs-sale cycle. It can never be called again.
 
 ## Related
 
-- [DAOVote](/contracts/dao-vote) — the proposal contract `add_vote` deploys
-- [CommunityManagement](/contracts/community-management) — the source of the token threshold `add_vote` checks
-- [Proposals](/dao/proposals) — the subjects explained for a non-developer audience
-- [Quorum and thresholds](/dao/quorum-and-thresholds) — the passing conditions
-- [Replaceable DAO](/dao/replaceable-dao) — the migration path `ChangeDAO` implements
+- [DAOVote](/contracts/dao-vote): the proposal contract `add_vote` deploys
+- [CommunityManagement](/contracts/community-management): the source of the token threshold `add_vote` checks
+- [Proposals](/dao/proposals): the subjects explained for a non-developer audience
+- [Quorum and thresholds](/dao/quorum-and-thresholds): the passing conditions
+- [Replaceable DAO](/dao/replaceable-dao): the migration path `ChangeDAO` implements

@@ -6,7 +6,7 @@ description: "Endpoints, contract addresses and a faucet for running Superhero a
 # Using Testnet
 
 æternity's public testnet (`ae_uat`) is where you experiment without spending real AE. Superhero has
-a complete second deployment there — its own backend, its own contracts, its own explorer.
+a complete second deployment there, with its own backend, its own contracts, its own explorer.
 
 ## Network selection is a build-time decision
 
@@ -81,7 +81,7 @@ deployment.
 | Wrapped AE (WAE) | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` |
 | æETH | `ct_ryTY1mxqjCjq1yBn9i6HDaCSdA6thXUFZTA84EMzbWd1SLKdh` |
 
-Community token sale contracts are **not** in this table — the factory deploys them per community,
+Community token sale contracts are **not** in this table. The factory deploys them per community,
 so you discover them from the backend or from the factory's own events. The active factory address
 comes from the backend's factory endpoint.
 
@@ -96,7 +96,7 @@ curl -X POST https://faucet.aepps.com/account/ak_YOUR_ADDRESS
 
 **There is a per-address cooldown.** Request again too soon and the faucet answers **HTTP 425** with
 a message of the form "The address is graylisted for another …". Handle 425 explicitly in any
-script that tops an account up — it is a wait, not a failure. Read the grant amount from the
+script that tops an account up; it is a wait, not a failure. Read the grant amount from the
 faucet's response rather than hard-coding it.
 
 Test AE has no value and is not convertible to mainnet AE. If you need more than one grant, wait
@@ -106,7 +106,7 @@ configuration value.
 
 ## Point a wallet at testnet
 
-Superhero Wallet — extension, mobile app, or `wallet.superhero.com` — ships both networks in every
+Superhero Wallet (extension, mobile app, or `wallet.superhero.com`) ships both networks in every
 build. Switch under **Settings → Network**; custom networks can be added there too, with
 per-protocol URLs.
 
@@ -121,8 +121,8 @@ Its æternity testnet defaults:
 | Tipping backend | `https://superhero-backend-testnet.prd.service.aepps.com` |
 | Multisig backend | `https://ga-multisig-backend-testnet.prd.service.aepps.com` |
 
-Once the wallet is on testnet it shows a **Faucet** entry — on the More screen and on the AE asset
-screen — linking to `https://faucet.aepps.com?address=<your ak_ address>` with your address
+Once the wallet is on testnet it shows a **Faucet** entry (on the More screen and on the AE asset
+screen) linking to `https://faucet.aepps.com?address=<your ak_ address>` with your address
 prefilled. It is hidden on mainnet.
 
 Because superhero.com is build-pinned, the two must agree: a mainnet build plus a testnet wallet is
@@ -161,10 +161,10 @@ real AE**.
 
 ## Related
 
-- [Agent Quickstart](/agents/quickstart) — the setup the scripts assume.
-- [Contract Addresses](/contracts/addresses) — the full address reference across both networks.
-- [Networks](/aeternity/networks) — what `ae_uat` is at the protocol level.
-- [Troubleshooting](/wallets/troubleshooting) — the network-mismatch and passkey-RP-ID symptoms.
-- [Web Wallet](/wallets/web-wallet) — the hosted wallet whose network switcher reaches `ae_uat`.
-- [testnet.aescan.io](https://testnet.aescan.io) — the testnet explorer.
-- [Testnets and Faucet](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet) — the upstream guide.
+- [Agent Quickstart](/agents/quickstart): the setup the scripts assume.
+- [Contract Addresses](/contracts/addresses): the full address reference across both networks.
+- [Networks](/aeternity/networks): what `ae_uat` is at the protocol level.
+- [Troubleshooting](/wallets/troubleshooting): the network-mismatch and passkey-RP-ID symptoms.
+- [Web Wallet](/wallets/web-wallet): the hosted wallet whose network switcher reaches `ae_uat`.
+- [testnet.aescan.io](https://testnet.aescan.io): the testnet explorer.
+- [Testnets and Faucet](https://docs.aeternity.com/aeternity-developer-tools/development-infrastructure/testing-and-deployment/testnets-and-faucet): the upstream guide.

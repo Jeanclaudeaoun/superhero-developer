@@ -35,7 +35,7 @@ Each entry in `collections` is keyed by its own `id`:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `id` | string | Full collection id, `NAME-ak_deployer` — the same string as the map key |
+| `id` | string | Full collection id, `NAME-ak_deployer`, the same string as the map key |
 | `name` | string | Human-readable label, used as the badge on a token |
 | `description` | string | Optional |
 | `allowed_name_length` | **string** | Maximum token name length in this collection. Parse it |
@@ -52,7 +52,7 @@ const collection = Object.values(factorySchema.collections).find(c => c.name ===
 
 ### `allowed_name_chars`
 
-Each rule is one of exactly two forms — a set of single code points, or an inclusive code point
+Each rule is one of exactly two forms: a set of single code points, or an inclusive code point
 range:
 
 ```text
@@ -117,7 +117,7 @@ There is no version field and no upgrade notification. Instead:
    it, so `factory_address` on a `TokenDto` is a reliable record of provenance.
 3. **`GET /api/tokens?factory_address=ct_...`** filters the token list to one deployment.
 
-When `address` changes, re-derive everything you hold that depends on it — the factory address,
+When `address` changes, re-derive everything you hold that depends on it: the factory address,
 the collection ids and the `AffiliationTreasury` address, which is `affiliation_address` on the
 same response.
 
@@ -148,10 +148,10 @@ curl -s "https://api.superhero.com/api/stats"
 | --- | --- | --- |
 | `fullSyncing` | boolean | The backward indexer is running |
 | `currentBlockNumber` | number | The chain tip height the indexer knows about |
-| `bclBlockNumber` | number | The factory's `deployed_at_block_height` — the floor of interesting history |
+| `bclBlockNumber` | number | The factory's `deployed_at_block_height`, the floor of interesting history |
 | `syncingLatestBlocks` | boolean | Same value as `fullSyncing` |
 | `lastSyncedBlockNumber` | number | How far down from the tip the backward sync has reached |
-| `remainingBlocksToSync` | number | `lastSyncedBlockNumber` minus 0 — the backward sync targets genesis |
+| `remainingBlocksToSync` | number | `lastSyncedBlockNumber` minus 0, because the backward sync targets genesis |
 | `apiVersion` | string | The deployed package version |
 | `mdwConnected` | boolean | Whether the middleware WebSocket subscription is up |
 | `uptime` | string | Human-readable, e.g. `3d 4h 12m 8s` |
@@ -159,13 +159,13 @@ curl -s "https://api.superhero.com/api/stats"
 
 Read `mdwConnected` and the gap between `currentBlockNumber` and `lastSyncedBlockNumber` before
 trusting that a recent trade is indexed. `GET /api/mdw/health` gives a more detailed version of
-the same picture — see [Node & Middleware](/api-reference/node-and-middleware). For platform
+the same picture; see [Node & Middleware](/api-reference/node-and-middleware). For platform
 metrics rather than indexer health, use [Analytics](/api-reference/analytics).
 
 ## Related
 
-- [Tokens API](/api-reference/tokens) — `collection`, `collection_info` and `factory_address` on every token
-- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — the affiliation treasury reached through the factory
-- [Community factory](/contracts/community-factory) — what the contract itself does
-- [Collections and naming](/tokens/collections-and-naming) — the naming rules from a creator's point of view
-- [Contract addresses](/contracts/addresses) — the addresses this endpoint does not cover
+- [Tokens API](/api-reference/tokens): `collection`, `collection_info` and `factory_address` on every token
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations): the affiliation treasury reached through the factory
+- [Community factory](/contracts/community-factory): what the contract itself does
+- [Collections and naming](/tokens/collections-and-naming): the naming rules from a creator's point of view
+- [Contract addresses](/contracts/addresses): the addresses this endpoint does not cover

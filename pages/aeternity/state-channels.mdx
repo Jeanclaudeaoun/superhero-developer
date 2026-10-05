@@ -13,7 +13,7 @@ individual on-chain transactions; chat runs on Nostr relays and video calls on J
 
 **Opening** is an on-chain transaction. Both participants lock funds into the channel and agree on
 an initial state, each authenticating it with a signature. From then on they exchange updates
-directly with each other — a transfer, a contract call, any agreed change — each co-signed by
+directly with each other (a transfer, a contract call, any agreed change), each co-signed by
 both parties and given a round number. None of it touches the chain, so none of it costs a fee
 or waits for a block.
 
@@ -32,8 +32,8 @@ for ten thousand is dramatically better.
 
 Channels fit two-party, high-frequency interaction. A public social feed is neither: a post has
 to be visible to everyone, and trading against a bonding curve is inherently many-party. The
-closest thing in Superhero to "off chain" is [delegated posting](/social/delegated-posting) —
-a user signs a message and a relayer pays for the transaction — but every post still lands on
+closest thing in Superhero to "off chain" is [delegated posting](/social/delegated-posting),
+where a user signs a message and a relayer pays for the transaction, but every post still lands on
 chain individually.
 
 If you need state channels on æternity, they are fully supported at the protocol and SDK level.
@@ -41,8 +41,8 @@ You would be building on the chain, not on Superhero.
 
 ## Related
 
-- [Why æternity](/aeternity/why-aeternity) — the chain features Superhero does use.
-- [Chat](/social/chat) — the off-chain system Superhero ships.
-- [Delegated posting](/social/delegated-posting) — off-chain signatures with on-chain settlement.
-- [State channel transactions](https://docs.aeternity.com/aeternity-core-concepts/protocol/transactions/state-channel-transactions) — the on-chain transaction types.
-- [Channels in the protocol spec](https://github.com/aeternity/protocol/tree/master/channels) — the normative on-chain and off-chain specifications.
+- [Why æternity](/aeternity/why-aeternity): the chain features Superhero does use.
+- [Chat](/social/chat): the off-chain system Superhero ships.
+- [Delegated posting](/social/delegated-posting): off-chain signatures with on-chain settlement.
+- [State channel transactions](https://docs.aeternity.com/aeternity-core-concepts/protocol/transactions/state-channel-transactions): the on-chain transaction types.
+- [Channels in the protocol spec](https://github.com/aeternity/protocol/tree/master/channels): the normative on-chain and off-chain specifications.

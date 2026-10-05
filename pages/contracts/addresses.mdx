@@ -7,7 +7,7 @@ description: "Every shared contract address Superhero uses on mainnet and testne
 
 The addresses below are the shared contracts on æternity mainnet (`ae_mainnet`) and testnet
 (`ae_uat`). Per-community contracts (token, sale, DAO, community management) are deployed by
-the factory and resolved per token — see
+the factory and resolved per token. See
 [Reading addresses at runtime](#reading-addresses-at-runtime).
 
 ## Mainnet (`ae_mainnet`)
@@ -24,9 +24,9 @@ the factory and resolved per token — see
 | WAE (wrapped AE) | `ct_J3zBY8xxjsRr3QojETNw48Eb38fjvEuJKkQ6KzECvubvEcvCa` |
 | aeETH | `ct_ryTY1mxqjCjq1yBn9i6HDaCSdA6thXUFZTA84EMzbWd1SLKdh` |
 
-The mainnet factory was deployed at key block height **1089546**. Start an indexer backfill of
+The mainnet factory was deployed at key block height 1089546. Start an indexer backfill of
 factory events from there. The governance registry is older: its backfill starts at height
-**164578**.
+164578.
 
 ## Testnet (`ae_uat`)
 
@@ -42,8 +42,8 @@ factory events from there. The governance registry is older: its backfill starts
 | WAE (wrapped AE) | `ct_JDp175ruWd7mQggeHewSLS1PFXt9AzThCDaFedxon8mF8xTRF` |
 | aeETH | `ct_WVqAvLQpvZCgBg4faZLXA1YBj43Fxj91D33Z8K7pFsY8YCofv` |
 
-The testnet factory was deployed at key block height **1097291**; the testnet governance
-registry backfill starts at height **168710**.
+The testnet factory was deployed at key block height 1097291; the testnet governance
+registry backfill starts at height 168710.
 
 ## Reading addresses at runtime
 
@@ -119,8 +119,8 @@ addresses without any chain calls.
 
 ## Related
 
-- [Calling Contracts](/contracts/calling-contracts) — how to turn one of these addresses into a working contract instance
-- [CommunityFactory](/contracts/community-factory) — the entrypoints used above to resolve addresses
-- [Networks](/aeternity/networks) — node, middleware and explorer endpoints for both networks
-- [Factory and contracts API](/api-reference/factory-and-contracts) — the REST endpoints that serve the factory schema
-- [aeScan block explorer](https://aescan.io) — inspect any address, its state and its calls
+- [Calling Contracts](/contracts/calling-contracts): how to turn one of these addresses into a working contract instance
+- [CommunityFactory](/contracts/community-factory): the entrypoints used above to resolve addresses
+- [Networks](/aeternity/networks): node, middleware and explorer endpoints for both networks
+- [Factory and contracts API](/api-reference/factory-and-contracts): the REST endpoints that serve the factory schema
+- [aeScan block explorer](https://aescan.io): inspect any address, its state and its calls

@@ -38,7 +38,7 @@ Practical consequences:
 
 - A tip cannot fail because of contract logic; it fails only if you cannot pay.
 - Attribution happens off chain, by the indexer reading the payload. If the indexer misses a
-  tip, the AE still arrived — only the displayed total is affected.
+  tip, the AE still arrived; only the displayed total is affected.
 - Anyone can reconstruct tip attribution by scanning spend transactions to an address and
   decoding payloads that start with `TIP_POST:`.
 
@@ -49,10 +49,10 @@ Practical consequences:
    or `TIP_POST`, otherwise the transaction is skipped.
 3. For a `TIP_POST:` payload, everything after the colon is taken as a post id and looked up
    directly by `id`. A miss leaves the tip unattached to a post.
-4. Self-tips are dropped, not stored — for a post tip that means `sender == post.sender_address`
+4. Self-tips are dropped, not stored. For a post tip that means `sender == post.sender_address`
    (tipping your own post), and for a profile tip `sender == receiver`.
 5. The row is keyed on `tx_hash`, so reprocessing the same transaction is idempotent.
-6. The amount is stored as `toAe(tx.amount)` — a decimal AE string, not aettos.
+6. The amount is stored as `toAe(tx.amount)`, a decimal AE string, not aettos.
 
 Two things follow:
 
@@ -78,15 +78,15 @@ balance disables the button.
 
 The displayed total comes from the indexer, which has to see the transaction confirm. The app
 adds your amount to the cached total immediately, then polls
-`GET /api/tips/posts/{postId}/summary` — 5 seconds after the send, then every 3 seconds for up
-to 18 more attempts, roughly a minute — until the backend total reaches the expected value. If
+`GET /api/tips/posts/{postId}/summary` (5 seconds after the send, then every 3 seconds for up
+to 18 more attempts, roughly a minute) until the backend total reaches the expected value. If
 the minute elapses, the app does a final refetch and leaves the real value in place.
 
 ## Read tip totals
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/tips/posts/{postId}/summary` | `totalTips` — a decimal AE string, summing every tip on the post **except** those sent by the post's own author. 404 if the post id is unknown. |
+| `GET /api/tips/posts/{postId}/summary` | `totalTips`, a decimal AE string, summing every tip on the post **except** those sent by the post's own author. 404 if the post id is unknown. |
 | `GET /api/tips/accounts/{address}/summary` | `totalTipsSent` and `totalTipsReceived`, both decimal AE strings, each excluding rows where sender equals receiver |
 | `GET /api/tips` | The paginated tip list |
 
@@ -95,8 +95,8 @@ The post id in the path takes the `_v3` suffix, matching the payload form.
 `GET /api/tips` accepts `sender`, `receiver`, `type` and `post_id` filters,
 `order_by` of `amount`, `type` or `created_at`, an `order_direction`, and `page`/`limit` with a
 maximum limit of 100. Ordering by `amount` casts the stored string to numeric first, so it
-sorts by value rather than lexically. `type` holds the **whole decoded payload** —
-`TIP_PROFILE`, or `TIP_POST:3903_v3` — so filtering by `type` is an exact-string match on that,
+sorts by value rather than lexically. `type` holds the **whole decoded payload**
+(`TIP_PROFILE`, or `TIP_POST:3903_v3`), so filtering by `type` is an exact-string match on that,
 not on the bare word `TIP_POST`.
 
 Tip signals also feed the popular feed: `tipsAmountAE`, `tipsCount` and `uniqueTippers` are
@@ -112,15 +112,15 @@ pending-tip pool and no reclaim path.
 ## Tips and notifications
 
 There is no tip notification type. The closest is `incoming-transfer`, which fires on any
-incoming `SpendTx` — a tip included — above `NOTIF_MIN_AMOUNT_AETTOS` (default 0, meaning
+incoming `SpendTx`, a tip included, above `NOTIF_MIN_AMOUNT_AETTOS` (default 0, meaning
 off). That type is mobile push only, so an incoming tip produces a mobile push if the recipient
 has a registered device, and nothing in the web bell. See
 [Notifications](/social/notifications).
 
 ## Related
 
-- [Posting](/social/posting) — the ids and `_v3` suffix convention the payload depends on.
-- [The Feed](/social/feed) — how tip signals influence popular ranking.
-- [Notifications](/social/notifications) — why a tip does not raise a bell notification.
-- [Value flow](/concepts/value-flow) — where money moves elsewhere in the protocol.
-- [Transactions](/api-reference/transactions) — reading spend transactions and their payloads.
+- [Posting](/social/posting): the ids and `_v3` suffix convention the payload depends on.
+- [The Feed](/social/feed): how tip signals influence popular ranking.
+- [Notifications](/social/notifications): why a tip does not raise a bell notification.
+- [Value flow](/concepts/value-flow): where money moves elsewhere in the protocol.
+- [Transactions](/api-reference/transactions): reading spend transactions and their payloads.

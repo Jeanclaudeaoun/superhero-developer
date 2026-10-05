@@ -10,7 +10,7 @@ to your on-chain SuperheroID, post about Superhero, and the backend scans your p
 AE to your connected wallet.
 
 This is **not** the affiliate program. Affiliate rewards come from trading fees and are
-withdrawn from a contract — see [The Affiliation System](/rewards/affiliation).
+withdrawn from a contract. See [The Affiliation System](/rewards/affiliation).
 
 ## Where it lives
 
@@ -18,14 +18,14 @@ The program is at the top of `https://superhero.com/trends/invite`, above the Re
 cards. Connect your wallet first; nothing on the page tracks progress without an active
 account.
 
-## Milestone 1 — Link X Account & Post
+## Milestone 1: Link X Account & Post
 
-**Reward: 50 AE.** Two steps, both of which must complete before milestone 2 unlocks.
+**Reward: 50 AE.** Two steps, both of which must complete before milestone 2 opens.
 
 | Step | What you do |
 | --- | --- |
 | 1 | Link your X account to your on-chain SuperheroID. The button sends you to your profile page at `/users/<your address>`. |
-| 2 | Post about Superhero from that linked account. The post must mention Superhero — either a `superhero.com` link or a tag of `@superhero_chain`. |
+| 2 | Post about Superhero from that linked account. The post must mention Superhero: either a `superhero.com` link or a tag of `@superhero_chain`. |
 
 The app pre-fills the compose intent with:
 
@@ -35,13 +35,13 @@ Check out @superhero_chain — earn AE tokens by posting on X! https://superhero
 
 - **Your X account must have at least 100 followers.** Accounts under that threshold are not
   eligible.
-- Milestone 1 is a **regular post** — it does not need your referral link. Only milestone 2
+- Milestone 1 is a **regular post** and does not need your referral link. Only milestone 2
   requires the link.
 
 Linking X also sets up your SuperheroID profile. See [SuperheroID](/identity/superhero-id)
 and [X verification](/identity/x-verification).
 
-## Milestone 2 — Post on X & Earn
+## Milestone 2: Post on X & Earn
 
 **Reward: 10–30 AE per qualifying post, plus a 50 AE streak bonus.** Locked until milestone 1
 is paid.
@@ -65,9 +65,9 @@ Your per-post rate is set by your follower count:
 
 Two counters run on this milestone:
 
-- **Posts rewarded** — the card tracks progress toward **10 rewarded posts** and reads
+- **Posts rewarded**: the card tracks progress toward **10 rewarded posts** and reads
   "completed" at 10.
-- **Streak** — posting on 10 consecutive days earns an **extra 50 AE**. The card shows your
+- **Streak**: posting on 10 consecutive days earns an **extra 50 AE**. The card shows your
   current streak out of 10 days. The bonus is recurring: when the streak reaches 10 it pays
   out and the counter resets, so the next streak starts from zero.
 
@@ -80,10 +80,10 @@ At the base tier, milestone 1 plus 10 posts plus one streak bonus adds up to 200
 | --- | --- | --- |
 | Onboarding | Your first post containing `superhero.com` or `superhero_chain` | One-time |
 | Per-post | A post containing your referral link | Once per UTC day, at your follower tier's rate |
-| Streak bonus | 10 consecutive UTC days of referral posts | Recurring — the counter resets and starts again |
+| Streak bonus | 10 consecutive UTC days of referral posts | Recurring: the counter resets and starts again |
 
-An account below the minimum follower count accrues nothing — no qualifying posts, no
-per-post rewards, no streak progress — though already-accrued payouts still settle.
+An account below the minimum follower count accrues nothing (no qualifying posts, no
+per-post rewards, no streak progress), though already-accrued payouts still settle.
 
 ### What counts as a qualifying post
 
@@ -125,13 +125,13 @@ backend, which scans X on your behalf.
 countdown. A submit past the cap returns HTTP 429 and the scan is skipped. The cap is claimed
 atomically, so retries and concurrent requests cannot exceed it.
 
-- A handled scan failure — an X outage, say — still consumes the slot. An unexpected failure
+- A handled scan failure, such as an X outage, still consumes the slot. An unexpected failure
   such as a database error releases it.
 - Recovering a pending or failed payout never calls X, so it runs **before** the cap check. A
   recheck that finds a stuck payout can settle it even while the scan itself is cooling down.
 
 **A successful check can still pay nothing.** A recheck that returns HTTP 200 may carry an
-`error` string explaining why no reward was sent — below the follower minimum, the X identity
+`error` string explaining why no reward was sent: below the follower minimum, the X identity
 was already rewarded on another address, or the payout transaction failed. The card shows that
 string as a red banner.
 
@@ -147,10 +147,10 @@ of the rewards page. Rewards may be reportable as income.
 
 ## Related
 
-- [Claiming Rewards](/rewards/claiming) — what arrives automatically versus what you sign for.
-- [Invite Links](/rewards/invite-links) — the other half of the `/trends/invite` page.
-- [The Affiliation System](/rewards/affiliation) — the on-chain referral system, which has
+- [Claiming Rewards](/rewards/claiming): what arrives automatically versus what you sign for.
+- [Invite Links](/rewards/invite-links): the other half of the `/trends/invite` page.
+- [The Affiliation System](/rewards/affiliation): the on-chain referral system, which has
   entirely different rules.
-- [X verification](/identity/x-verification) — the linking step behind milestone 1.
-- [Rewards page on superhero.com](https://superhero.com/trends/invite) — where you connect a
+- [X verification](/identity/x-verification): the linking step behind milestone 1.
+- [Rewards page on superhero.com](https://superhero.com/trends/invite): where you connect a
   wallet, link X and press Check rewards.

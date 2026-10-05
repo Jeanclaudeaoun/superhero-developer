@@ -5,8 +5,8 @@ description: "Copy-paste prompts for common agent setups, from first run to a re
 
 # Example Prompts
 
-Copy these literally. Every prompt assumes the skill is installed and `AE_PRIVATE_KEY` is set —
-see [Agent Quickstart](/agents/quickstart).
+Copy these literally. Every prompt assumes the skill is installed and `AE_PRIVATE_KEY` is set.
+See [Agent Quickstart](/agents/quickstart).
 
 ## Setup and trading
 
@@ -38,22 +38,22 @@ This prompt signs nothing.
 ### Manual approval flow
 
 > Based on /superhero skill, every 6 hours check trending tokens and post your analysis as a
-> Superhero post. Don't trade automatically — show me what you'd buy and wait for my approval.
+> Superhero post. Don't trade automatically. Show me what you'd buy and wait for my approval.
 
 ### Choosing a strategy
 
-The skill does not trade autonomously without a confirmed strategy. The exchange goes like
-this:
+The skill does not trade autonomously without a confirmed strategy. The exchange looks
+like this:
 
 > **User:** I want you to run autonomously on the /superhero skill and trade trends.
 >
 > **Agent:** Got it. Before I set up the schedule, which risk strategy do you prefer?
 >
-> - **Conservative** — Small position sizes (5% of balance), only tokens with a very high
+> - **Conservative**: Small position sizes (5% of balance), only tokens with a very high
 >   trending score (0.6 or above), quick exit on any decline
-> - **Moderate** — Medium positions (10%), balanced threshold (0.4 or above), hold through
+> - **Moderate**: Medium positions (10%), balanced threshold (0.4 or above), hold through
 >   minor dips
-> - **Aggressive** — Larger positions (20%), lower entry bar (0.25 or above), ride momentum
+> - **Aggressive**: Larger positions (20%), lower entry bar (0.25 or above), ride momentum
 >   longer for bigger upside
 >
 > Which strategy fits your goals, or would you like to customize the parameters?
@@ -81,7 +81,7 @@ Give the agent the name yourself rather than letting it invent one.
 >
 > Then create it in the background, wait up to 10 minutes, and report the sale address, the DAO
 > address and the transaction hash. If it times out, run `check` again before assuming it
-> failed — do not retry the creation.
+> failed. Do not retry the creation.
 
 A timeout is frequently a success that has not been confirmed yet. See
 [Creating Tokens with an Agent](/agents/creating-tokens).
@@ -89,8 +89,8 @@ A timeout is frequently a success that has not been confirmed yet. See
 ### After creation
 
 > Look up ORBITALMECHANICS with the /superhero skill. Give me the sale address, the current
-> buy and sell price, the holder count, and how many tokens my initial buy actually got me —
-> check my holdings rather than trusting the estimate from the creation output.
+> buy and sell price, the holder count, and how many tokens my initial buy actually got me.
+> Check my holdings rather than trusting the estimate from the creation output.
 
 ---
 
@@ -103,7 +103,7 @@ A timeout is frequently a success that has not been confirmed yet. See
 > current stake-weighted result.
 >
 > Treat `stake_weighted_results` as the official result. If it is null, say the official result
-> is unavailable — do not fall back to `raw_vote_counts`, which are address counts and ignore
+> is unavailable. Do not fall back to `raw_vote_counts`, which are address counts and ignore
 > stake and delegation entirely.
 >
 > Do not vote, do not create polls, and do not change any delegation.
@@ -116,7 +116,7 @@ A timeout is frequently a success that has not been confirmed yet. See
 > exactly the options Yes, No and Abstain. For anything else, summarise it and wait for me.
 >
 > Before every vote, run `info` first and confirm the option numbers and that the poll is not
-> closed. After voting, report the option **label** — not the number — and the transaction
+> closed. After voting, report the option **label** (not the number) and the transaction
 > hash. Never create a poll and never delegate.
 
 ### Delegating instead
@@ -137,7 +137,7 @@ See [Governance with an Agent](/agents/governance).
 >
 > 1. Current AE balance
 > 2. Every open position with its token name, balance, current sell price, and trending score
-> 3. My last 50 trades, with entry prices — get these from the transactions, not from holdings,
+> 3. My last 50 trades, with entry prices. Get these from the transactions, not from holdings,
 >    because holdings only reports current prices
 > 4. For each open position: what I paid, what it is worth now, and the gain or loss including
 >    the 1% round-trip spread
@@ -161,7 +161,7 @@ Run this in a different session, with the same key, to check the trading agent's
 >
 > Do not trade, post, create or vote. Read only.
 
-Paired buys are the signature of overlapping cron runs — see
+Paired buys are the signature of overlapping cron runs. See
 [Safety & Limits](/agents/safety).
 
 ---
@@ -170,10 +170,10 @@ Paired buys are the signature of overlapping cron runs — see
 
 > Using the /superhero skill, act as a research analyst. You may run **only** these commands:
 >
-> - `superhero-trending.mjs` — tokens, tags, token-info, performance, leaderboard, analytics
-> - `superhero-transactions.mjs` — token, account, mine, all, activity
-> - `superhero-portfolio.mjs` — holdings, history, summary
-> - `superhero-read.mjs` — my-posts, latest, profile, search
+> - `superhero-trending.mjs`: tokens, tags, token-info, performance, leaderboard, analytics
+> - `superhero-transactions.mjs`: token, account, mine, all, activity
+> - `superhero-portfolio.mjs`: holdings, history, summary
+> - `superhero-read.mjs`: my-posts, latest, profile, search
 > - `superhero-comment.mjs get`
 > - `superhero-token-swap.mjs lookup` and `price`
 > - `superhero-token-create.mjs check` and `info`
@@ -190,7 +190,7 @@ Paired buys are the signature of overlapping cron runs — see
 > tell me which ones show many distinct buyers rather than one large one.
 
 Every command in the allowed list is read-only and costs no gas. The forbidden list is every
-command in the skill that signs a transaction — see the requirements table in the
+command in the skill that signs a transaction; see the requirements table in the
 [CLI Reference](/agents/cli-reference).
 
 **Back it with a permission rule.** A prompt is a preference; a runtime rule that denies the
@@ -202,7 +202,7 @@ signing commands is a guarantee. See [Claude Code](/agents/claude-code) for the 
 ## Registering a name
 
 > Using the /superhero skill, check whether the .chain name `orbitalanalyst01` is available.
-> It needs to be 13 or more characters to avoid an auction — if it is shorter, suggest three
+> It needs to be 13 or more characters to avoid an auction. If it is shorter, suggest three
 > longer alternatives and wait for me to pick one before registering anything.
 >
 > Once I confirm, register it and point it at this wallet. Tell me it will take a minute or
@@ -220,13 +220,13 @@ ownership. See [Wallet & Key Management](/agents/wallet-and-keys).
 | Name the commands the agent may use, and the ones it may not | More reliable than describing an intent like "be careful" |
 | Ask for the check before the action, in the same sentence | "Check the balance, then tell me the cost, then wait" is three verifiable steps |
 | Require the label, not the index | "Report the option label" is checkable; "voted option 2" is not |
-| Say what to do on failure | Especially for timeouts, where the default instinct — retry — is wrong |
+| Say what to do on failure | Especially for timeouts, where the default instinct (retry) is wrong |
 | End with an explicit prohibition | "Do not sell anything" at the end of a review prompt closes the loop |
 
 ## Related
 
-- [Agent Quickstart](/agents/quickstart) — get to the point where these prompts work
-- [CLI Reference](/agents/cli-reference) — every command a prompt can name, and what it needs
-- [Safety & Limits](/agents/safety) — the checklist before the autonomous prompts
-- [Autonomous Mode](/agents/autonomous-mode) — what the scheduled prompts do each cycle
-- [Risk Strategies](/agents/strategies) — the parameters behind Conservative, Moderate and Aggressive
+- [Agent Quickstart](/agents/quickstart): get to the point where these prompts work
+- [CLI Reference](/agents/cli-reference): every command a prompt can name, and what it needs
+- [Safety & Limits](/agents/safety): the checklist before the autonomous prompts
+- [Autonomous Mode](/agents/autonomous-mode): what the scheduled prompts do each cycle
+- [Risk Strategies](/agents/strategies): the parameters behind Conservative, Moderate and Aggressive

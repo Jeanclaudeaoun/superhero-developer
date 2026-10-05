@@ -5,7 +5,7 @@ description: "Why pricing attention with a bonding curve produces a usable marke
 
 # Attention Markets
 
-Attention is already a market — it just has no price feed. Hashtags trend, communities form, and
+Attention already behaves like a market, but it has no price feed. Hashtags trend, communities form, and
 value accrues to platforms rather than participants. Superhero gives every trend a token whose price
 is a deterministic function of how many people have bought in.
 
@@ -50,7 +50,7 @@ Two design consequences fall straight out of the constants:
 
 ## A worked example
 
-Take a token at supply zero — freshly created, nobody has bought. All figures are computed from the
+Take a token at supply zero: freshly created, nobody has bought. All figures are computed from the
 curve formula above.
 
 | Supply | Marginal price of the next token |
@@ -65,11 +65,11 @@ Now follow one buyer through it.
 
 **The first buyer spends 1 AE.** Solving the integral for a 1 AE curve cost at supply 0 gives about
 **437,014 tokens**. Their marginal price rose from 0.0000001 AE to roughly 0.0000053 AE per token
-along the way — a 53× move in the marginal price, on a 1 AE trade, because the curve is steepest in
+along the way, a 53× move in the marginal price, on a 1 AE trade, because the curve is steepest in
 relative terms at the very bottom.
 
 **The next buyer spends the same 1 AE.** They start at supply 437,014, not 0, so the same AE buys
-materially fewer tokens. This is the entire point: the price encodes who was early.
+materially fewer tokens. The price encodes who was early.
 
 **Buying a million tokens at different points** shows the same thing from the other side:
 
@@ -81,14 +81,14 @@ materially fewer tokens. This is the entire point: the price encodes who was ear
 | 100,000,000 | 1,732.02 AE |
 
 **Round trip.** If the first buyer sells immediately at the same supply, the sell curve returns
-`0.995` of the curve value — about **0.995 AE** against the **1.005 AE** they actually paid (the
+`0.995` of the curve value, about **0.995 AE** against the **1.005 AE** they actually paid (the
 curve cost plus the 0.5% affiliation fee). The round trip costs them roughly 1% of the gross,
-before gas. Nothing about the curve rewards churn.
+before gas, so the curve does not reward churn.
 
 ## The social loop
 
 1. Someone posts about a topic. The post is on-chain and attributed to them.
-2. Attention gathers on the topic — the feed, the hashtag page, the token's chat room.
+2. Attention gathers on the topic: the feed, the hashtag page, the token's chat room.
 3. Some of that attention converts into buying pressure on the topic's token.
 4. Buying moves the supply, which moves the price, which is visible to everyone in real time.
 5. The visible price move is itself a signal that draws more attention. Back to step 1.
@@ -114,8 +114,8 @@ score = (0.35 * trading_score + 0.65 * social_score) * freshness_decay
 normalized(raw, cap) = ln(1 + min(raw, cap)) / ln(1 + cap)
 ```
 
-Capping before the logarithm means a signal stops helping entirely once it saturates — the 5,001st
-AE of 24-hour volume adds nothing — and the logarithm means the first few units of any signal are
+Capping before the logarithm means a signal stops helping entirely once it saturates (the 5,001st
+AE of 24-hour volume adds nothing), and the logarithm means the first few units of any signal are
 worth far more than the next few. Both work against brute-force manufacturing of a score.
 
 | Group | Signal | Weight in group | Cap (24h) |
@@ -132,7 +132,7 @@ worth far more than the next few. Both work against brute-force manufacturing of
 | Social | Reads of mentioning posts | 0.06 | 200 |
 
 **Social activity is weighted almost twice as heavily as trading**: community activity dominates
-ranking. And **buys and sells count equally**, at 0.20 each. A token being dumped trends exactly as
+ranking. **Buys and sells count equally**, at 0.20 each, so a token being dumped trends exactly as
 hard as a token being accumulated. The score measures activity, not direction.
 
 The decay term is a Hacker-News-style gravity function on time since the *most recent* activity of
@@ -143,8 +143,8 @@ freshness_decay = 1 / (1 + age_hours / 2) ^ 1.15
 ```
 
 At two hours idle a token keeps about half its pre-decay score; at a day, about a twentieth. Scores
-are refreshed on a cron — every two hours for tokens with recent activity, every six for a stale
-backfill — so a score you read may be up to two hours behind the window it describes. Tokens flagged
+are refreshed on a cron (every two hours for tokens with recent activity, every six for a stale
+backfill), so a score you read may be up to two hours behind the window it describes. Tokens flagged
 `unlisted` are skipped entirely.
 
 Trending *tags* are a different mechanism that happens to share a word. They may not have tokens at
@@ -160,35 +160,11 @@ The trending score is a *derived* number, not a protocol quantity: no contract r
 depends on it, and the weights above are backend configuration that can change with a deploy. Treat
 it as a ranking aid, not as ground truth. See [The Trending Score](/tokens/trending-score).
 
-## Reading the price well
-
-The price records the community's conviction as it happens. A few things help you read it well.
-
-**Reflexivity.** The price is supposed to measure conviction, but the price is also what creates
-conviction. There is no external anchor — no earnings, no redemption value other than the curve
-itself — to break the feedback loop in either direction.
-
-**Wash trading.** Nothing prevents one party from buying and selling their own token to manufacture
-volume; it costs them roughly 1% per round trip plus gas. Holder counts and transaction lists are
-public on every token page so you can check for this — see [Reading a Token Page](/tokens/token-page).
-The trending score's caps blunt this: a single wallet cycling trades saturates the buy and sell
-counts at 40 each and contributes 1 to a 25-cap active-wallet count. The price and the market cap
-have no such ceiling.
-
-**First-mover concentration.** The curve is cheapest at supply zero, so the creator and the earliest
-buyers can accumulate a large share of the eventual supply for very little AE. That share is also
-DAO voting weight. Check the Holders tab before assuming a token's governance is distributed.
-
-**Trend decay.** The curve has no notion of time. Price is a record of cumulative net buying, not of
-current relevance.
-
-Volatility and smart-contract risk are real; see [Risks](/tokens/risks).
-
 ## Related
 
-- [Bonding Curves](/tokens/bonding-curve) — the integral, the contract entrypoints, and how a quote is produced.
-- [Curve Parameters & Units](/tokens/curve-parameters) — aettos, decimals, and the exact constants.
-- [Where the Money Goes](/concepts/value-flow) — the 1% spread, split to the fraction, on both sides of a trade.
-- [The Trending Score](/tokens/trending-score) — what the API returns and how the app sorts by it.
-- [Risks](/tokens/risks) — the trading risks stated plainly, with the mitigations that exist.
-- [Trending tokens on superhero.com](https://superhero.com/trends/tokens) — the live market, sorted by market cap.
+- [Bonding Curves](/tokens/bonding-curve): the integral, the contract entrypoints, and how a quote is produced.
+- [Curve Parameters & Units](/tokens/curve-parameters): aettos, decimals, and the exact constants.
+- [Where the Money Goes](/concepts/value-flow): the 1% spread, split to the fraction, on both sides of a trade.
+- [The Trending Score](/tokens/trending-score): what the API returns and how the app sorts by it.
+- [Risks](/tokens/risks): the trading risks stated plainly, with the mitigations that exist.
+- [Trending tokens on superhero.com](https://superhero.com/trends/tokens): the live market, sorted by market cap.

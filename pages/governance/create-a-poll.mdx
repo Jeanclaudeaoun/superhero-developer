@@ -5,8 +5,8 @@ description: "Deploy a poll contract and register it in the Registry, from the w
 
 # Creating a Poll
 
-Creating a poll takes **two on-chain transactions** — deploy the poll contract, then register
-it in the `Registry` — and costs roughly 0.02 AE. Allow 2–5 minutes for both to mine.
+Creating a poll takes **two on-chain transactions** (deploy the poll contract, then register
+it in the `Registry`) and costs roughly 0.02 AE. Allow 2–5 minutes for both to mine.
 
 **A poll cannot be edited after it is deployed.** There is no entrypoint to change the title,
 fix a typo in the description, add an option, or move the close height. The only correction is
@@ -74,7 +74,7 @@ The web form defaults to 30 days, computed as `current_height + 14400`.
 Micro-blocks arrive about every three seconds, but `close_height` is a key-block height, so
 always convert at three minutes per block.
 
-Setting `0` — or omitting it in the CLI — creates a poll that **never closes**. Stake weighting
+Setting `0`, or omitting it in the CLI, creates a poll that **never closes**. Stake weighting
 is computed against the state at the close height, so an open-ended poll has no snapshot and
 produces a continuously moving figure rather than a settled outcome. Use it for standing
 sentiment, not for a decision.
@@ -87,14 +87,14 @@ Go to [superhero.com/voting/create](https://superhero.com/voting/create), or ope
 1. Connect a wallet with at least 0.02 AE.
 2. Enter the **title** (50 characters) and the **description** (300 characters).
 3. Enter the **link**. If it does not point at `forum.aeternity.com`, the form suggests opening
-   a forum thread and linking that instead — a hint, not a requirement.
+   a forum thread and linking that instead. This is a hint, not a requirement.
 4. Choose **Publicly Listed** or **Not Listed**.
 5. Add your **options**. The form starts with two empty rows and adds another each time you
    fill the last one.
 6. Set the **close height**. The form pre-fills 30 days ahead and shows an estimated close date
    and time; editing either the date or the time recomputes the height at three minutes per
    block, and editing the height recomputes the date.
-7. Submit, and approve **two** transactions in your wallet — the poll deployment, then the
+7. Submit, and approve **two** transactions in your wallet: the poll deployment, then the
    registry entry.
 
 On success the app takes you to `/voting/p/:pollAddress`, the poll's own page.
@@ -156,7 +156,7 @@ against the node's current height so it cannot be set in the past. On success it
 }
 ```
 
-Keep `poll_address` — it is what every other command takes. `poll_id` is the registry's
+Keep `poll_address`; it is what every other command takes. `poll_id` is the registry's
 sequential id, usable with `info-by-id`.
 
 ## Deploy without the script
@@ -173,18 +173,18 @@ If you are building your own client, the two calls are:
       returns the poll's sequential registry id
 ```
 
-Both Superhero paths leave `spec_ref` unset. The registry to call is the one for your network
-— see [The Governance Registry](/governance/registry).
+Both Superhero paths leave `spec_ref` unset. The registry to call is the one for your network;
+see [The Governance Registry](/governance/registry).
 
 Deploy the poll from the **account that should be its author**: `Poll.state.author` is set at
 deployment and `is_author` checks against it. The author has no special power over the poll
-afterwards — they cannot close it, edit it or delete it — but the attribution is permanent.
+afterwards (they cannot close it, edit it or delete it), but the attribution is permanent.
 
 `Registry.add_poll` can be called by any account for any deployed poll, and the caller sets
 `is_listed`. The registry has no `remove_poll`, no `set_listed` and no update entrypoint, so
 a registration is permanent: the id, the cached title and the `is_listed` flag are fixed. If
-you register with the wrong `is_listed` value, register the poll again with the other value —
-both entries remain — or deploy a fresh poll.
+you register with the wrong `is_listed` value, register the poll again with the other value
+(both entries remain), or deploy a fresh poll.
 
 Deploy the standard poll bytecode as shipped with the app or the agent skill. The governance
 backend computes `stake_weighted_results` only for polls built from the unmodified
@@ -203,8 +203,8 @@ Each transaction pays gas at the network's current gas price.
 
 ## Related
 
-- [Polls](/governance/polls) — the data model you are populating, and which result figure counts.
-- [Voting on Polls](/governance/voting) — what happens once people start voting.
-- [The Governance Registry](/governance/registry) — `add_poll`, the registry addresses, and the governance API.
-- [Governance with an agent](/agents/governance) — the guarded workflow for creating polls from an agent.
-- [Create a poll](https://superhero.com/voting/create) — the live form.
+- [Polls](/governance/polls): the data model you are populating, and which result figure counts.
+- [Voting on Polls](/governance/voting): what happens once people start voting.
+- [The Governance Registry](/governance/registry): `add_poll`, the registry addresses, and the governance API.
+- [Governance with an agent](/agents/governance): the guarded workflow for creating polls from an agent.
+- [Create a poll](https://superhero.com/voting/create): the live form.

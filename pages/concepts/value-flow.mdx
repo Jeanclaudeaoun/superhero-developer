@@ -6,8 +6,8 @@ description: "The exact split of every AE spent on a community token buy — and
 # Where the Money Goes
 
 Every AE that enters a community token trade ends up in one of four places: the bonding curve
-reserve, the community's DAO treasury, the affiliation chain, or the network as gas. Here is the
-full accounting, on both sides of a trade.
+reserve, the community's DAO treasury, the affiliation chain, or the network as gas. This page gives
+the full accounting, on both sides of a trade.
 
 ## The buy side
 
@@ -29,12 +29,12 @@ Buyer also receives:
 ```
 
 The 1% total spread is the difference between the buy curve and the sell curve. It is not
-charged as a separate fee — it is built into the two curves. See
+charged as a separate fee; it is built into the two curves. See
 [Bonding Curves](/tokens/bonding-curve) for the math.
 
 ## The exact split
 
-Write `C` for the **curve cost** of the slice you are buying — the integral of the buy curve from the
+Write `C` for the **curve cost** of the slice you are buying: the integral of the buy curve from the
 current supply to the supply after your purchase:
 
 ```text
@@ -57,7 +57,7 @@ function exp_helper(x : int, term : int, sum : int, i : int, scale : int) : int 
 The series matches the closed form to well below one aetto per token. Use the closed form to
 reason about the shape; use `price(count)` when a number has to be exact.
 
-The sell curve is `sell(x) = buy(x) * 0.995` — the 0.5% that funds the DAO. The sale contract adds
+The sell curve is `sell(x) = buy(x) * 0.995`, and that 0.5% gap funds the DAO. The sale contract adds
 a further 0.5% affiliation fee **on top of** the curve price, so the total spread between buy and
 sell price is 1%.
 
@@ -73,7 +73,7 @@ entrypoint price(count : int) : int =
 
 `price(n)` already equals `1.005 * C`; do not multiply it by 1.005 again. `buy` uses the same
 arithmetic and requires `Call.value >= total_price`, refunding any excess with
-`Chain.spend(Call.caller, overpaid_refund)` — which is why the agent CLI can attach `price * 1.03`
+`Chain.spend(Call.caller, overpaid_refund)`. That is why the agent CLI can attach `price * 1.03`
 and get the difference back.
 
 The affiliation fee rate is read from the treasury at call time: `get_affiliation_fee_percentage()`
@@ -93,7 +93,7 @@ split rounded to one decimal place.
 
 The four affiliation levels are percentages **of the transaction value**, not of the fee, which is
 why they sum to 0.5% rather than to 100%. The transaction value handed to the treasury is `C`, the
-bare curve price — so level 1 receives 0.300% of `C`, not of `1.005 * C`.
+bare curve price, so level 1 receives 0.300% of `C`, not of `1.005 * C`.
 
 ### How the split is executed
 
@@ -108,7 +108,7 @@ bare curve price — so level 1 receives 0.300% of `C`, not of `1.005 * C`.
 | 5 | `dao_contract.record_sale_transaction(...)` | `Call.value - overpaid_refund - affiliation_amount - reserve` |
 
 The DAO's cut in step 5 is a **residual**, not a percentage. `reserve` is
-`calculate_sell_return(total_supply_after_mint, count)`, which is `0.995 * C` — exactly what a
+`calculate_sell_return(total_supply_after_mint, count)`, which is `0.995 * C`: exactly what a
 seller of that same slice could immediately redeem. Subtracting it and the affiliation fee from
 `1.005 * C` leaves `0.005 * C` for the DAO. The sale contract keeps precisely the sell-side
 obligation and forwards the rest, which is what makes the solvency guarantee structural.
@@ -152,7 +152,7 @@ return = integral of sell(x) dx, from supply - amount to supply
 | Affiliation chain | nothing |
 | ProtocolDAO tokens minted | none |
 
-The 0.5% gap relative to the buy curve is not a sell fee — it was taken when those tokens were
+The 0.5% gap relative to the buy curve is not a sell fee. It was taken when those tokens were
 bought. The reserve grows by `0.995 * C` per buy, which is exactly the sell-curve integral over the
 same slice, so the reserve at supply `S` is always `integral of sell(x) from 0 to S`: precisely
 enough to redeem the entire supply. Selling the entire supply back to the curve is always possible.
@@ -190,13 +190,13 @@ only. Likewise the factory's `mint_protocol_dao_token(int, address)` is called o
 
 | Event | Argument 0 | Argument 1 | Argument 2 |
 | --- | --- | --- | --- |
-| `Buy` | `total_price` — all-in AE, fee included | `affiliation_amount` | `total_supply` **before** the mint |
-| `Sell` | `return` — AE paid to the seller | `total_supply` **before** the burn | — |
-| `PriceChange` | `previous_price` | `next_price` | — |
+| `Buy` | `total_price`: all-in AE, fee included | `affiliation_amount` | `total_supply` **before** the mint |
+| `Sell` | `return`: AE paid to the seller | `total_supply` **before** the burn | n/a |
+| `PriceChange` | `previous_price` | `next_price` | n/a |
 
 `Buy` and `Sell` omit `count`; take the token amount from the decoded call arguments, not the
-event. Both unit prices in `PriceChange` come from `calculate_unit_price()`, which is `price(10^18)`
-— the all-in cost of one whole token at that moment, affiliation fee included.
+event. Both unit prices in `PriceChange` come from `calculate_unit_price()`, which is `price(10^18)`:
+the all-in cost of one whole token at that moment, affiliation fee included.
 
 ## A worked example
 
@@ -223,7 +223,7 @@ If your buy is attributed to a referrer, that 0.050 AE splits down the invite ch
 | 4 | 0.025% | 0.0025 AE |
 | **Total** | **0.500%** | **0.0500 AE** |
 
-A level that does not exist — nobody invited your inviter — contributes nothing to anyone.
+A level that does not exist (nobody invited your inviter) contributes nothing to anyone.
 
 Now sell all 1,400,993 tokens straight back, before anyone else trades:
 
@@ -234,7 +234,7 @@ Now sell all 1,400,993 tokens straight back, before anyone else trades:
 | **You receive** | **9.950 AE** (minus gas, on two transactions) |
 
 Round trip: you paid 10.050 AE and got back 9.950 AE. The 0.100 AE difference is **0.995% of what
-you sent** — the 1% spread, all of it collected on the way in. Gas is extra, and a sell costs two
+you sent**: the 1% spread, all of it collected on the way in. Gas is extra, and a sell costs two
 transactions' worth of it.
 
 ## Slippage
@@ -261,10 +261,10 @@ Count transactions, not trades:
 | --- | --- |
 | Post or comment | 1 |
 | Buy a token | 1 |
-| **Sell a token** | **2** — allowance, then sell |
+| **Sell a token** | **2**: allowance, then sell |
 | Create a token | 1 (deploys token, curve, sale, DAO and management contracts together) |
 | Open a DAO vote | 1, plus a **555 AE** payment to the DAO |
-| Create a governance poll | 2 — deploy, then register |
+| Create a governance poll | 2: deploy, then register |
 | Claim rewards | 1; a small gas fee applies |
 
 Gas for every transaction follows the network's gas price at execution;
@@ -289,7 +289,7 @@ switch(get_direct_inviter(invitee))
 ```
 
 No entry is credited for a missing level. The only way AE leaves the treasury is `withdraw()`,
-which pays `get_accumulated_rewards(Call.caller)` — the sum of that caller's own ledger entries.
+which pays `get_accumulated_rewards(Call.caller)`, the sum of that caller's own ledger entries.
 There is no owner, no admin entrypoint and no sweep, so uncredited AE stays in the contract balance
 permanently. (Creating a collection, by contrast, sends its 555 AE fee to the burn address
 `ak_11111111111111111111111111111111273Yts`.)
@@ -297,8 +297,8 @@ permanently. (Creating a collection, by contrast, sends its 555 AE fee to the bu
 Two further amounts burn the same way, both consequences of `withdraw()`:
 
 - **Rewards older than two payout periods.** `get_accumulated_rewards` sums only the current period
-  and the one before it. A payout period is `Chain.timestamp / 2592000000` — 30 days in
-  milliseconds — so anything credited more than roughly 30 to 60 days ago can no longer be
+  and the one before it. A payout period is `Chain.timestamp / 2592000000` (30 days in
+  milliseconds), so anything credited more than roughly 30 to 60 days ago can no longer be
   withdrawn.
 - **Rewards belonging to an inviter who has not qualified.** `withdraw()` requires
   `state.unique_invitees[...] == ThresholdReached`, and aborts with
@@ -309,8 +309,8 @@ Two further amounts burn the same way, both consequences of `withdraw()`:
 
 ## ProtocolDAO tokens
 
-Every buy also mints ProtocolDAO tokens to the buyer — a separate platform-wide AEX-9 token, not the
-community token you bought — at **1,000× the AE value of the buy**, issued to the buyer's address at
+Every buy also mints ProtocolDAO tokens to the buyer (a separate platform-wide AEX-9 token, not the
+community token you bought) at **1,000× the AE value of the buy**, issued to the buyer's address at
 the time of purchase. Its governance functionality is not yet implemented.
 
 The factory holds the multiplier as a single constant:
@@ -324,7 +324,7 @@ stateful entrypoint mint_protocol_dao_token(buy_value : int, receiver : address)
   state.protocol_dao_token.mint(receiver, buy_value * protocol_dao_token_multiplier)
 ```
 
-The sale contract passes `Call.value - overpaid_refund` as `buy_value` — the **all-in** amount
+The sale contract passes `Call.value - overpaid_refund` as `buy_value`: the **all-in** amount
 debited, `1.005 * C`, affiliation fee included. A buy whose curve cost is 10 AE costs 10.05 AE and
 mints 10,050 ProtocolDAO tokens. Only a sale the factory itself deployed can mint
 (`known_token_sales`). During `create_community` the factory mints the initial buy's ProtocolDAO
@@ -338,9 +338,9 @@ record.
 
 ## Related
 
-- [Bonding Curves](/tokens/bonding-curve) — the integral, the entrypoints, and how a quote is built.
-- [Fees & Slippage](/tokens/fees-and-slippage) — the practical guide to setting tolerance before you trade.
-- [The Affiliation System](/rewards/affiliation) — how the four-level chain is recorded and how payouts are claimed.
-- [The Treasury](/dao/treasury) — what happens to the DAO's 0.5% once it arrives.
-- [ProtocolDAO Token](/dao/protocol-dao) — what the platform token is for, and what it is not yet.
-- [Buy or sell on superhero.com](https://superhero.com/trends/tokens) — the live token list and trade cards.
+- [Bonding Curves](/tokens/bonding-curve): the integral, the entrypoints, and how a quote is built.
+- [Fees & Slippage](/tokens/fees-and-slippage): the practical guide to setting tolerance before you trade.
+- [The Affiliation System](/rewards/affiliation): how the four-level chain is recorded and how payouts are claimed.
+- [The Treasury](/dao/treasury): what happens to the DAO's 0.5% once it arrives.
+- [ProtocolDAO Token](/dao/protocol-dao): what the platform token is for, and what it is not yet.
+- [Buy or sell on superhero.com](https://superhero.com/trends/tokens): the live token list and trade cards.

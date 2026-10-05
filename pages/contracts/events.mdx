@@ -15,14 +15,14 @@ A Sophia `Chain.event` produces a log entry with a `topics` array and a `data` f
 
 | Slot | Contents |
 | --- | --- |
-| `topics[0]` | The **Blake2b-256 hash of the event constructor name**, as a big integer. It is implicit — not one of the declared arguments. |
+| `topics[0]` | The **Blake2b-256 hash of the event constructor name**, as a big integer. It is implicit, not one of the declared arguments. |
 | `topics[1..]` | The word-sized arguments in declaration order: `address`, `int`, `bool`, contract references. |
 | `data` | A single `string` argument, if the event declares one. Empty otherwise. |
 
-`Mint(address, int)` produces three topics — the name hash, the account, and the value — and
+`Mint(address, int)` produces three topics (the name hash, the account, and the value) and
 empty data. An indexer filters logs on `topics[0]` and reads the amount from `topics[2]`.
 
-`PostWithoutTipReceived(address, string)` produces two topics — the name hash and the author —
+`PostWithoutTipReceived(address, string)` produces two topics (the name hash and the author)
 and puts the title in `data`.
 
 The name hash is derivable offline:
@@ -168,7 +168,7 @@ datatype event =
 | `ChangedMetaInfo` | `10335050073377245413811954146980376891356632402160017070530938091573150368814` |
 
 `MuteUserId` and `UnmuteUserId` carry their `string` in `data`, not in a topic.
-`ChangedMetaInfo` has no arguments — one topic, empty data. On seeing it, re-read
+`ChangedMetaInfo` has no arguments, so it has one topic and empty data. On seeing it, re-read
 `meta_info()` to find out what changed.
 
 ### AffiliationTreasury
@@ -199,7 +199,7 @@ Two orderings are easy to transpose: `InvitationRedeemed` leads with the **invit
 `InvitationRedeemed` is the caller, which for a redemption is the invite address itself.
 
 `UserInvited` fires only from `register_invitation`. An invite claimed through a code emits
-`InvitationRedeemed` instead, even though both write the same affiliation-tree entry — watch
+`InvitationRedeemed` instead, even though both write the same affiliation-tree entry. Watch
 both to capture every invite relationship.
 
 `RewardAdded` fires once per credited level, so one buy under a four-deep referral chain emits
@@ -271,9 +271,9 @@ datatype event = PostViaBurnReceived(tip_id, address, string, TokenContract)
 | --- | --- |
 | `PostViaBurnReceived` | `82774704438961085039490474074506978272280842136924042967135740228700002403902` |
 
-## Name collisions — filter by contract, always
+## Name collisions: filter by contract, always
 
-The topic hash is computed from the **name alone**. It carries no contract identity and no
+The topic hash is computed from the name alone. It carries no contract identity and no
 argument types. Three names collide across the suite:
 
 | Name | Emitted by | Arguments |
@@ -357,7 +357,7 @@ const payload = log.data;
 
 `event_hash` is the same 32-byte Blake2b-256 digest as `topics[0]`, encoded as padded
 base32hex (RFC 4648's extended-hex alphabet, not standard base32). Match on `event_hash` when
-you want a stable identifier, and on `event_name` only as a convenience — it is present only
+you want a stable identifier, and on `event_name` only as a convenience, since it is present only
 when the middleware has the contract's ACI.
 
 Two operational notes:
@@ -389,8 +389,8 @@ The subscribe message is a JSON object with up to four fields:
 | --- | --- |
 | `op` | `Subscribe` or `Unsubscribe` |
 | `payload` | the channel: `Transactions`, `MicroBlocks`, `KeyBlocks`, or `Object` |
-| `target` | optional — the object to watch, for the `Object` channel |
-| `source` | optional — `mdw` or `node` |
+| `target` | optional; the object to watch, for the `Object` channel |
+| `source` | optional; `mdw` or `node` |
 
 Unsubscribing sends the identical object with `op` flipped to `Unsubscribe`. Reconnect on a
 timeout: a dropped socket is silent, and the gap is otherwise invisible.
@@ -401,8 +401,8 @@ and `token-history`. See [WebSocket API](/api-reference/websocket).
 
 ## Related
 
-- [Calling Contracts](/contracts/calling-contracts) — `decodedEvents` in context, plus reverts and gas
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — where the four events of a buy come from
-- [Node and middleware API](/api-reference/node-and-middleware) — the middleware endpoints in full
-- [WebSocket API](/api-reference/websocket) — the Superhero API's own real-time channels
-- [æternity contract events specification](https://github.com/aeternity/protocol/blob/master/contracts/events.md) — the topic and data encoding rules
+- [Calling Contracts](/contracts/calling-contracts): `decodedEvents` in context, plus reverts and gas
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale): where the four events of a buy come from
+- [Node and middleware API](/api-reference/node-and-middleware): the middleware endpoints in full
+- [WebSocket API](/api-reference/websocket): the Superhero API's own real-time channels
+- [æternity contract events specification](https://github.com/aeternity/protocol/blob/master/contracts/events.md): the topic and data encoding rules

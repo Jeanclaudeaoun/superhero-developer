@@ -6,7 +6,7 @@ description: "Where a community DAO's AE comes from, how to read the balance on-
 # The DAO Treasury
 
 A community DAO holds plain AE. There is no separate vault contract, no wrapped balance and
-no staking position — the treasury is the AE balance of the `DAO` contract, and the only way
+no staking position. The treasury is the AE balance of the `DAO` contract, and the only way
 it leaves is a payout vote that passes and is applied in time.
 
 ## Where the money comes from
@@ -33,7 +33,7 @@ state.dao_contract.record_sale_transaction(
 the curve price and the DAO receives the residual `0.5%`. Setting the payout obligation aside
 before the treasury is paid is what keeps the reserve solvent.
 
-The call is `protected = true`, so a DAO call that aborts does not block the trade — the AE
+The call is `protected = true`, so a DAO call that aborts does not block the trade; the AE
 stays in the sale contract. See [Value flow](/concepts/value-flow) and
 [Fees & Slippage](/tokens/fees-and-slippage).
 
@@ -44,7 +44,7 @@ stateful payable entrypoint record_sale_transaction(buyer: address, buy_price: i
 ```
 
 The AE rides along with the call; the buyer's address and the buy price arrive as arguments.
-The stock DAO keeps the AE and does not store the arguments — reconstruct which buys funded a
+The stock DAO keeps the AE and does not store the arguments. Reconstruct which buys funded a
 treasury from the `Buy` events on the sale contract. The entrypoint is part of the
 `ReplaceableDAO` interface, so a replacement DAO can split income, forward part of it, or
 account for it per buyer. See [Replaceable DAOs](/dao/replaceable-dao).
@@ -56,7 +56,7 @@ DAO must accept zero-value calls to be a beneficiary.
 ## The 555 AE is not refundable
 
 The 555 AE paid on `add_vote` is a donation to the DAO. It lands in the treasury and no
-entrypoint returns it — not on rejection, not on expiry, and not on success. There is no
+entrypoint returns it: not on rejection, not on expiry, and not on success. There is no
 `refund`, no `cancel_vote` and no author-only withdrawal.
 
 - A failed proposal costs its author 555 AE, which stays with the community.
@@ -96,12 +96,12 @@ Everything else about the DAO is read through its entrypoints:
 | `total_supply` | Needed to evaluate the 10% participation quorum |
 | `holders_count` | How many addresses hold the token |
 
-`dao_balance` is in aettos — divide by `10^18` to get AE. See
+`dao_balance` is in aettos; divide by `10^18` to get AE. See
 [Tokens API](/api-reference/tokens) for the rest of the DTO.
 
 `dao_balance` is refreshed together with the token's live price, so it is as fresh as the last
-price refresh. For a balance consistent with a specific block — for example when checking
-whether a `VotePayoutAmount` proposal is affordable — read the contract's account balance at
+price refresh. For a balance consistent with a specific block (for example, when checking
+whether a `VotePayoutAmount` proposal is affordable), read the contract's account balance at
 that height yourself.
 
 ## The treasury in the app
@@ -112,26 +112,26 @@ that height yourself.
 | One DAO | `/trends/dao/:saleAddress` | That community's treasury, its proposal list, and the create-vote form. |
 | One proposal | `/trends/dao/:saleAddress/vote/:voteId/:voteAddress` | The ballot, the voters table, and the vote, revoke, withdraw and apply actions. |
 
-The DAO list is keyed by `sale_address`, not by the DAO address — the sale contract is the
+The DAO list is keyed by `sale_address`, not by the DAO address, because the sale contract is the
 stable public identifier for a community across the app.
 
 ## What the treasury can be spent on
 
 Only two of the seven vote subjects move money:
 
-- `VotePayout(recipient)` — send the **entire** DAO balance to one account.
-- `VotePayoutAmount(recipient, amount)` — send a **specified** amount to one account.
+- `VotePayout(recipient)` sends the **entire** DAO balance to one account.
+- `VotePayoutAmount(recipient, amount)` sends a **specified** amount to one account.
 
 There is no multi-recipient payout, no streaming, no vesting and no budget primitive. A
 community that wants to split a grant between three contributors runs three proposals, or
 pays one address that then distributes off-protocol. A `ChangeDAO` vote also moves the whole
-balance, as part of a migration — see [Replaceable DAOs](/dao/replaceable-dao).
+balance, as part of a migration; see [Replaceable DAOs](/dao/replaceable-dao).
 
 ## Related
 
-- [Proposals and Vote Subjects](/dao/proposals) — the two payout subjects and their exact parameters.
-- [How DAOs Work](/dao/overview) — the funding step in the context of the whole lifecycle.
-- [Replaceable DAOs](/dao/replaceable-dao) — the interface `record_sale_transaction` belongs to.
-- [Value flow](/concepts/value-flow) — where the other 99.5% of a buy goes.
-- [Tokens API](/api-reference/tokens) — the full token DTO including `dao_address` and `dao_balance`.
-- [Browse every DAO treasury](https://superhero.com/trends/daos) — the live list.
+- [Proposals and Vote Subjects](/dao/proposals): the two payout subjects and their exact parameters.
+- [How DAOs Work](/dao/overview): the funding step in the context of the whole lifecycle.
+- [Replaceable DAOs](/dao/replaceable-dao): the interface `record_sale_transaction` belongs to.
+- [Value flow](/concepts/value-flow): where the other 99.5% of a buy goes.
+- [Tokens API](/api-reference/tokens): the full token DTO including `dao_address` and `dao_balance`.
+- [Browse every DAO treasury](https://superhero.com/trends/daos): the live list.

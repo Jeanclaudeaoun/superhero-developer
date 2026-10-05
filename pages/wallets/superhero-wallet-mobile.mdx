@@ -3,7 +3,7 @@ title: "Superhero Wallet — Mobile"
 description: "The native apps, the built-in wallet, and installing Superhero as a PWA with no app store."
 ---
 
-# Superhero Wallet — Mobile
+# Superhero Wallet: Mobile
 
 On a phone there are three ways to hold an account for Superhero: the Superhero app's built-in
 wallet, the standalone Superhero Wallet app, and Superhero installed as a PWA.
@@ -28,11 +28,11 @@ a full-screen experience, an integrated wallet and push notifications.
 **Safari only.** Chrome and Firefox on iOS cannot install a PWA.
 
 1. Open [superhero.com](https://superhero.com) in Safari.
-2. Open the page menu — the **⋯** menu in the top right, or the **Share** button on older iOS
+2. Open the page menu: the **⋯** menu in the top right, or the **Share** button on older iOS
    versions.
 3. Scroll and tap **Add to Home Screen**.
 4. Tap **Add** in the top right. The icon appears on your home screen.
-5. **Launch it from the home-screen icon**, not from Safari — the extra capabilities only exist in
+5. **Launch it from the home-screen icon**, not from Safari. The extra capabilities only exist in
    standalone mode.
 
 ### Android
@@ -50,7 +50,7 @@ On desktop, the same install is available from the install button in your browse
 | Behaviour | Browser tab | Installed app |
 | --- | --- | --- |
 | Create a built-in wallet (passkey or new phrase) | Yes | Yes |
-| **Import** an existing seed phrase or private key | No — Connect instead | **Yes** |
+| **Import** an existing seed phrase or private key | No, Connect instead | **Yes** |
 | In-page signing by the built-in wallet | Not installed as the signer | **Yes** |
 | Token community chat entry points | Hidden | **Shown** |
 | Location sharing on iOS | Not available | Available |
@@ -64,7 +64,7 @@ installed app does not come back cleanly, which is why the installed app takes t
 
 Tapping **Connect** in the installed app offers a passkey option first. On a phone that means Face
 ID, Touch ID, a fingerprint or your device PIN, and it creates a real æternity account in one
-ceremony — no seed-phrase screen, because the seed is *derived* from the passkey rather than stored
+ceremony. There is no seed-phrase screen, because the seed is *derived* from the passkey rather than stored
 beside it.
 
 **That is a backup only if the passkey syncs** (iCloud Keychain, Google Password Manager). There is
@@ -74,10 +74,10 @@ survive.
 
 ## Push notifications
 
-Push is standard Web Push (VAPID), opt-in, and enabled from a control in the app — the permission
+Push is standard Web Push (VAPID), opt-in, and enabled from a control in the app. The permission
 prompt requires a tap, so it never appears on load.
 
-- **Exactly one permission is requested** — the browser's notification permission. No location, no
+- **Exactly one permission is requested**: the browser's notification permission. No location, no
   contacts, no background-refresh grant. Subscriptions are `userVisibleOnly`, so the browser will
   not deliver a push that does not show a notification.
 - **It can be unavailable through no fault of yours.** If the server has no VAPID key configured,
@@ -94,7 +94,7 @@ Superhero Wallet app. An installed PWA is still the web build:
 | | Installed PWA of the web wallet | Native app |
 | --- | --- | --- |
 | Where the seed lives | Site `localStorage`, encrypted under your password | OS keychain, accessible when unlocked, encrypted with a per-install key |
-| Unlock | Password (or none, if you turned protection off) | Biometrics — Face ID, Touch ID, fingerprint — or the device credential |
+| Unlock | Password (or none, if you turned protection off) | Biometrics (Face ID, Touch ID, fingerprint) or the device credential |
 | Default auto-lock | 5 minutes of inactivity | **Immediately** |
 | In-app dæpp browser | No | **Yes** |
 | QR scanning | Browser camera | Native scanner |
@@ -103,8 +103,8 @@ Superhero Wallet app. An installed PWA is still the web build:
 | Deep links | `https://wallet.superhero.com/...` only | Also the `superhero://` scheme, and universal links on `wallet.superhero.com` |
 | Survives "clear site data" | No | Yes |
 
-**The native app is the stronger place to hold value on a phone** — keychain storage and
-biometrics — and the PWA is the convenient one. Neither changes your backup obligation, which is
+**The native app is the stronger place to hold value on a phone** (keychain storage and
+biometrics), and the PWA is the convenient one. Neither changes your backup obligation, which is
 the seed phrase in both cases.
 
 ## Connecting the standalone Superhero Wallet app
@@ -116,9 +116,9 @@ app through the transaction queue route, described in [Connecting a Wallet](/wal
 
 ## Related
 
-- [The Built-In Wallet](/wallets/built-in-wallet) — what the "wallet built in" is, and where its keys live.
-- [Connecting a Wallet](/wallets/connecting) — the deep-link path mobile uses instead of extension detection.
-- [Choosing a Wallet](/wallets/choosing-a-wallet) — built-in versus standalone, decided by recovery model.
-- [Backup & Recovery](/wallets/backup-and-recovery) — especially the passkey-sync rule.
-- [Web Wallet](/wallets/web-wallet) — what an installed PWA of `wallet.superhero.com` can and cannot do.
-- [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet) — the standalone wallet's documentation.
+- [The Built-In Wallet](/wallets/built-in-wallet): what the "wallet built in" is, and where its keys live.
+- [Connecting a Wallet](/wallets/connecting): the deep-link path mobile uses instead of extension detection.
+- [Choosing a Wallet](/wallets/choosing-a-wallet): built-in versus standalone, decided by recovery model.
+- [Backup & Recovery](/wallets/backup-and-recovery): especially the passkey-sync rule.
+- [Web Wallet](/wallets/web-wallet): what an installed PWA of `wallet.superhero.com` can and cannot do.
+- [Superhero Wallet on the æternity docs hub](https://docs.aeternity.com/aeternity-user-tools-and-services/superhero-wallet): the standalone wallet's documentation.

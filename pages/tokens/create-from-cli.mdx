@@ -22,7 +22,7 @@ the skill's root. It signs with an in-memory account built from `AE_PRIVATE_KEY`
 
 ## Pre-flight
 
-1. Confirm you have AE for gas — about 0.001 AE for creation, plus whatever you intend to pre-buy:
+1. Confirm you have AE for gas (about 0.001 AE for creation, plus whatever you intend to pre-buy):
 
    ```bash
    node scripts/superhero-wallet.mjs balance
@@ -81,8 +81,8 @@ Progress messages go to stderr, so `2>/dev/null` gives you parseable JSON and no
 
 1. **Load the signing account** from `AE_PRIVATE_KEY` and connect to mainnet.
 2. **Initialise the factory** at the mainnet address `ct_25cqTw85wkF5cbcozmHHUCuybnfH9WaRZXSgEcNNXG9LsCJWTN` using `contracts/CommunityFactory.aci.json`.
-3. **Check the balance** — only when `buy_ae` is greater than zero. It requires `balance >= buy_ae + 0.01`, where the extra 0.01 AE is gas headroom.
-4. **Resolve the collection.** It fetches `https://api.superhero.com/api/factory` and takes the first collection in the schema — the English `WORDS-ak_...` one. To create in a different collection, use the SDK path below.
+3. **Check the balance** if `buy_ae` is greater than zero. It requires `balance >= buy_ae + 0.01`, where the extra 0.01 AE is gas headroom.
+4. **Resolve the collection.** It fetches `https://api.superhero.com/api/factory` and takes the first collection in the schema, which is the English `WORDS-ak_...` one. To create in a different collection, use the SDK path below.
 5. **Check the name** with `factory.has_community(collectionId, tokenName)` and abort if it is taken.
 6. **Size the initial buy**, if there is one:
    - Estimate a token count off-chain by bisecting the curve integral against your AE figure (up to 1,000 iterations, search bounds 0 to 10^12 tokens, always from supply zero). The stopping tolerance is an **absolute** 0.001 AE, so a 0.1 AE initial buy is sized to within about 1%.
@@ -102,7 +102,7 @@ attached = ceil( calculate_buy_price(0, count) × 1.05 )
 
 `calculate_buy_price` returns the **bare curve integral**; the sale contract also charges a 0.5%
 affiliation fee, so roughly a tenth of the buffer covers the fee. A new token is created at supply
-zero by definition, so there is no curve drift between quote and execution for a creation — the
+zero by definition, so there is no curve drift between quote and execution for a creation. The
 same buffer pattern is reused for ordinary buys, where drift is real.
 
 **The remainder comes back.** `create_community` requires `Call.value >= buy_price` rather than
@@ -239,9 +239,9 @@ hardcoded address pointing at an abandoned registry.
 
 ## Related
 
-- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — the same deployment through the web form, with live price estimates
-- [Curve Parameters & Units](/tokens/curve-parameters) — why `initialBuyCount` is scaled by 10^18 and what `supported_decimals()` is for
-- [Collections & Naming Rules](/tokens/collections-and-naming) — how to pick a collection deliberately instead of taking the first one
-- [Buying & Selling](/tokens/buying-and-selling) — the trading script, which follows the same conventions
-- [Agent CLI reference](/agents/cli-reference) — every script in the skill
-- [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/) — `Contract.initialize`, ACIs and call options such as `amount`
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard): the same deployment through the web form, with live price estimates
+- [Curve Parameters & Units](/tokens/curve-parameters): why `initialBuyCount` is scaled by 10^18 and what `supported_decimals()` is for
+- [Collections & Naming Rules](/tokens/collections-and-naming): how to pick a collection deliberately instead of taking the first one
+- [Buying & Selling](/tokens/buying-and-selling): the trading script, which follows the same conventions
+- [Agent CLI reference](/agents/cli-reference): every script in the skill
+- [æternity JavaScript SDK: contracts](https://aeternity.com/aepp-sdk-js/develop/guides/contracts/): `Contract.initialize`, ACIs and call options such as `amount`

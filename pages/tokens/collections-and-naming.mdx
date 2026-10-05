@@ -7,7 +7,7 @@ description: "Which collection a token name belongs to, the character and length
 
 A **collection** is a namespace inside the community factory. It owns a character set, a maximum
 name length, and a registry of the token sales created inside it. Names are unique per collection,
-not globally, and you never pick a collection explicitly in the app — it is derived from the
+not globally, and you never pick a collection explicitly in the app. It is derived from the
 characters you type.
 
 ## What a collection defines
@@ -23,7 +23,7 @@ characters you type.
 | `create_collection(collection_name, allowed_name_length, allowed_name_chars)` | Create a namespace. Payable |
 
 The registry enforces two further rules: a community's name must be unique within its collection
-(`NAME_ALREADY_REGISTERED`), and the token's name is also its symbol — `create_community` passes the
+(`NAME_ALREADY_REGISTERED`), and the token's name is also its symbol: `create_community` passes the
 same `name` string as both.
 
 Both name checks run inside `create_community` and abort the whole transaction: `NAME_TOO_LONG` when
@@ -68,10 +68,10 @@ The Superhero backend indexes a configured allowlist of collections. Four are co
 
 | Collection | Max name length | Allowed characters |
 | --- | --- | --- |
-| `WORDS` | 20 | `-`, `0`–`9`, `A`–`Z` — code points 45, 48–57, 65–90 |
-| `CHINESE` | 20 | `-` and CJK ideographs U+4E00–U+9FFF — code points 45, 19968–40959 |
-| `ARABIC` | 20 | `-` and Arabic letters U+0621–U+064A — code points 45, 1569–1610 |
-| `RUSSIAN` | 20 | `-`, `Ё` and `А`–`Я` — code points 45, 1025, 1040–1071 |
+| `WORDS` | 20 | `-`, `0`–`9`, `A`–`Z` (code points 45, 48–57, 65–90) |
+| `CHINESE` | 20 | `-` and CJK ideographs U+4E00–U+9FFF (code points 45, 19968–40959) |
+| `ARABIC` | 20 | `-` and Arabic letters U+0621–U+064A (code points 45, 1569–1610) |
+| `RUSSIAN` | 20 | `-`, `Ё` and `А`–`Я` (code points 45, 1025, 1040–1071) |
 
 None of the three non-Latin collections admits digits or Latin letters, and `RUSSIAN` admits only
 uppercase Cyrillic. All four cap names at 20 characters. `WORDS` was deployed from a different
@@ -103,13 +103,13 @@ The English collection is three rules:
   65 to 90  =  "A" to "Z"
 ```
 
-The app turns each rule set into a regular expression character class — `\-0-9A-Z` for the English
-collection — anchored as a whole-string match with the `u` flag, so astral code points count as one
+The app turns each rule set into a regular expression character class (`\-0-9A-Z` for the English
+collection), anchored as a whole-string match with the `u` flag, so astral code points count as one
 character rather than as a surrogate pair. A name is valid for a collection when every one of its
 characters is in that class.
 
 The English rule set does not include lowercase letters, spaces, underscores, dots or emoji. That is
-why the create form uppercases as you type and rewrites spaces as dashes — it turns near-misses into
+why the create form uppercases as you type and rewrites spaces as dashes. That turns near-misses into
 valid names rather than rejecting them.
 
 ## How the app picks a collection for you
@@ -118,10 +118,10 @@ Because every collection allows `-`, a name such as `A-B` is valid in all of the
 resolves this in three steps, re-derived on every keystroke:
 
 1. **Detect.** Every collection whose character rules accept the name, in schema order.
-2. **Prefer.** If more than one matches, the English one — or the first in the list if English is absent.
+2. **Prefer.** If more than one matches, the English one, or the first in the list if English is absent.
 3. **Honour an explicit choice.** If you picked a collection from the chip's dropdown and it still accepts the current name, that choice wins; otherwise the preference takes over again.
 
-If no collection matches, the form shows an **Unsupported** badge and disables submit — a name no
+If no collection matches, the form shows an **Unsupported** badge and disables submit, because a name no
 collection accepts would only burn gas and revert on-chain.
 
 The dropdown appears only when the name fits more than one collection. `HELLO` is Latin-only and
@@ -157,10 +157,10 @@ payable stateful entrypoint create_collection(collection_name : string, allowed_
 | Question | Answer |
 | --- | --- |
 | Who may call it? | **Anyone.** There is no owner check, no allowlist and no moderator role. |
-| What does it cost? | **Exactly 555 AE** — `Call.value == 555 * 10^18`. Attaching more aborts just as surely as attaching less. There is no refund path, because there is no surplus. |
+| What does it cost? | **Exactly 555 AE**: `Call.value == 555 * 10^18`. Attaching more aborts just as surely as attaching less. There is no refund path, because there is no surplus. |
 | Where does the 555 AE go? | `Chain.spend` to `ak_11111111111111111111111111111111273Yts`, the all-zero account. It is **burned**, not paid to the platform or to a treasury. |
 
-The creator chooses the collection's rules outright — the length cap and the whole character
+The creator chooses the collection's rules outright: the length cap and the whole character
 whitelist are arguments. The only uniqueness check is `collection_ALREADY_EXISTS`, and because the
 id is suffixed with the caller's address, it only stops the *same account* creating the same name
 twice.
@@ -194,9 +194,9 @@ instead, which is faster but can lag a very recent creation by a few minutes.
 
 ## Related
 
-- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — where the collection chip and the availability tick appear
-- [Create a Token (CLI)](/tokens/create-from-cli) — how the script resolves a collection, and how to override it
-- [Community Tokens](/tokens/overview) — what the name you are choosing is attached to
-- [Community factory contract](/contracts/community-factory) — the registry and collection entrypoints in full
-- [Factory and contracts API](/api-reference/factory-and-contracts) — `GET /api/factory`, the schema the app reads collections from
-- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) — `String.length`, `String.to_list` and `Char.to_int`, which the name check is built from
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard): where the collection chip and the availability tick appear
+- [Create a Token (CLI)](/tokens/create-from-cli): how the script resolves a collection, and how to override it
+- [Community Tokens](/tokens/overview): what the name you are choosing is attached to
+- [Community factory contract](/contracts/community-factory): the registry and collection entrypoints in full
+- [Factory and contracts API](/api-reference/factory-and-contracts): `GET /api/factory`, the schema the app reads collections from
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md): `String.length`, `String.to_list` and `Char.to_int`, which the name check is built from

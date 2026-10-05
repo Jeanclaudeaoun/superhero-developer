@@ -15,7 +15,7 @@ at the poll's close height.
 **`stake_weighted_results` is the official outcome. `raw_vote_counts` are address counts
 only.**
 
-The `Poll` contract stores `votes : map(address, int)` — one option per address, with no
+The `Poll` contract stores `votes : map(address, int)`: one option per address, with no
 weight attached. Counting those entries tells you how many addresses picked each option,
 which can point the opposite way from the stake-weighted result: a hundred addresses holding
 dust outvote two whales on raw counts and lose decisively on stake.
@@ -55,7 +55,7 @@ and no way to extend or shorten `close_height`. The only remedy for a mistake is
 The contract validates the metadata lengths in `init`: the title must be at most 50
 characters (`TITLE_STRING_TO_LONG`) and the description at most 300
 (`DESCRIPTION_STRING_TO_LONG`). The link, `spec_ref`, the option labels, the number of options
-and the close height are not validated on-chain — a poll deployed with a close height already
+and the close height are not validated on-chain. A poll deployed with a close height already
 in the past is born closed.
 
 ### On the registry
@@ -83,8 +83,8 @@ Registry.poll_data = { poll         : Poll
 - Anyone can vote on it.
 - It still appears in `Registry.polls()`, which returns everything.
 
-Use it for polls that should not clutter the public list — a test, a narrow question for a
-specific group — not for anything that needs to stay secret.
+Use it for polls that should not clutter the public list (a test, a narrow question for a
+specific group), not for anything that needs to stay secret.
 
 The CLI defaults to listed-only and takes `--all` to include unlisted polls:
 
@@ -137,7 +137,7 @@ poll is closed, and your own current vote.
 }
 ```
 
-`total_stake` and `option_stake` are in aettos — divide by `10^18` for AE.
+`total_stake` and `option_stake` are in aettos; divide by `10^18` for AE.
 `percent_of_total_supply` is how much of all AE in existence took part, which is the closest
 thing this system has to a turnout figure. There is **no quorum**: a poll with 0.1%
 participation still produces a result.
@@ -150,16 +150,16 @@ participation still produces a result.
 | `title()`, `metadata()` | Poll identity |
 | `close_height()` | The closing height, as `option(int)` |
 | `votes()` | Every address and the option it chose |
-| `vote(option)` | Cast or change your vote — stateful |
-| `revoke_vote()` | Retract your vote — stateful |
+| `vote(option)` | Cast or change your vote (stateful) |
+| `revoke_vote()` | Retract your vote (stateful) |
 | `has_voted(voter)` | Whether that address has a vote standing |
 | `voted_option(voter)` | Which option, as `option(int)` |
 | `is_closed()` | Whether the closing height has passed |
 | `is_author(author)` | Whether that address deployed the poll |
 | `version()` | Contract version |
 
-The contract emits `Vote` — the poll address, the voter and the option index — and
-`RevokeVote` — the poll address and the voter. The events are on each poll, not on the
+The contract emits `Vote` (the poll address, the voter and the option index) and
+`RevokeVote` (the poll address and the voter). The events are on each poll, not on the
 registry, so an indexer subscribes per poll.
 
 ## How stake weighting works
@@ -172,10 +172,10 @@ and account stakes at that height.**
   your weight; spending it reduces it.
 - Accounts that have **not** voted on the poll have their AE counted for whoever they
   delegated to. Voting yourself overrides your delegation for that poll only.
-- Delegation chains resolve transitively — a delegatee who has themselves delegated passes the
+- Delegation chains resolve transitively: a delegatee who has themselves delegated passes the
   weight along. See [Delegation](/governance/delegation).
 
-An open-ended poll — `close_height` set to `None` — has no snapshot. It never closes, so its
+An open-ended poll (`close_height` set to `None`) has no snapshot. It never closes, so its
 result is a running figure computed against the current state. Treat it as continuous
 sentiment, not a decision.
 
@@ -194,7 +194,7 @@ The governance backend indexes the contracts and computes the stake-weighted res
 | Endpoint | Returns |
 | --- | --- |
 | `GET pollOverview/:pollAddress` | Poll state, per-account stakes at height, per-option stakes, total stake, vote count |
-| `GET votesState/:address` | The same overview shape — the source of `stake_weighted_results` |
+| `GET votesState/:address` | The same overview shape. This is the source of `stake_weighted_results` |
 | `GET pollOrdering?closed=true,false` | The backend's ordering of polls, with per-poll totals and a score |
 | `GET delegatedPower/:address?poll=:pollAddress` | Delegated power for an account, with its delegation tree |
 | `GET accountPollVoterAuthor/:address` | Polls an account voted in, authored, or was voted in by its delegatee |
@@ -205,7 +205,7 @@ The app calls `contractEvent` immediately after every vote, revoke and delegatio
 backend re-indexes promptly. If your own client skips it, expect a lag before your vote shows
 up in the stake-weighted figures.
 
-`pollOverview` carries a `stakesAtHeight` array with one entry per voting account —
+`pollOverview` carries a `stakesAtHeight` array with one entry per voting account:
 `account`, `option`, `stake`, `balance`, `delegated`, `delegators` and a `delegationTree`.
 Look there when a result does not match your expectation: it separates an account's own
 balance from the weight it received by delegation.
@@ -226,15 +226,15 @@ history:
 | `GET /api/governance/delegations` | Paginated delegations; `includeRevoked` to see revoked ones |
 | `GET /api/governance/delegations/:accountAddress` | Delegation and revocation history for one account, in order |
 
-These are indexed transaction records — counts of votes and revocations, not stake weights.
+These are indexed transaction records: counts of votes and revocations, not stake weights.
 Use them for provenance and history, and the governance API for results.
 
 ## Related
 
-- [Voting on Polls](/governance/voting) — casting a vote once you have read the poll.
-- [Creating a Poll](/governance/create-a-poll) — the field limits and the two-transaction flow.
-- [Delegation](/governance/delegation) — where the delegated half of a stake figure comes from.
-- [The Governance Registry](/governance/registry) — the contract behind `polls()` and `poll(id)`.
-- [Community DAOs](/dao) — the other voting system, where stake is locked and results execute.
-- [Browse polls](https://superhero.com/voting) — the live list.
-- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance) — the reference implementation and the close-height counting rule.
+- [Voting on Polls](/governance/voting): casting a vote once you have read the poll.
+- [Creating a Poll](/governance/create-a-poll): the field limits and the two-transaction flow.
+- [Delegation](/governance/delegation): where the delegated half of a stake figure comes from.
+- [The Governance Registry](/governance/registry): the contract behind `polls()` and `poll(id)`.
+- [Community DAOs](/dao): the other voting system, where stake is locked and results execute.
+- [Browse polls](https://superhero.com/voting): the live list.
+- [aeternity/aepp-governance](https://github.com/aeternity/aepp-governance): the reference implementation and the close-height counting rule.

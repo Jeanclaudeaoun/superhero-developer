@@ -35,7 +35,7 @@ node scripts/superhero-governance.mjs vote ct_abc123... 0
 ```
 
 The script re-reads the poll before submitting. It refuses an option index the poll does not
-define — printing the valid options instead — and refuses to vote on a poll that is already
+define (printing the valid options instead) and refuses to vote on a poll that is already
 closed. The contract enforces the same two rules:
 
 ```sophia
@@ -47,7 +47,7 @@ stateful entrypoint vote(option : int) =
 ```
 
 `is_closed()` is `Chain.block_height >= close_height` for a poll that has one, and `false` for
-a poll with `close_height = None` — which is how an open-ended poll stays votable forever.
+a poll with `close_height = None`, which is how an open-ended poll stays votable forever.
 
 The script prints the option label it voted for:
 
@@ -80,7 +80,7 @@ Revoking removes your vote entirely, so the poll counts you as not having voted:
 - **Your delegation comes back into effect for that poll.** Voting directly overrides your
   delegation only while your vote stands; once revoked, whoever you delegated to speaks for
   your balance again. To abstain rather than hand your weight back to your delegatee, revoke
-  your delegation too — see [Delegation](/governance/delegation).
+  your delegation too; see [Delegation](/governance/delegation).
 
 You can vote again after revoking, as long as the poll is still open. `revoke_vote` itself is
 not restricted to open polls. The script checks that you have actually voted before
@@ -95,8 +95,8 @@ costing a transaction.
 | Tokens transferred to the contract | No | Yes |
 | Balance immobilised while voting | No | Yes, until you revoke or withdraw |
 | What is counted | Your AE balance at the poll's close height | The token amount you locked |
-| Changing your mind | Call `vote` again | Rejected — `revoke_vote` first |
-| Revoking after the close | Allowed | Rejected — `VOTE_ALREADY_CLOSED` |
+| Changing your mind | Call `vote` again | Rejected: `revoke_vote` first |
+| Revoking after the close | Allowed | Rejected: `VOTE_ALREADY_CLOSED` |
 | Withdrawal step after closing | None | Required |
 | Minimum to participate | None | The amount you stake, plus an allowance |
 
@@ -112,8 +112,8 @@ The snapshot only exists once the poll has closed:
 
 | Poll state | Weighting is read at |
 | --- | --- |
-| Open, with a future close height | The current height — the figures move as balances move |
-| Closed | The close height — fixed |
+| Open, with a future close height | The current height; the figures move as balances move |
+| Closed | The close height: fixed |
 | Open-ended (`close_height = None`) | The current height, forever. There is never a snapshot |
 
 An open poll's percentages are a live reading, so two people loading the same open poll an
@@ -121,7 +121,7 @@ hour apart can legitimately see different numbers.
 
 **There is no minimum balance to vote.** An account with nothing in it can cast a vote that
 records normally, emits a `Vote` event and appears in `votes()`. It contributes zero stake,
-but it is counted in the backend's `voteCount` — the address count the app shows as "Total
+but it is counted in the backend's `voteCount`, the address count the app shows as "Total
 Votes". See [Polls](/governance/polls).
 
 Nothing about a governance poll executes on-chain. Acting on a result is a separate, off-chain
@@ -141,7 +141,7 @@ appears. The same page shows live stake-weighted results and, below them, your a
 balance, your delegation status and how many accounts delegate to you.
 
 The app's **Total Votes** figure and its per-option percentage bars are computed from address
-counts. For the stake-weighted picture — the official result — read `option_stake` and
+counts. For the stake-weighted picture (the official result), read `option_stake` and
 `percentage_of_total_stake` from the governance API, or the `stake_weighted_results` block in
 the CLI's `info` output.
 
@@ -154,9 +154,9 @@ itself is on-chain and counted regardless.
 
 ## Related
 
-- [Polls](/governance/polls) — the data model, and why the stake-weighted figure is the real result.
-- [Delegation](/governance/delegation) — what your vote overrides, and what comes back when you revoke it.
-- [Creating a Poll](/governance/create-a-poll) — asking the question rather than answering it.
-- [Voting in a community DAO](/dao/voting) — the other system, where voting locks your tokens.
-- [Governance with an agent](/agents/governance) — the read-before-voting workflow, automated.
-- [Vote on a poll](https://superhero.com/voting) — the live interface.
+- [Polls](/governance/polls): the data model, and why the stake-weighted figure is the real result.
+- [Delegation](/governance/delegation): what your vote overrides, and what comes back when you revoke it.
+- [Creating a Poll](/governance/create-a-poll): asking the question rather than answering it.
+- [Voting in a community DAO](/dao/voting): the other system, where voting locks your tokens.
+- [Governance with an agent](/agents/governance): the read-before-voting workflow, automated.
+- [Vote on a poll](https://superhero.com/voting): the live interface.
