@@ -6,8 +6,8 @@ description: "What can go wrong with a community token — the 1% starting loss,
 # Risks
 
 Community tokens are volatile, reflexive, and structurally loss-making on a short round trip. The
-bonding curve removes some risks that exist elsewhere — there is no liquidity to pull and no
-counterparty to default — and introduces others that are specific to it.
+bonding curve removes some risks that exist elsewhere (there is no liquidity to pull and no
+counterparty to default) and introduces others that are specific to it.
 
 Nothing here is financial advice. Never risk funds you cannot afford to lose.
 
@@ -29,7 +29,7 @@ loss                               0.001052764439 AE   = 0.995% of what you paid
 ```
 
 Before gas. **The price has to rise about 1% before you are level**, which on this curve means the
-supply must grow by roughly the same 1% — somebody else has to buy about as much as you did for you
+supply must grow by roughly the same 1%: somebody else has to buy about as much as you did for you
 to break even.
 
 For a trader doing many round trips this compounds: ten round trips at unchanged prices leave you
@@ -54,13 +54,13 @@ a position's value. See [Portfolio & PnL](/tokens/portfolio).
 
 The same logic makes large entries expensive: adding 10% to a token's supply costs about 5% above
 the price you were quoted, and doubling the supply costs about 54% above it. Splitting the order does
-not help — the curve is path-independent. See [Fees & Slippage](/tokens/fees-and-slippage).
+not help, because the curve is path-independent. See [Fees & Slippage](/tokens/fees-and-slippage).
 
 ## 3. Reflexivity
 
 Price is a pure function of supply and nothing else. There is no external market, no arbitrageur,
 and no fundamental value pulling the price back to anything, so the feedback loop is direct: buying
-raises the price, which attracts buyers, which raises the price — and selling does the same in
+raises the price, which attracts buyers, which raises the price, and selling does the same in
 reverse. Neither direction has a natural floor above the curve itself, and a price that rose on one
 large buy is exactly as "real" as one that rose on a thousand small ones.
 
@@ -74,9 +74,9 @@ further up the curve than the people the signal is reporting on. See
 Most community tokens are small. The specific dangers in a thin one:
 
 - **A single holder can be the market.** If one address holds 50% of the supply, their exit walks the price down through every other holder's position first. Check the Holders tab before you buy.
-- **The creator's entry was much cheaper than yours.** A pre-buy at creation happens at the very bottom of the curve: the first 437,014 tokens cost exactly 1 AE, while the same 437,014 tokens bought at a supply of 10,000,000 cost 47.06 AE — 47 times more. An early holder can be far ahead while a later one is underwater.
+- **The creator's entry was much cheaper than yours.** A pre-buy at creation happens at the very bottom of the curve: the first 437,014 tokens cost exactly 1 AE, while the same 437,014 tokens bought at a supply of 10,000,000 cost 47.06 AE, 47 times more. An early holder can be far ahead while a later one is underwater.
 - **Low holder count with high supply is one person's position with a price attached**, not a community.
-- **Dilution.** Supply is unlimited and minted on demand. Your balance does not change when other people buy, but your share of the supply — and therefore your governance weight — falls.
+- **Dilution.** Supply is unlimited and minted on demand. Your balance does not change when other people buy, but your share of the supply, and therefore your governance weight, falls.
 
 ## 5. Abandoned tokens
 
@@ -87,14 +87,14 @@ prices and the curve keeps working, but:
 - Whatever the DAO treasury accumulated stays there. Opening a DAO vote costs **555 AE** paid by the proposer, so a treasury worth less than 555 AE is effectively unspendable: nobody will rationally pay more to propose a payout than the payout is worth. See [DAO voting](/dao/voting).
 - Governance requires a quorum of 10% of the token stake and 55% approval within two weeks. In an abandoned community that quorum may be unreachable, which freezes the treasury, the moderator set and the write threshold as they are.
 
-You can always sell back to the curve — solvency is guaranteed — but you will be selling into whatever
+You can always sell back to the curve (solvency is guaranteed), but you will be selling into whatever
 supply remains, at whatever price the last trades left behind.
 
 ## 6. Mechanism risk
 
 | Risk | What it means |
 | --- | --- |
-| Slippage between quote and fill | Other trades land before yours. Guarded by your slippage tolerance on a buy and by `minimal_return_required` on a sell — both of which revert rather than fill badly, costing you gas |
+| Slippage between quote and fill | Other trades land before yours. Guarded by your slippage tolerance on a buy and by `minimal_return_required` on a sell. Both revert rather than fill badly, and a revert still costs gas |
 | A sell with no floor | `minimal_return_required` of 0 means "fill me at any price". On a falling curve that is exactly wrong |
 | Standing allowances | Selling requires granting the sale contract an AEX-9 allowance. Leaving a large one in place authorises that contract to move that many tokens until you reduce it |
 | Two-step sells | A sell is two transactions. If the second fails, you have granted an allowance and still hold the tokens |
@@ -118,13 +118,13 @@ See [Contract security](/contracts/security).
 - **Read the transaction before you sign it.** Check the contract address, the amount and the entrypoint. A malicious site can ask you to sign something that looks like a buy.
 - **Phishing.** Addresses are long and look alike. Verify a sale address against the token page or [aeScan](https://aescan.io) rather than pasting one from a chat message.
 - **Agents holding raw private keys.** The CLI scripts sign with `AE_PRIVATE_KEY` from the environment. An agent with that key can spend the whole balance, and a prompt-injected agent can be told to. Use a dedicated wallet with a limited balance. See [Agent safety](/agents/safety).
-- **Autonomous trading.** A strategy that trades every 2–6 hours pays the 1% spread every round trip. Model the friction before you enable it — see [Autonomous mode](/agents/autonomous-mode).
+- **Autonomous trading.** A strategy that trades every 2–6 hours pays the 1% spread every round trip. Model the friction before you enable it. See [Autonomous mode](/agents/autonomous-mode).
 
 ## 9. Availability and data risk
 
 The chain is the system of record; superhero.com is a client on top of it. If the web app or the
-indexer is down, your tokens and the contracts are unaffected — you can trade directly against the
-sale contract with the SDK — but price charts, the trending score, portfolio valuations and
+indexer is down, your tokens and the contracts are unaffected (you can trade directly against the
+sale contract with the SDK), but price charts, the trending score, portfolio valuations and
 transaction history are served by the backend and go with it. Indexer lag is normal: a new token
 takes 2–5 minutes to appear, and a trade may be on-chain before it shows in a list. Verify against
 the explorer before concluding something failed.
@@ -136,8 +136,8 @@ the explorer before concluding something failed.
 
 ## Related
 
-- [Bonding Curves](/tokens/bonding-curve) — the arithmetic behind the spread and slippage numbers above
-- [Fees & Slippage](/tokens/fees-and-slippage) — the three cost components separated out
-- [Portfolio & PnL](/tokens/portfolio) — why a position's displayed value overstates its exit
-- [Reading a Token Page](/tokens/token-page) — how to check concentration and flow before buying
-- [Contract security](/contracts/security) — the security model of the contract suite
+- [Bonding Curves](/tokens/bonding-curve): the arithmetic behind the spread and slippage numbers above
+- [Fees & Slippage](/tokens/fees-and-slippage): the three cost components separated out
+- [Portfolio & PnL](/tokens/portfolio): why a position's displayed value overstates its exit
+- [Reading a Token Page](/tokens/token-page): how to check concentration and flow before buying
+- [Contract security](/contracts/security): the security model of the contract suite

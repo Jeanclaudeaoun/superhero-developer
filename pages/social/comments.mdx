@@ -5,8 +5,8 @@ description: "Comments are posts with a parent marker — how threading works, a
 
 # Comments
 
-A comment on Superhero is a post. Same contract, same entrypoint, same permanence — the only
-difference is a marker in the `media` list naming the parent. That one convention gives you
+A comment on Superhero is a post, written through the same contract and entrypoint and just as
+permanent. The only difference is a marker in the `media` list naming the parent. That one convention gives you
 arbitrarily deep threads with no threading support in the contract.
 
 ## The convention
@@ -28,7 +28,7 @@ and a parent can never be deleted, so a thread can never be orphaned.
 
 ## How the indexer reads it
 
-The indexer reads the call's second argument — the media list — and looks for an entry
+The indexer reads the call's second argument (the media list) and looks for an entry
 containing the literal `comment:`. It takes everything after that string as the parent id,
 trims it, and appends `_v3` if it is not there already. An entry with `comment:` and nothing
 after it is stored as a top-level post.
@@ -40,11 +40,11 @@ Emit `comment:` plus the id with the `_v3` suffix. That is what the app and the 
 On ingest the indexer looks the parent up, retrying three times with exponential backoff from
 100 ms, because backward sync does not guarantee that a parent is processed before its child.
 If the parent is still missing after the retries, the comment is stored as a standalone
-top-level post — `post_id` is set to null and it is ranked like any other post.
+top-level post: `post_id` is set to null and it is ranked like any other post.
 
 A second sweep catches the race the other way round. About ten seconds after boot, one
 `UPDATE` detaches every comment older than one hour whose parent still does not exist, and a
-second `UPDATE` recomputes `total_comments` for every parent whose count is stale — which also
+second `UPDATE` recomputes `total_comments` for every parent whose count is stale, which also
 fixes parents that arrived after their children. The one-hour grace period means a comment
 whose parent is merely running behind in the sync is not detached.
 
@@ -54,7 +54,7 @@ reverses that later.
 ## Threading and depth
 
 Nothing limits nesting. `/post/:slug` resolves the post, extracts its parent id, fetches that
-post, extracts *its* parent, and repeats — building the full ancestor chain oldest-first before
+post, extracts *its* parent, and repeats, building the full ancestor chain oldest-first before
 rendering. The walk is bounded by a visited set and a limit of 100 hops.
 
 The page renders ancestors above the target post and scrolls the target into the centre of the
@@ -74,7 +74,7 @@ the subtree.
 | `/post/:slug/comment/:id` | Legacy; redirects to `/post/` plus the comment id |
 
 Post ids are stored with a `_v3` suffix and every in-app link strips it. A link built from a
-raw API id still works — the resolver re-adds the suffix.
+raw API id still works because the resolver re-adds the suffix.
 
 ## Read comments from the API
 
@@ -112,7 +112,7 @@ node scripts/superhero-comment.mjs get <post_id> 50 2   # limit, page
 ```
 
 `get` is a plain read against `https://api.superhero.com/api/posts/<id>/comments` and needs no
-wallet. `comment_post_id` is the bare integer — add `_v3` before you use it as an API id or as
+wallet. `comment_post_id` is the bare integer. Add `_v3` before you use it as an API id or as
 a parent for a further reply.
 
 A comment pays gas only, the same as a post.
@@ -122,7 +122,7 @@ A comment pays gas only, the same as a post.
 The web composer applies the same 280-character limit to replies as to posts, and offers the
 same emoji, GIF and image attachments. The contract applies no limit of its own, and the
 indexer applies the same 5,000-character truncation and five-media-entry cap it applies to
-posts — see [Posting](/social/posting).
+posts. See [Posting](/social/posting).
 
 The `comment:` marker is not a URL, so the indexer's media filter drops it from the stored
 `media` array. A comment's API `media` field contains only its own attachments, while `tx_args`
@@ -130,7 +130,7 @@ still carries the marker. Do not look for the parent id in `media` on an API res
 
 ## How comments feed ranking
 
-A comment is never ranked as a standalone popular item — the candidate query requires
+A comment is never ranked as a standalone popular item, because the candidate query requires
 `post_id IS NULL`. Instead the whole reply tree rolls up into the parent's score, counted
 recursively to a depth cap of 50, with replies written by the root post's own author excluded
 and hidden comments pruning their entire subtree. Comments carry the heaviest default weight of
@@ -138,9 +138,9 @@ any signal, 2.5. See [The Feed](/social/feed).
 
 ## Related
 
-- [Posting](/social/posting) — the entrypoint, the ids, and the content conventions comments
+- [Posting](/social/posting): the entrypoint, the ids, and the content conventions comments
   share.
-- [The Feed](/social/feed) — where comment counts feed into the popular ranking.
-- [Notifications](/social/notifications) — a reply is the `post-comment` notification type.
-- [The Tipping contract](/contracts/tipping) — the contract reference.
-- [Posts API](/api-reference/posts) — the endpoint-level reference for posts and comments.
+- [The Feed](/social/feed): where comment counts feed into the popular ranking.
+- [Notifications](/social/notifications): a reply is the `post-comment` notification type.
+- [The Tipping contract](/contracts/tipping): the contract reference.
+- [Posts API](/api-reference/posts): the endpoint-level reference for posts and comments.

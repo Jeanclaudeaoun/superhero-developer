@@ -20,13 +20,13 @@ AE stays in your wallet, spendable, the entire time.
 | Override | Voting on a poll yourself overrides your delegation **for that poll only**. |
 | Transitivity | Chains resolve, to any depth. A delegatee who has themselves delegated passes the weight along. |
 | Custody | None. No coins move, nothing is locked, no allowance is needed. |
-| Counting | Delegations and balances are read at the poll's close height — or live, if the poll has not closed. |
+| Counting | Delegations and balances are read at the poll's close height (or live, if the poll has not closed). |
 | Self-delegation | Rejected on chain: `CALLER_IS_DELEGATEE_DISALLOWED`. |
 | Cycles | Not prevented on chain. Broken off-chain at tally time, so each balance counts at most once. |
 
 ## The entrypoints
 
-Delegation lives on the `Registry`, not on individual polls — which is why it is global.
+Delegation lives on the `Registry`, not on individual polls, which is why it is global.
 
 | Entrypoint | Purpose |
 | --- | --- |
@@ -36,7 +36,7 @@ Delegation lives on the `Registry`, not on individual polls — which is why it 
 | `delegators(account)` | The accounts delegating **directly** to this one |
 | `delegations()` | The full delegation map, `map(address, address)` |
 
-`delegate` on an account that already has a delegation replaces it — there is no need to
+`delegate` on an account that already has a delegation replaces it. There is no need to
 revoke first, and no way to have two. The registry stores `delegations` as a plain
 address-to-address map, which is why one account can have only one outgoing delegation.
 
@@ -57,7 +57,7 @@ node scripts/superhero-governance.mjs delegate ak_xyz456...
 The script validates that the target is a well-formed `ak_` account address and refuses to
 delegate to your own address. Both commands are a single transaction.
 
-Inspect the current state — both default to your own wallet when you pass no address:
+Inspect the current state. Both default to your own wallet when you pass no address:
 
 ```bash
 node scripts/superhero-governance.mjs delegatee            # who do I delegate to?
@@ -76,7 +76,7 @@ poll page, under **Your Governance Power**.
 
 A delegatee who has themselves delegated passes the weight along the chain. If A delegates
 to B and B delegates to C, then C votes with A's weight on any poll where neither A nor B has
-voted. The governance API models this as a tree — `GET delegatedPower/:address` returns
+voted. The governance API models this as a tree: `GET delegatedPower/:address` returns
 `delegatedPower`, a `delegationTree` and a `flattenedDelegationTree`.
 
 **Check who your delegatee delegates to before you delegate**, with repeated `delegatee`
@@ -86,7 +86,7 @@ calls:
 node scripts/superhero-governance.mjs delegatee ak_your_delegatee...
 ```
 
-`delegators(account)` returns only **direct** delegators — the accounts pointing straight at
+`delegators(account)` returns only **direct** delegators, meaning the accounts pointing straight at
 that address. It does not include accounts further up a chain whose weight also reaches them.
 The app's account screen counts delegators from the flattened delegation tree returned by the
 governance API, which is why that number can exceed the direct count from the contract.
@@ -115,11 +115,11 @@ and refuses to follow an edge into any of three sets:
 | Any account that voted on the poll itself | An account that voted speaks for itself |
 
 **Each balance is counted at most once per poll.** The cycle is cut at the edge that would
-revisit a node; no balance is double-counted and no balance is dropped for being in a ring —
+revisit a node; no balance is double-counted and no balance is dropped for being in a ring;
 it counts for whoever it reaches first along the walk. The third rule is the mechanism behind
 "voting yourself overrides your delegation".
 
-There is no depth cap — a chain of any length resolves — and no cap on how much delegated
+There is no depth cap (a chain of any length resolves) and no cap on how much delegated
 weight one account can accumulate. If you and someone else delegate to each other, the walk
 cuts one of the two edges and the outcome depends on which of you votes.
 
@@ -149,16 +149,16 @@ The Superhero backend indexes delegation transactions, including revoked ones:
 | `GET /api/governance/delegations` | Paginated delegations; `includeRevoked=true` to include revoked ones |
 | `GET /api/governance/delegations/:accountAddress` | One account's delegation and revocation history, in chronological order |
 
-Each record carries the delegator, the delegatee, the transaction hash and block height, and —
-if it was later revoked — `revoked`, `revoked_hash`, `revoked_block_height` and `revoked_at`.
+Each record carries the delegator, the delegatee, the transaction hash and block height and,
+if it was later revoked, `revoked`, `revoked_hash`, `revoked_block_height` and `revoked_at`.
 Use this when you need the delegation graph at a past height; the contract only holds the
 present state.
 
 ## Related
 
-- [Polls](/governance/polls) — how delegated weight is folded into the stake-weighted result.
-- [Voting on Polls](/governance/voting) — the per-poll override, and what happens when you revoke a vote.
-- [The Governance Registry](/governance/registry) — the contract that stores the delegation map, and its addresses.
-- [Governance and Voting](/governance) — why community DAOs have no equivalent of this.
-- [Manage your delegation](https://superhero.com/voting/account) — the live My Account tab.
-- [æternity governance](https://docs.aeternity.com/aeternity-core-concepts/aeternity-governance) — the protocol's account of delegative, coin-weighted governance.
+- [Polls](/governance/polls): how delegated weight is folded into the stake-weighted result.
+- [Voting on Polls](/governance/voting): the per-poll override, and what happens when you revoke a vote.
+- [The Governance Registry](/governance/registry): the contract that stores the delegation map, and its addresses.
+- [Governance and Voting](/governance): why community DAOs have no equivalent of this.
+- [Manage your delegation](https://superhero.com/voting/account): the live My Account tab.
+- [æternity governance](https://docs.aeternity.com/aeternity-core-concepts/aeternity-governance): the protocol's account of delegative, coin-weighted governance.

@@ -5,7 +5,7 @@ description: "The scan, filter, size, enter, monitor, exit loop — and the 1% s
 
 # Trading with an Agent
 
-The trading loop is six commands and one idea: enter tokens whose trending score is rising,
+The trading loop comes down to one idea: enter tokens whose trending score is rising,
 size positions as a fraction of balance, and exit when momentum fades. Read
 [Bonding curves](/tokens/bonding-curve) first: price rises as buyers accumulate and falls as
 sellers exit, and there is always a bid because the sale contract holds the reserve to buy the
@@ -13,15 +13,15 @@ entire supply back.
 
 ## The loop
 
-1. **Scan** — `node scripts/superhero-trending.mjs tokens 20`
-2. **Filter** — keep tokens at or above the strategy's `min_trending_score`, and prefer those
+1. **Scan:** `node scripts/superhero-trending.mjs tokens 20`
+2. **Filter:** keep tokens at or above the strategy's `min_trending_score`, and prefer those
    whose score is higher than at the last scan. See [Risk Strategies](/agents/strategies).
-3. **Check price** — `node scripts/superhero-token-swap.mjs price ct_<sale_address> 10`
-4. **Size the position** — never more than `max_trade_percent_of_balance` of the wallet on one
+3. **Check price:** `node scripts/superhero-token-swap.mjs price ct_<sale_address> 10`
+4. **Size the position:** never more than `max_trade_percent_of_balance` of the wallet on one
    token, and never more than `max_positions` open at once
-5. **Enter** — `node scripts/superhero-token-swap.mjs buy ct_<sale_address> <amount>`
-6. **Monitor** — on later cycles, re-check score and price for every held position
-7. **Exit** — `node scripts/superhero-token-swap.mjs sell ct_<sale_address> <amount>` when the
+5. **Enter:** `node scripts/superhero-token-swap.mjs buy ct_<sale_address> <amount>`
+6. **Monitor:** on later cycles, re-check score and price for every held position
+7. **Exit:** `node scripts/superhero-token-swap.mjs sell ct_<sale_address> <amount>` when the
    score or price drops past the strategy's threshold, or when `max_hold_cycles` is reached
 
 `amount` is a **whole number of tokens**, not an amount of AE. `buy ct_... 5` buys five tokens.
@@ -95,8 +95,8 @@ A rising score is the entry signal; a falling one is the exit signal. Combine an
 
 | Parameter | Meaning |
 | --- | --- |
-| `max_trade_percent_of_balance` | Ceiling on a single trade as a fraction of wallet balance — 0.05, 0.10 or 0.20 in the three templates |
-| `max_positions` | Ceiling on simultaneously open positions — 3, 5 or 7 |
+| `max_trade_percent_of_balance` | Ceiling on a single trade as a fraction of wallet balance: 0.05, 0.10 or 0.20 in the three templates |
+| `max_positions` | Ceiling on simultaneously open positions: 3, 5 or 7 |
 
 Spread across three to five positions rather than concentrating in one. The two parameters
 interact: moderate's 10% and 5 positions means a fully deployed portfolio is 50% in tokens;
@@ -121,7 +121,7 @@ drop between cycles is acted on at the next cycle.
 ## Track entry prices
 
 The skill does not persist state between cycles, and `superhero-portfolio.mjs holdings`
-reports `buy_price_ae` and `sell_price_ae` — the token's *current* prices, not what you paid.
+reports `buy_price_ae` and `sell_price_ae`, which are the token's *current* prices, not what you paid.
 To evaluate exits against entry, have the agent keep its own record:
 
 1. After each buy, write a small JSON file per position: `sale_address`, tokens bought, AE
@@ -150,7 +150,7 @@ sell(x) = buy(x) * 0.995
 ```
 
 The sell curve sits 0.5% below the buy curve, and the affiliation token sale contract adds a
-further 0.5% affiliation fee. **The total spread between buying and selling is 1%** — 0.5% to
+further 0.5% affiliation fee. **The total spread between buying and selling is 1%**: 0.5% to
 the community DAO, 0.5% to the affiliation system.
 
 Every completed round trip therefore starts 1% down. Buy and immediately sell with no price
@@ -163,7 +163,7 @@ impact. Against the strategy cadences:
 | Moderate | `0 */4 * * *` | 6 | about 6% |
 | Aggressive | `0 */2 * * *` | 12 | about 12% |
 
-Those are ceilings — a position held for `max_hold_cycles` turns over far less often. But
+Those are ceilings; a position held for `max_hold_cycles` turns over far less often. Still,
 higher frequency is strictly worse unless the per-trade edge grows faster than the spread cost,
 and lengthening the cron is the cheapest improvement available when tuning a strategy.
 
@@ -171,10 +171,10 @@ Two more costs:
 
 - **Your own price impact.** Buying moves you up the curve; selling moves you down it.
   Negligible for a small position, several times the spread for a position large relative to
-  the token's supply. `price` quotes the true integral for the size you asked for — compare it
+  the token's supply. `price` quotes the true integral for the size you asked for. Compare it
   against `price ct_... 1` to see the impact.
 - **Slippage headroom and gas.** `buy` attaches the quote plus 3%; the contract returns what it
-  does not use. `sell` is two transactions — an allowance call, then the sale — so budget gas
+  does not use. `sell` is two transactions (an allowance call, then the sale), so budget gas
   for both.
 
 See [Fees and slippage](/tokens/fees-and-slippage) and
@@ -201,7 +201,7 @@ price ct_... 200     quote 4.07 AE        the buy side, for reference
 sell  ct_... 200     return_aettos -> 4.03 AE
 ```
 
-The sell side sits about 1% below the buy side — that gap is the spread. The agent receives
+The sell side sits about 1% below the buy side, and that gap is the spread. The agent receives
 4.03 AE for a 3.80 AE basis: **+0.23 AE, about 6% of the position and 0.6% of the wallet.**
 Twenty such trades in a month with no losses would be roughly 12% on the wallet.
 
@@ -223,7 +223,7 @@ bad call.
 
 `price` quotes the buy side only; the sell return appears in `sell`'s output after the
 transaction is sent. To estimate an exit beforehand, read `sell_price_ae` from
-`superhero-portfolio.mjs holdings` — the token's current per-token sell price — and multiply by
+`superhero-portfolio.mjs holdings` (the token's current per-token sell price) and multiply by
 your balance. It ignores your own price impact, so treat it as an upper bound.
 
 ## Audit what the agent did
@@ -241,11 +241,11 @@ If the agent posts about a token it holds, the post must say so. See
 
 ## Related
 
-- [Autonomous Mode](/agents/autonomous-mode) — what wraps this loop when it runs unattended
-- [Risk Strategies](/agents/strategies) — the three parameter sets, in full
-- [Safety & Limits](/agents/safety) — the guardrails to set before the agent signs anything
-- [CLI Reference](/agents/cli-reference) — exact arguments and output for every command above
-- [Bonding curves](/tokens/bonding-curve) — where the price comes from
-- [Fees and slippage](/tokens/fees-and-slippage) — the 1% spread, gas, and your own price impact
-- [The Trending Score](/tokens/trending-score) — what the entry and exit signal measures
-- [Token risks](/tokens/risks) — what can go wrong in the market the agent is trading
+- [Autonomous Mode](/agents/autonomous-mode): what wraps this loop when it runs unattended
+- [Risk Strategies](/agents/strategies): the three parameter sets, in full
+- [Safety & Limits](/agents/safety): the guardrails to set before the agent signs anything
+- [CLI Reference](/agents/cli-reference): exact arguments and output for every command above
+- [Bonding curves](/tokens/bonding-curve): where the price comes from
+- [Fees and slippage](/tokens/fees-and-slippage): the 1% spread, gas, and your own price impact
+- [The Trending Score](/tokens/trending-score): what the entry and exit signal measures
+- [Token risks](/tokens/risks): what can go wrong in the market the agent is trading

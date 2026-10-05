@@ -5,9 +5,9 @@ description: "Pagination, ordering, units, errors, rate limits and authenticatio
 
 # API Conventions
 
-Every endpoint on `api.superhero.com` is plain JSON over HTTPS. The rules below — base URLs,
+Every endpoint on `api.superhero.com` is plain JSON over HTTPS. The rules below (base URLs,
 pagination, shared query parameters, units, errors, rate limits and the signature-based write
-flow — apply everywhere and are not repeated on the endpoint pages.
+flow) apply everywhere and are not repeated on the endpoint pages.
 
 ## Base URLs
 
@@ -17,7 +17,7 @@ flow — apply everywhere and are not repeated on the endpoint pages.
 | Testnet | Not publicly documented | `ae_uat` |
 
 Both hosts serve the same paths. Every path is relative to the base and begins with `/api/`. The
-only versioned prefix is `/api/v2/mdw/*`, the indexed chain mirror — see
+only versioned prefix is `/api/v2/mdw/*`, the indexed chain mirror. See
 [Node & Middleware](/api-reference/node-and-middleware).
 
 Outside production the server also serves Swagger UI at `/api` and the OpenAPI 3 document at
@@ -118,8 +118,8 @@ family:
 
 | Endpoint family | `limit=101` | `page=0` |
 | --- | --- | --- |
-| `/api/tokens`, `/api/accounts`, `/api/posts`, `/api/trending-tags`, `/api/tips`, `/api/invitations` and the other list endpoints | `400` — `Limit must be between 1 and 100` (wording varies per endpoint) | `400` — `Page must be greater than or equal to 1` |
-| `/api/v2/mdw/*` | `400` — `Maximum limit is 100 items per request` | `400` — `Page must be greater than or equal to 1` |
+| `/api/tokens`, `/api/accounts`, `/api/posts`, `/api/trending-tags`, `/api/tips`, `/api/invitations` and the other list endpoints | `400`: `Limit must be between 1 and 100` (wording varies per endpoint) | `400`: `Page must be greater than or equal to 1` |
+| `/api/v2/mdw/*` | `400`: `Maximum limit is 100 items per request` | `400`: `Page must be greater than or equal to 1` |
 | `/api/dex/*` lists | Silently clamped to 100 | Silently clamped to 1 |
 
 Read `meta.itemsPerPage` rather than assuming your `limit` was honoured. `page` on
@@ -141,7 +141,7 @@ to `market_cap` and an unrecognised `order_direction` to `DESC`, with no error.
 | `GET /api/feed` | Keyset pagination: `items` plus `next_cursor`. Pass the cursor back as `cursor`; there is no page number |
 
 The analytics series endpoints return bare arrays and the totals endpoints return a scalar or a
-small object — see [Analytics](/api-reference/analytics).
+small object. See [Analytics](/api-reference/analytics).
 
 ## Shared query parameters
 
@@ -167,7 +167,7 @@ rather than an error, so match the spelling per endpoint:
 | `startDate` / `endDate` | `/api/accounts/leaderboard`, all `/api/accounts/{address}/portfolio/*` |
 | `from_date` / `to_date` | `GET /api/dex/transactions` |
 | `convertTo` | Every endpoint that takes it |
-| `sortBy` / `sortDir` | `/api/accounts/leaderboard` only — everything else uses `order_by` / `order_direction` |
+| `sortBy` / `sortDir` | `/api/accounts/leaderboard` only. Everything else uses `order_by` / `order_direction` |
 
 ### Currency conversion
 
@@ -186,8 +186,8 @@ code to number.
 ## Units
 
 The API mixes two conventions. Values in trade records and OHLC candles are in whole units (AE,
-whole tokens). Values read live from a contract — a token's `market_cap`, `total_supply` and
-`dao_balance` — are raw (aettos, base units).
+whole tokens). Values read live from a contract (a token's `market_cap`, `total_supply` and
+`dao_balance`) are raw (aettos, base units).
 
 | Field family | Unit | Conversion |
 | --- | --- | --- |
@@ -201,7 +201,7 @@ whole tokens). Values read live from a contract — a token's `market_cap`, `tot
 is aettos, on a transaction or an OHLC candle it is AE. They differ by exactly 1e18.
 
 **Every key of a `PriceDto` is on the same scale as its `ae` key.** Each fiat key is
-`ae * rate[code]`, not a re-denomination — if `ae` is in aettos, so is `usd`. When rates are
+`ae * rate[code]`, not a re-denomination: if `ae` is in aettos, so is `usd`. When rates are
 unavailable every key except `ae` is `null`.
 
 `decimals` is a **string** in `TokenDto`, not a number. Parse it before using it as an exponent.
@@ -222,7 +222,7 @@ Failures are ordinary HTTP status codes with a JSON body carrying `statusCode`, 
 
 Request bodies and DTO-bound query parameters (the leaderboard, portfolio history) are validated
 strictly: an unknown property is a `400`, and declared types are coerced (`"5"` becomes `5`).
-Individually bound query parameters — most list endpoints — ignore unrecognised keys silently.
+Individually bound query parameters (most list endpoints) ignore unrecognised keys silently.
 
 ## Rate limits
 
@@ -230,11 +230,11 @@ Individually bound query parameters — most list endpoints — ignore unrecogni
 | --- | --- |
 | Allowance | **10 requests per minute** |
 | Window | 60 seconds, fixed, starting at your first request |
-| Bucket key | client IP plus route path — **per route, not per API** |
+| Bucket key | client IP plus route path, **per route, not per API** |
 | Response when exceeded | `429` |
 | Body | `{ "status": 429, "message": "Rate limit exceeded. Maximum 10 requests per minute.", "retryAfter": <seconds> }` |
 
-`retryAfter` is a field in the JSON body, in seconds — there is no `Retry-After` header and no
+`retryAfter` is a field in the JSON body, in seconds. There is no `Retry-After` header and no
 `X-RateLimit-*` headers. Because the key includes the route path, the budget is spent separately
 on each guarded endpoint.
 
@@ -252,8 +252,8 @@ on each guarded endpoint.
 | `POST /api/profile/chain-name/challenge`, `POST /api/profile/chain-name/claim` |
 | `/api/rooms/*` and the token-gated-room recheck and metrics routes |
 
-Everything else — tokens, transactions, accounts, analytics, DEX, posts, trending tags,
-affiliations, search and feed — is unthrottled. Poll considerately and prefer the
+Everything else (tokens, transactions, accounts, analytics, DEX, posts, trending tags,
+affiliations, search and feed) is unthrottled. Poll considerately and prefer the
 [WebSocket](/api-reference/websocket) for change notification.
 
 ## CORS
@@ -283,7 +283,7 @@ Several endpoints are served from an in-process cache rather than recomputed per
 | `GET /api/accounts` | 60 seconds |
 | `GET /api/feed` | 15 seconds |
 | `GET /api/analytics/total-unique-users` | 20 seconds |
-| `GET /api/accounts/leaderboard` | up to 60 seconds — `meta.timeFilter.start` / `.end` are the times the cache entry was filled |
+| `GET /api/accounts/leaderboard` | up to 60 seconds. `meta.timeFilter.start` / `.end` are the times the cache entry was filled |
 
 Some values are recomputed on a schedule: token performance and `rank` every five minutes, the
 daily analytics rows hourly, AE fiat rates every ten minutes, and trending scores as described on
@@ -293,7 +293,7 @@ daily analytics rows hourly, AE fiat rates every ten minutes, and trending score
 
 There is no version negotiation. The OpenAPI document declares version `1.0`, `GET /api/stats`
 reports the deployed package version as `apiVersion`, and no header or path segment selects a
-version — `/api/v2/mdw/*` is a name inherited from the middleware's own API.
+version. `/api/v2/mdw/*` is a name inherited from the middleware's own API.
 
 Deprecation is by annotation. A retired parameter keeps validating and stops having an effect:
 
@@ -306,8 +306,8 @@ Deprecation is by annotation. A retired parameter keeps validating and stops hav
 
 ## Related
 
-- [API Reference](/api-reference) — the full endpoint index
-- [Tokens API](/api-reference/tokens) — the `TokenDto` these unit rules apply to, field by field
-- [Accounts API](/api-reference/accounts) — the portfolio and leaderboard endpoints with the camelCase date parameters
-- [Profile API](/api-reference/profile) — the challenge/signature write flow end to end
-- [Node & Middleware](/api-reference/node-and-middleware) — when the REST API does not have the data
+- [API Reference](/api-reference): the full endpoint index
+- [Tokens API](/api-reference/tokens): the `TokenDto` these unit rules apply to, field by field
+- [Accounts API](/api-reference/accounts): the portfolio and leaderboard endpoints with the camelCase date parameters
+- [Profile API](/api-reference/profile): the challenge/signature write flow end to end
+- [Node & Middleware](/api-reference/node-and-middleware): when the REST API does not have the data

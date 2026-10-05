@@ -6,8 +6,8 @@ description: "Read chain state directly: the node for contract calls and submiss
 # æternity Node & Middleware
 
 The Superhero API is an index over the æternity chain, not the chain itself. For anything it
-does not carry — an arbitrary transaction, an AEX-9 balance, a name's pointers, a contract's
-event log, or submitting a transaction at all — talk to an æternity **node** or its
+does not carry (an arbitrary transaction, an AEX-9 balance, a name's pointers, a contract's
+event log, or submitting a transaction at all), talk to an æternity **node** or its
 **middleware**.
 
 ## Node versus middleware
@@ -17,10 +17,10 @@ event log, or submitting a transaction at all — talk to an æternity **node** 
 | Path prefix | `/v3/...` | `/mdw/v3/...` |
 | Answers | Current state | Historical and indexed state |
 | Use it for | Contract calls, dry-runs, balances, submitting transactions, current height | Transactions by account or contract, AEX-9 transfers and balances, AENS names, contract event logs |
-| Can it write? | Yes — transactions are submitted here | No, read-only |
+| Can it write? | Yes, transactions are submitted here | No, read-only |
 
-The æternity SDK's `Node` class wraps the node API. Everything that signs something — posting,
-creating a token, swapping, generating invites, voting — goes through a `Node` instance. The
+The æternity SDK's `Node` class wraps the node API. Everything that signs something (posting,
+creating a token, swapping, generating invites, voting) goes through a `Node` instance. The
 middleware is read with plain `fetch`.
 
 ## Hosts
@@ -89,7 +89,7 @@ The response is `{ data: [...], next }`. Each element carries `hash`, `block_hei
 `{ type, value }`) and `return`. Filter to `tx.function === 'post_without_tip'`, then read the
 post body from `arguments[0].value` and the attached links from `arguments[1].value`.
 
-`next` is a **path**, not a full URL — concatenate it onto the middleware origin to page.
+`next` is a **path**, not a full URL. Concatenate it onto the middleware origin to page.
 
 ### Name resolution
 
@@ -122,7 +122,7 @@ The Superhero API re-indexes a slice of middleware data under its own paths:
 | `GET /api/v2/mdw/plugin-sync-state` | Per-plugin sync state |
 | `GET /api/mdw/health` | Middleware health check |
 
-These take an `includes` parameter for nested relations — `keyBlock`, `keyBlock.txs`,
+These take an `includes` parameter for nested relations: `keyBlock`, `keyBlock.txs`,
 `microBlocks`, `txs.keyBlock` and similar, comma-separated. An array relation is truncated to
 **50** items per parent. Response shapes are the mirror's own `Tx`, `KeyBlock` and `MicroBlock`
 records, not the upstream middleware's.
@@ -178,9 +178,9 @@ deployment while live data is already current. Judge freshness from `liveSync`.
 
 | You need | Go to |
 | --- | --- |
-| Token prices, holders, trades, trending, portfolio value | Superhero API — [Tokens](/api-reference/tokens), [Accounts](/api-reference/accounts) |
-| Posts, comments, topics, tips | Superhero API — [Posts](/api-reference/posts) |
-| Claim status of invites you issued | Superhero API — [Invitations](/api-reference/invitations-and-affiliations) |
+| Token prices, holders, trades, trending, portfolio value | Superhero API: [Tokens](/api-reference/tokens), [Accounts](/api-reference/accounts) |
+| Posts, comments, topics, tips | Superhero API: [Posts](/api-reference/posts) |
+| Claim status of invites you issued | Superhero API: [Invitations](/api-reference/invitations-and-affiliations) |
 | A raw transaction by hash, or "is my transaction confirmed?" | Middleware `GET /v3/transactions/{hash}` |
 | Every call an account made to a specific contract | Middleware `GET /v3/transactions?contract=&caller_id=` |
 | AEX-9 balances for an arbitrary token | Middleware `GET /v3/accounts/{ak}/aex9/balances` |
@@ -195,10 +195,10 @@ check `GET /api/mdw/health` before expecting a recent event to be in the API.
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — how the Superhero API's conventions differ from the middleware's
-- [Transactions API](/api-reference/transactions) — Superhero trade records, and how `tx_hash` links back to the chain
-- [Accounts API](/api-reference/accounts) — the batch chain-name resolver
-- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — combining both sources
-- [Networks](/aeternity/networks) — mainnet and testnet, and what a network id means
-- [æternity node API documentation](https://api-docs.aeternity.io/) — the node's own reference
-- [ae_mdw on GitHub](https://github.com/aeternity/ae_mdw) — the middleware's endpoint list
+- [API Conventions](/api-reference/conventions): how the Superhero API's conventions differ from the middleware's
+- [Transactions API](/api-reference/transactions): Superhero trade records, and how `tx_hash` links back to the chain
+- [Accounts API](/api-reference/accounts): the batch chain-name resolver
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations): combining both sources
+- [Networks](/aeternity/networks): mainnet and testnet, and what a network id means
+- [æternity node API documentation](https://api-docs.aeternity.io/): the node's own reference
+- [ae_mdw on GitHub](https://github.com/aeternity/ae_mdw): the middleware's endpoint list

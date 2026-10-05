@@ -5,8 +5,8 @@ description: "The name types attached to an address, how a public name is resolv
 
 # Names
 
-An address can carry several names — a preferred `.chain` name, a middleware-resolved chain
-name, an X handle — and the Superhero API resolves one of them into a `public_name` for
+An address can carry several names (a preferred `.chain` name, a middleware-resolved chain
+name, an X handle), and the Superhero API resolves one of them into a `public_name` for
 display. The name types differ in how much evidence backs them, so know which one you are
 looking at before you cache it.
 
@@ -14,9 +14,9 @@ looking at before you cache it.
 
 | Type | Where it lives | How it gets there | Verified? |
 | --- | --- | --- | --- |
-| Preferred AENS name | `AddressLink`, provider `prefaens` | `link_principal`, which calls `AENSv2.lookup` inside the contract | **Yes** — ownership is checked on chain |
+| Preferred AENS name | `AddressLink`, provider `prefaens` | `link_principal`, which calls `AENSv2.lookup` inside the contract | **Yes**: ownership is checked on chain |
 | Chain name | `chain_name` on the account | Resolved from the middleware, refreshed on an hourly sweep and on a stale read | Yes, by resolution rather than by claim |
-| X handle | `AddressLink`, provider `x` | `link` after an OAuth check the backend performs | Off chain only — see [X verification](/identity/x-verification) |
+| X handle | `AddressLink`, provider `x` | `link` after an OAuth check the backend performs | Off chain only; see [X verification](/identity/x-verification) |
 | Legacy username | `profile.username` | Read-only legacy field | No |
 
 ## How a public name is resolved
@@ -39,7 +39,7 @@ The resolved value is `public_name` on `GET /api/profile/{address}` and
 ### How the chain name stays fresh
 
 `chain_name` is cached with a `chain_name_updated_at` timestamp. An hourly sweep refreshes it,
-and `GET /api/accounts/{address}` additionally refreshes on read when the cached value is older
+and `GET /api/accounts/{address}` also refreshes on read when the cached value is older
 than the staleness window, writing the new value back asynchronously. An expired or transferred
 AENS name therefore drops out of the profile within about an hour.
 
@@ -53,7 +53,7 @@ whether a name is live, resolve it through AENS.
 
 | Call | Answers |
 | --- | --- |
-| `resolve(provider, value)` | Which address holds this provider value — for example which address linked the X handle `superherocom` |
+| `resolve(provider, value)` | Which address holds this provider value, for example which address linked the X handle `superherocom` |
 | `resolve_signer(principal)` | Which address linked this AENS name as a principal |
 
 ## What the app displays
@@ -67,7 +67,7 @@ chainName                  (the AENS name looked up for the address)
 formatAddress(address)     (a shortened ak_… fallback)
 ```
 
-A verified badge is rendered when an `x` link exists for the account — see
+A verified badge is rendered when an `x` link exists for the account. See
 [Verifying Your X Account](/identity/x-verification) for what that link proves.
 
 ## Normalization
@@ -78,16 +78,16 @@ A verified badge is rendered when an `x` link exists for the account — see
 | Backend, on read | `links.x` is trimmed, lowercased and has a leading `@` stripped; `links.bio`, `links.site` and `links.prefaens` are trimmed only |
 | Backend, on write | The value must be at most 200 characters and must not contain a `:`, because the signed message is colon-delimited |
 
-The `site` provider also strips the scheme — `https://example.com/blog` is stored as
-`example.com/blog` — and rejects a port.
+The `site` provider also strips the scheme (`https://example.com/blog` is stored as
+`example.com/blog`) and rejects a port.
 
 The contract stores the value string verbatim, so whatever the backend normalized is what is
 on chain.
 
 ## Worked examples
 
-**Link a `.chain` name.** Claim the AENS name first — the identity layer does not claim it for
-you — then run the claim-sign-submit flow at `/api/address-links/prefered-aens-name/`. The
+**Link a `.chain` name.** Claim the AENS name first, because the identity layer does not claim it for
+you. Then run the claim-sign-submit flow at `/api/address-links/prefered-aens-name/`. The
 signed message puts the name in the subject slot rather than your address:
 
 ```text
@@ -105,15 +105,15 @@ submit with the verification token. The handle is stored lowercased.
 to the middleware-resolved name.
 
 **Remove a name.** `unclaim` then `unclaim/submit` on the matching provider path. Only your
-own signature is required — no OAuth, no AENS check.
+own signature is required, with no OAuth or AENS check.
 
 ## Related
 
-- [AddressLink](/identity/address-link) — the contract behind every link.
-- [Chain Names (AENS)](/identity/chain-names) — how to get the `.chain` name that sits at the
+- [AddressLink](/identity/address-link): the contract behind every link.
+- [Chain Names (AENS)](/identity/chain-names): how to get the `.chain` name that sits at the
   top of the resolution ladder.
-- [Verifying Your X Account](/identity/x-verification) — the `x` link, and what a verified
+- [Verifying Your X Account](/identity/x-verification): the `x` link, and what a verified
   badge means.
-- [Profiles & Accounts](/identity/profiles) — where the resolved name ends up on screen.
-- [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) —
+- [Profiles & Accounts](/identity/profiles): where the resolved name ends up on screen.
+- [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens):
   the protocol-level name system a chain name is anchored to.

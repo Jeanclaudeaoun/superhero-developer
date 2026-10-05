@@ -17,22 +17,22 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | `GET /api/analytics/past-24-hours` | `address` | Rolling 24-hour summary object |
 | `GET /api/analytics/summary` | `start_date`, `end_date`, `address` | `total_unique_accounts` over a range |
 | `GET /api/analytics` | `start_date`, `end_date`, `force_pull`, `address` | Array of daily summary objects |
-| `GET /api/analytics/preview` | — | An HTML dashboard, not JSON |
+| `GET /api/analytics/preview` | None | An HTML dashboard, not JSON |
 | `GET /api/analytics/daily-trade-volume` | `start_date`, `end_date`, `token_address`, `account_address` | Daily volume series |
 | `GET /api/analytics/daily-unique-active-users` | `start_date`, `end_date`, `token_address` | Daily active-user series |
 | `GET /api/analytics/daily-created-tokens-count` | `start_date`, `end_date` | Daily token-creation series |
 | `GET /api/analytics/daily-market-cap-sum` | `start_date`, `end_date` | Daily market-cap series |
-| `GET /api/analytics/total-market-cap` | — | `sum` and `sum_data`, in **aettos** |
-| `GET /api/analytics/total-created-tokens` | — | A bare number |
+| `GET /api/analytics/total-market-cap` | None | `sum` and `sum_data`, in **aettos** |
+| `GET /api/analytics/total-created-tokens` | None | A bare number |
 | `GET /api/analytics/total-unique-users` | `token_sale_addresses` | `total_users` |
 | `GET /api/analytics/challenge` | `addresses`, `start_date`, `end_date` | Per-account, per-day activity grid |
-| `GET /api/analytics/challenge/preview` | — | An HTML dashboard, not JSON |
-| `GET /api/coins/aeternity/rates` | — | Currency code to rate map |
+| `GET /api/analytics/challenge/preview` | None | An HTML dashboard, not JSON |
+| `GET /api/coins/aeternity/rates` | None | Currency code to rate map |
 | `GET /api/coins/aeternity/history` | `currency`, `interval`, `days` | Array of `[timestamp_ms, price]` pairs |
 | `GET /api/coins/aeternity/market-data` | `currency` | Market data object |
 
 Posting activity has its own set under `/api/posts/analytics*` and referral activity under
-`/api/bcl-affiliation/analytics*` — see [Posts](/api-reference/posts) and
+`/api/bcl-affiliation/analytics*`. See [Posts](/api-reference/posts) and
 [Invitations & Affiliations](/api-reference/invitations-and-affiliations).
 
 Date parameters are snake_case `start_date` / `end_date` in `YYYY-MM-DD` format.
@@ -43,10 +43,10 @@ Returns **one object** with seven fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `date` | string | `YYYY-MM-DD` of the start of the window — yesterday's date |
+| `date` | string | `YYYY-MM-DD` of the start of the window, which is yesterday's date |
 | `total_market_cap_sum` | string | Sum of every token's last-traded market cap, in **AE** |
 | `total_volume_sum` | string | Sum of trade `amount.ae` inside the window, in **AE** |
-| `total_tokens` | number | Tokens created at any time before the window closes — a running total, not a 24-hour delta |
+| `total_tokens` | number | Tokens created at any time before the window closes. A running total, not a 24-hour delta |
 | `total_transactions` | number | Trades inside the window |
 | `total_created_tokens` | number | Trades inside the window whose `tx_type` is `create_community` |
 | `total_active_accounts` | number | Distinct trader addresses inside the window |
@@ -83,7 +83,7 @@ Four endpoints return a **bare JSON array** with one element per day.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `date` | string | The day |
-| `volume_ae` | number | Volume in **AE** — no 1e18 division |
+| `volume_ae` | number | Volume in **AE**, so no 1e18 division |
 | `transaction_count` | number | Trades that day |
 
 Filter with `token_address` for one market or `account_address` for one trader.
@@ -103,7 +103,7 @@ curl -s "https://api.superhero.com/api/analytics/daily-trade-volume?start_date=2
 ### `GET /api/analytics/daily-market-cap-sum`
 
 `date` (`YYYY-MM-DD`) and `sum`, one element per day, ascending. **`sum` is in AE, not
-aettos** — it is the last-trade-per-token sum described under `past-24-hours`, computed at each
+aettos**. It is the last-trade-per-token sum described under `past-24-hours`, computed at each
 day's end. Do not divide by 1e18.
 
 - The range is clamped to **365 days**; a wider `start_date` is moved forward, not rejected.
@@ -124,7 +124,7 @@ day's end. Do not divide by 1e18.
 curl -s "https://api.superhero.com/api/analytics/total-created-tokens"
 ```
 
-`total-market-cap` is the one market-cap figure in the API in aettos — divide by 1e18. `sum_data`
+`total-market-cap` is the one market-cap figure in the API in aettos. Divide by 1e18. `sum_data`
 is the same aettos value multiplied through the AE fiat rates, so every currency key is on the
 aettos scale too.
 
@@ -148,7 +148,7 @@ from `past-24-hours`, which counts every token.
 curl -s "https://api.superhero.com/api/coins/aeternity/rates"
 ```
 
-The map has exactly eight keys — `usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp`, `xau` — one for
+The map has exactly eight keys (`usd`, `eur`, `aud`, `brl`, `cad`, `chf`, `gbp`, `xau`), one for
 each `convertTo` currency other than `ae`. A response either has all eight or is replaced by the
 last known good snapshot. `xau` is troy ounces of gold.
 
@@ -165,7 +165,7 @@ curl -s "https://api.superhero.com/api/coins/aeternity/history?currency=usd&inte
 ```
 
 `GET /api/coins/aeternity/market-data?currency=usd` returns the broader market picture in
-**camelCase** — the only camelCase response body in the API:
+**camelCase**, the only camelCase response body in the API:
 
 ```text
 id · symbol · name · lastUpdated
@@ -194,13 +194,13 @@ upstream was unreachable. Check them before treating the numbers as current.
 | --- | --- | --- |
 | `start_date` | 10 days ago | `YYYY-MM-DD` |
 | `end_date` | tomorrow | A `start_date` after `end_date` is a 400 |
-| `address` | — | Scopes every figure to one account |
+| `address` | None | Scopes every figure to one account |
 | `force_pull` | `false` | Recompute and rewrite the cached rows for the range before answering |
 
 Without `address` the rows come from the cached daily table. With `address` they are computed
 live, so an address-scoped call is slower and always current.
 
-`GET /api/analytics/summary` returns `{ "total_unique_accounts": <n> }` for the range — a true
+`GET /api/analytics/summary` returns `{ "total_unique_accounts": <n> }` for the range. This is a true
 distinct count over the whole range, not a sum of per-day distincts. Both dates are optional;
 omitting them makes it all-time.
 
@@ -210,7 +210,7 @@ omitting them makes it all-time.
 | --- | --- |
 | `past-24-hours`, `summary` | Computed live on every request |
 | `analytics` without `force_pull` | Read from the daily table, rebuilt **hourly** (re-pulling the last 7 days each tick) |
-| `analytics` with `force_pull=true` | Recomputed synchronously for the whole requested range first — slow for a wide range |
+| `analytics` with `force_pull=true` | Recomputed synchronously for the whole requested range first, which is slow for a wide range |
 | `analytics` with `address` | Always live; `force_pull` irrelevant |
 | `daily-market-cap-sum`, `total-unique-users` | Live, cached 20 seconds |
 | `daily-trade-volume`, `daily-unique-active-users`, `daily-created-tokens-count`, `total-market-cap`, `total-created-tokens` | Live on every request, uncached |
@@ -230,7 +230,7 @@ A per-account, per-day activity grid for comparing a small set of traders over a
 curl -s "https://api.superhero.com/api/analytics/challenge?addresses=ak_FIRST_ADDRESS,ak_SECOND_ADDRESS&start_date=2026-09-01&end_date=2026-09-14"
 ```
 
-Returns a flat array with one row per address per day, **zero-filled** — every address gets a
+Returns a flat array with one row per address per day, **zero-filled**: every address gets a
 row for every day in the range:
 
 | Field | Type | Meaning |
@@ -249,7 +249,7 @@ dashboards, not JSON.
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — the units rule and the non-envelope response shapes
-- [Tokens API](/api-reference/tokens) — per-token history, the fine-grained counterpart to these aggregates
-- [Accounts API](/api-reference/accounts) — per-account portfolio history and trading statistics
-- [Invitations & Affiliations](/api-reference/invitations-and-affiliations) — the referral analytics endpoints
+- [API Conventions](/api-reference/conventions): the units rule and the non-envelope response shapes
+- [Tokens API](/api-reference/tokens): per-token history, the fine-grained counterpart to these aggregates
+- [Accounts API](/api-reference/accounts): per-account portfolio history and trading statistics
+- [Invitations & Affiliations](/api-reference/invitations-and-affiliations): the referral analytics endpoints

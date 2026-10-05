@@ -19,21 +19,21 @@ no cut beyond the protocol fees described below.
 | Requirement | Detail |
 | --- | --- |
 | A connected wallet | The submit button is replaced by Connect Wallet until one is connected |
-| AE for gas | A small amount — about 0.001 AE for the creation |
+| AE for gas | A small amount, about 0.001 AE for the creation |
 | AE for the initial buy | Optional. Zero is allowed and creates the token with zero supply |
 | A name no one has taken | Checked live as you type |
 
 ## The name field
 
-The name is the token's identity, its symbol, and its URL — `/trends/tokens/YOURNAME`. It is the
+The name is the token's identity, its symbol, and its URL: `/trends/tokens/YOURNAME`. It is the
 only field in this form you cannot change later.
 
 The input uppercases and replaces spaces with dashes on every keystroke, so `my token` becomes
 `MY-TOKEN` as you type. The field is capped at 20 characters, with a counter underneath. Collections
-carry their own casing rules — the English collection accepts `A–Z`, the Russian one accepts `А–Я` —
+carry their own casing rules (the English collection accepts `A–Z`, the Russian one accepts `А–Я`),
 and uppercasing is what makes a typed name detectable.
 
-While an IME composition is active — typing Chinese through pinyin, for example — the input holds
+While an IME composition is active (typing Chinese through pinyin, for example), the input holds
 intermediate Latin text that belongs to no collection. Normalisation and the "unsupported" verdict
 are suspended until the composition commits.
 
@@ -57,7 +57,7 @@ The chip shows the human label, not the on-chain id: the `WORDS` collection is d
 | Indicator | Meaning |
 | --- | --- |
 | Spinner | The lookup is in flight |
-| Green tick | Available — you can submit |
+| Green tick | Available; you can submit |
 | Red cross | Taken. A **Trading live** panel appears with the existing token's price and holder count, and a **BUY TOKEN** button that takes you to its page instead |
 
 When the name is taken, the initial-buy section and the submit button are disabled. The check is an
@@ -65,13 +65,13 @@ index lookup, not a chain read: the factory's on-chain `has_community` check is 
 duplicate, and a name claimed seconds before yours fails at signing time with
 `NAME_ALREADY_REGISTERED`.
 
-## The initial buy — two input modes
+## The initial buy: two input modes
 
 The section under the name is a pre-buy: tokens minted to you as part of the creation transaction,
 at the very start of the curve, before anyone else can buy. The link on the right toggles between
 two ways of expressing the same thing.
 
-### Mode 1 — Amount to spend (AE)
+### Mode 1: Amount to spend (AE)
 
 You type an AE figure; the app tells you how many tokens that buys, solving the curve backwards by
 bisection from a starting supply of zero. Quick-pick buttons offer 1, 10, 100, 500 and 100,000 AE.
@@ -85,9 +85,9 @@ At the launch supply those correspond to:
 | 500 | 9,826,562 | 5.09e-5 | 1.03e-4 |
 | 100,000 | 114,613,982 | 8.72e-4 | 2.15e-3 |
 
-### Mode 2 — Tokens to buy
+### Mode 2: Tokens to buy
 
-You type a token count; the app tells you what it costs, labelled *(incl. fees)* — the curve
+You type a token count; the app tells you what it costs, labelled *(incl. fees)*: the curve
 integral multiplied by 1.005 for the 0.5% affiliation fee. Quick-pick buttons offer 500K, 1M, 5M,
 10M and 100M tokens:
 
@@ -100,7 +100,7 @@ integral multiplied by 1.005 for the 0.5% affiliation fee. Quick-pick buttons of
 | 100,000,000 | 71,838.182846 | 72,197.373760 |
 
 The AE-mode estimate is computed from the bare curve and does not subtract the affiliation fee,
-while the token-mode estimate adds it — so expect the AE mode to deliver slightly fewer tokens than
+while the token-mode estimate adds it, so expect the AE mode to deliver slightly fewer tokens than
 it shows. Both estimates are computed from supply zero, which is correct: the token does not exist
 yet. The same helpers price the trade card of an existing token, fed the live supply instead.
 
@@ -124,7 +124,7 @@ The attached amount is estimated using the fee percentage read from the factory'
 An over-estimate costs you nothing. `create_community` requires
 `Call.value >= price(initial_buy_count)` and refunds the difference with
 `Chain.spend(Call.caller, overpaid_refund)` in the same transaction. An under-estimate aborts with
-`VALUE_HAS_TO_BE_GREATER_THAN_BUY_PRICE` and the whole creation fails — nothing is half-created.
+`VALUE_HAS_TO_BE_GREATER_THAN_BUY_PRICE` and the whole creation fails. Nothing is half-created.
 
 The form returns as soon as the transaction is broadcast and navigates you to
 `/trends/tokens/YOURNAME?created=true&txHash=...` while it is still being mined. Expect
@@ -144,7 +144,7 @@ afterwards by DAO vote through `CommunityManagement.change_meta_info`.
 | Creation fee | **None.** `create_community` charges nothing beyond the buy |
 | Ongoing | Nothing. There is no listing fee or rent |
 
-Creating a token inside an existing collection is free. Creating a **collection** is not — that is
+Creating a token inside an existing collection is free. Creating a **collection** is not. That is
 `create_collection`, which requires exactly 555 AE and burns it. See
 [Collections & Naming Rules](/tokens/collections-and-naming).
 
@@ -164,7 +164,7 @@ spot price of `0.0000001 AE`. Anyone, including you, can buy first afterwards.
 | "Wallet not connected" / no signature prompt | Wallet session dropped | Reconnect and retry |
 | Nothing on the token page after 5 minutes | Transaction still pending, or it failed | Look up the `txHash` from the URL on [aeScan](https://aescan.io) |
 
-A failed creation costs you gas and nothing else — the whole deployment is one transaction, so no
+A failed creation costs you gas and nothing else. The whole deployment is one transaction, so no
 partial community is left behind.
 
 ## After it is mined
@@ -172,13 +172,13 @@ partial community is left behind.
 Your token is live and tradeable immediately.
 
 - Open `/trends/tokens/YOURNAME` and check the Info tab for the sale, token, DAO and creator addresses.
-- Post about it — the community feed and the token's chat room are attached to the same page.
+- Post about it. The community feed and the token's chat room are attached to the same page.
 - Read [Reading a Token Page](/tokens/token-page) to interpret what happens next.
 
 ## Related
 
-- [Create a Token (CLI)](/tokens/create-from-cli) — the same deployment from a terminal or an agent
-- [Collections & Naming Rules](/tokens/collections-and-naming) — why a name is rejected, and which collection it lands in
-- [Bonding Curves](/tokens/bonding-curve) — what the launch price means and how fast it moves
-- [Community factory contract](/contracts/community-factory) — `create_community` at the entrypoint level
-- [DAO overview](/dao/overview) — the treasury your token just created, and who controls it
+- [Create a Token (CLI)](/tokens/create-from-cli): the same deployment from a terminal or an agent
+- [Collections & Naming Rules](/tokens/collections-and-naming): why a name is rejected, and which collection it lands in
+- [Bonding Curves](/tokens/bonding-curve): what the launch price means and how fast it moves
+- [Community factory contract](/contracts/community-factory): `create_community` at the entrypoint level
+- [DAO overview](/dao/overview): the treasury your token just created, and who controls it

@@ -129,7 +129,8 @@ def check_meta(report):
         except Exception as exc:  # noqa: BLE001
             report(meta_path, 1, "META", f"invalid JSON: {exc}")
             continue
-        present = {f[: -len(".mdx")] for f in files if f.endswith(".mdx")}
+        present = {f.rsplit(".", 1)[0] for f in files
+                   if f.endswith((".mdx", ".tsx"))}
         present |= {d for d in os.listdir(root)
                     if os.path.isdir(os.path.join(root, d))}
         for key, value in meta.items():

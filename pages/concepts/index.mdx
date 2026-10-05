@@ -5,18 +5,16 @@ description: "Attention is the most valuable thing on the internet, and the peop
 
 # Core Concepts
 
-You have been early before. A song, a meme, a project, a community — you saw it before it broke
+You have been early before. A song, a meme, a project, a community: you saw it before it broke
 out, you told people, you helped it happen. Then the platform sold ads against the attention you
 created, and you got a badge.
 
 **Superhero is built on the idea that being early should be worth something.**
 
 A post belongs to the person who wrote it, not to a database someone else controls. A trending
-topic is not just a hashtag — it is a market you can back while it is still small, priced by
-nothing but how many people arrived before you. And the fees that trading generates flow into a
+topic is a market you can back while it is still small, priced by
+nothing but how many people arrived before you. The fees that trading generates flow into a
 treasury the community votes on, instead of out to an advertiser.
-
-Attention, priced in the open, owned by the people who make it. That is the whole idea.
 
 If you already know what a bonding curve is, skip ahead to
 [Where the Money Goes](/concepts/value-flow); it answers the question everyone asks first.
@@ -28,19 +26,18 @@ If you already know what a bonding curve is, skip ahead to
 | [What is Superhero?](/concepts/what-is-superhero) | What the product is, and how superhero.com, the mobile apps and the wallet relate. |
 | [Attention Markets](/concepts/attention-markets) | Why a bonding curve is used to price a hashtag, and what the resulting price does and does not tell you. |
 | [Architecture Overview](/concepts/architecture) | Which contract holds what, which service serves what, and the exact path a post and a trade take. |
-| [On-Chain Social](/concepts/on-chain-social) | What it means for a post to be a contract call — permanence, provenance, and the costs. |
+| [On-Chain Social](/concepts/on-chain-social) | What it means for a post to be a contract call: permanence, provenance, and the costs. |
 | [Where the Money Goes](/concepts/value-flow) | Every fraction of AE on a buy and on a sell, traced to the contract that receives it. |
 | [Glossary](/concepts/glossary) | Every Superhero and æternity term, defined once, linked to the page that goes deeper. |
 | [FAQ](/concepts/faq) | The user FAQ from superhero.com, plus developer and agent questions. |
 
 ## Three mechanisms
 
-Strip away the interface and Superhero runs on three ideas. Almost every question about the
-product is really a question about one of them.
+Superhero runs on three mechanisms. Most questions about the product come back to one of them.
 
 **Posts are contract calls.** A post is a `post_without_tip` call on the `Tipping.aes` v3 contract.
 The author's address, the text and a list of media URLs are written into contract state and indexed
-by a `tip_id`. Nobody — including Superhero — can delete it afterwards.
+by a `tip_id`. Nobody, including Superhero, can delete it afterwards.
 
 **Topics are tokens.** Any hashtag can be turned into an AEX-9 token whose price is a deterministic
 function of its own circulating supply. There is no order book and no counterparty: you buy from the
@@ -52,8 +49,8 @@ what the treasury does with it.
 
 ## Related
 
-- [Community Tokens](/tokens/overview) — the practical guide to trading a community token.
-- [How DAOs Work](/dao/overview) — what token holders can decide, and the thresholds that gate it.
-- [Getting Started](/getting-started) — wallet, funds, first post, first trade.
-- [Agent Quickstart](/agents/quickstart) — the same model, driven by an AI agent through a CLI.
-- [æternity Documentation Hub](https://docs.aeternity.com/) — the chain everything here runs on.
+- [Community Tokens](/tokens/overview): the practical guide to trading a community token.
+- [How DAOs Work](/dao/overview): what token holders can decide, and the thresholds that gate it.
+- [Getting Started](/getting-started): wallet, funds, first post, first trade.
+- [Agent Quickstart](/agents/quickstart): the same model, driven by an AI agent through a CLI.
+- [æternity Documentation Hub](https://docs.aeternity.com/): the chain everything here runs on.

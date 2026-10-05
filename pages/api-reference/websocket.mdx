@@ -25,7 +25,7 @@ const socket = io('https://api.superhero.com', { autoConnect: false });
 socket.connect();
 ```
 
-The CORS origin is the same value the REST API uses — every origin by default, an allow-list
+The CORS origin is the same value the REST API uses: every origin by default, an allow-list
 when the operator sets `ALLOWED_ORIGINS`. See [Conventions](/api-reference/conventions#cors).
 
 A plain WebSocket client cannot connect: Socket.IO is a protocol layered on Engine.IO, so use a
@@ -56,7 +56,7 @@ under `data`.
 { "sale_address": "ct_...", "data": {} }
 ```
 
-`data` is the live-price read that was just written to the token row — a fixed subset of
+`data` is the live-price read that was just written to the token row, a fixed subset of
 `TokenDto`:
 
 | Key | Type | Unit |
@@ -75,7 +75,7 @@ under `data`.
 | `beneficiary_address`, `bonding_curve_address`, `owner_address` | string | from `metaInfo` |
 
 Nothing else is on it. `rank`, `trending_score`, `holders_count`, `tx_count`,
-`collection_info`, `performance` and `created_at` are never pushed — refetch
+`collection_info`, `performance` and `created_at` are never pushed. Refetch
 `/api/tokens/{address}/rankings` and the holders endpoint for those, throttled to at most once
 every 15 seconds per `sale_address` so a burst of trades collapses into one refetch.
 
@@ -220,14 +220,14 @@ read takes an optional array of ids (omit it to mark everything) and returns the
 
 ## What is not on the WebSocket
 
-New posts, comments and tips are not pushed on the token channels — poll the feed over REST.
+New posts, comments and tips are not pushed on the token channels, so poll the feed over REST.
 Chat runs on Nostr relays (`wss://relay.superhero.chat` by default), not on this socket. Chain
 events are also absent; for those, watch the middleware.
 
 ## Related
 
-- [Transactions API](/api-reference/transactions) — the REST form of the `token-history` payload
-- [Tokens API](/api-reference/tokens) — the full `TokenDto` that `token-updated` sends partial updates for
-- [API Conventions](/api-reference/conventions) — base URLs, the `PriceDto` currency keys and the units rule
-- [Node & Middleware](/api-reference/node-and-middleware) — for chain-level events rather than Superhero events
-- [Socket.IO client documentation](https://socket.io/) — the protocol this endpoint speaks
+- [Transactions API](/api-reference/transactions): the REST form of the `token-history` payload
+- [Tokens API](/api-reference/tokens): the full `TokenDto` that `token-updated` sends partial updates for
+- [API Conventions](/api-reference/conventions): base URLs, the `PriceDto` currency keys and the units rule
+- [Node & Middleware](/api-reference/node-and-middleware): for chain-level events rather than Superhero events
+- [Socket.IO client documentation](https://socket.io/): the protocol this endpoint speaks

@@ -6,8 +6,8 @@ description: "The on-chain identity contract: what it stores, its entrypoints, t
 # AddressLink
 
 `AddressLink` is the contract behind SuperheroID. It stores signed links from an æternity
-address to values in named provider namespaces — an X handle, a Nostr key, a preferred `.chain`
-name, a bio, a website — and the `/api/address-links/…` endpoints are the API in front of it.
+address to values in named provider namespaces (an X handle, a Nostr key, a preferred `.chain`
+name, a bio, a website), and the `/api/address-links/…` endpoints are the API in front of it.
 
 ## What it stores
 
@@ -18,8 +18,8 @@ state = { providers  : map(string, address)
         , nonce_seq  : map(address, int) }
 ```
 
-A link is a `(subject, provider, value)` triple. `links` is the forward index — every provider
-value an address has claimed — and `reverse` is the inverse, so a provider value resolves back
+A link is a `(subject, provider, value)` triple. `links` is the forward index (every provider
+value an address has claimed), and `reverse` is the inverse, so a provider value resolves back
 to its owner. `nonce_seq` is a monotonic counter per subject: every signed message carries the
 current nonce, and the nonce advances on write, so a signature cannot be replayed.
 
@@ -126,7 +126,7 @@ For a principal link the subject slot holds the AENS name instead of the address
 link:hero.chain:prefaens:hero.chain:0
 ```
 
-The digest is the standard æternity personal-message construction — a 28-byte prefix
+The digest is the standard æternity personal-message construction: a 28-byte prefix
 (`0x1a`, `aeternity Signed Message:` plus a newline, then the body length `0x20`) concatenated
 with the Blake2b-256 hash of the message, the whole 60 bytes hashed again. That is exactly what
 `signMessage` in `@aeternity/aepp-sdk` produces, so pass the claim's `message` string to
@@ -140,7 +140,7 @@ The same construction is used by [delegated posting](/social/delegated-posting).
 | Abort | Meaning |
 | --- | --- |
 | `INVALID_SIGNATURE` | The Ed25519 check failed against the subject |
-| `INVALID_NONCE` | The nonce moved between claim and submit — restart from claim |
+| `INVALID_NONCE` | The nonce moved between claim and submit; restart from claim |
 | `ALREADY_CLAIMED` | This provider is already linked to a different value for this subject |
 | `NOT_LINKED` / `NO_LINKS` | Nothing to unlink |
 | `NOT_PROVIDER_OWNER` | The submitting wallet does not own the provider namespace |
@@ -167,8 +167,8 @@ With either of the first two unset, every address-link read and write returns
 ## How a link reaches the API
 
 The indexer scans `link`, `unlink`, `link_principal` and `unlink_principal` calls from height
-1,273,691. On a live `link` transaction it decodes the call arguments directly — `addr`,
-`provider`, `value` — so the API reflects a link the moment the transaction is mined, without
+1,273,691. On a live `link` transaction it decodes the call arguments directly (`addr`,
+`provider`, `value`), so the API reflects a link the moment the transaction is mined, without
 waiting for contract logs to be indexed.
 
 The link lands in the account's `links` object, keyed by provider id:
@@ -178,7 +178,7 @@ The link lands in the account's `links` object, keyed by provider id:
   "bio": "Builder on Aeternity", "site": "example.com", "prefaens": "hero.chain" }
 ```
 
-A `nostr` link additionally wakes the token-gated-rooms pipeline — see [Chat](/social/chat).
+A `nostr` link also wakes the token-gated-rooms pipeline. See [Chat](/social/chat).
 
 ## The profile aggregate
 
@@ -198,12 +198,12 @@ deprecated):
 
 ## Related
 
-- [SuperheroID](/identity/superhero-id) — the product-level view of what an identity links.
-- [Verifying Your X Account](/identity/x-verification) — the `x` provider's claim-sign-submit
+- [SuperheroID](/identity/superhero-id): the product-level view of what an identity links.
+- [Verifying Your X Account](/identity/x-verification): the `x` provider's claim-sign-submit
   flow end to end.
-- [Profiles & Accounts](/identity/profiles) — where the linked values surface on screen.
-- [Chat](/social/chat) — the `nostr` provider, and the room pipeline that consumes it.
-- [Delegated & Gasless Posting](/social/delegated-posting) — the same signed-message
+- [Profiles & Accounts](/identity/profiles): where the linked values surface on screen.
+- [Chat](/social/chat): the `nostr` provider, and the room pipeline that consumes it.
+- [Delegated & Gasless Posting](/social/delegated-posting): the same signed-message
   construction in the posting contract.
-- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) —
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md):
   the reference for `Crypto.verify_sig` and the Blake2b primitives.

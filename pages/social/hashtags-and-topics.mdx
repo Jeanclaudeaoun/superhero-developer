@@ -10,13 +10,13 @@ The hashtag is where Superhero's social layer meets its market layer:
 > Trends = Hashtags = Communities = Tokens.
 
 A `#tag` in a post is a plain substring on chain. Off chain it becomes a topic with its own
-feed, a row in the trending index, and — if someone launches one — a bonding-curve token with a
+feed, a row in the trending index and, if someone launches one, a bonding-curve token with a
 treasury, a DAO and a chat room.
 
 ## Writing a tag
 
 Type `#` followed by a name. The composer offers a picker while you type, and the resulting
-text goes on chain verbatim — there is no separate tag field in the contract.
+text goes on chain verbatim. There is no separate tag field in the contract.
 
 Which characters count as part of a tag comes from the community factory's collections: each
 collection publishes an `allowed_name_chars` rule set, and the composer merges every
@@ -25,7 +25,7 @@ through `9` and `A` through `Z`; other collections cover Chinese, Arabic and Rus
 collection added later is picked up automatically. A tag is capped at 50 characters for the
 picker's purposes.
 
-A name containing a character no collection allows — a `.` or a `_`, for example — truncates
+A name containing a character no collection allows (a `.` or a `_`, for example) truncates
 when rendered, so the picker does not offer it.
 
 Account mentions use the same trigger mechanics but a different storage form: `@name` in the
@@ -42,8 +42,8 @@ A tag may carry an optional suffix describing how it should render:
 #SYMBOL{mode=advanced}       adds the price and a chart
 ```
 
-The symbol itself is never modified. The three named modes are sugar over three booleans —
-`chart`, `price` and `change` — each settable to `1` or `0`, and the ladder is strictly
+The symbol itself is never modified. The three named modes are sugar over three booleans,
+`chart`, `price` and `change`, each settable to `1` or `0`, and the ladder is strictly
 monotonic: tag is a subset of compact, which is a subset of advanced. The `tag` preset carries
 `change: true`; turning the badge off requires `change=0` explicitly.
 
@@ -67,8 +67,8 @@ takes a case-insensitive exact match on the token's name or symbol, and falls ba
 result.
 
 The rendered pill also shows a 24-hour change badge, from the mention's embedded performance or
-from `GET /api/tokens/{address}/performance`. A tag with no matching token still links — the
-token page handles the miss — so a hashtag is always navigable.
+from `GET /api/tokens/{address}/performance`. A tag with no matching token still links (the
+token page handles the miss), so a hashtag is always navigable.
 
 ## From tag to topic
 
@@ -101,13 +101,13 @@ GET /api/trending-tags?order_by=score&order_direction=DESC&limit=100&page=1&sear
 
 | Parameter | Values |
 | --- | --- |
-| `order_by` | `score`, `source` or `created_at` — anything else is a 400 |
+| `order_by` | `score`, `source` or `created_at`; anything else is a 400 |
 | `order_direction` | `ASC` or `DESC` |
 | `limit`, `page` | 1 to 100, default 100 |
 | `search` | Case-insensitive substring on `tag`, at most 100 characters |
 
 Each row carries `id`, `tag`, `score`, `source`, `description` (nullable) and `created_at`,
-plus a left-joined `token` matched on `token.name = trending_tag.tag` — so a trending tag that
+plus a left-joined `token` matched on `token.name = trending_tag.tag`, so a trending tag that
 already has a community token arrives with it attached. A single tag is at
 `GET /api/trending-tags/{tag}`, 404 when unknown.
 
@@ -123,7 +123,7 @@ than ageing out.
 
 The index drives the trending rail beside the feed, the trending pill carousel, and the trend
 cloud at `/trends/visx`, which renders tags sized by score. It also supplies the popular feed's
-`trendingBoost` term, normalised as `min(1, highestTagScoreAmongThePostsTopics / 100)` — see
+`trendingBoost` term, normalised as `min(1, highestTagScoreAmongThePostsTopics / 100)`; see
 [The Feed](/social/feed). A score above 100 adds nothing extra.
 
 ## Topics and trending tags are different things
@@ -134,7 +134,7 @@ They are two tables with two independent writers, joined only by name.
 | --- | --- | --- |
 | Written by | The post indexer, from `#tag` in post content | The trending provider, via `POST /api/trending-tags` |
 | Endpoint | `GET /api/topics…` | `GET /api/trending-tags…` |
-| Has posts behind it | Always — a topic exists because a post mentioned it | Not necessarily |
+| Has posts behind it | Always. A topic exists because a post mentioned it | Not necessarily |
 | Lifetime | Permanent, like the posts | Until the next push replaces the index |
 
 Not every topic gets a trending row, and a trending tag can exist with no posts behind it. The
@@ -145,8 +145,8 @@ same camelCase-splitting and uppercasing rule.
 
 A topic becomes a token when somebody creates one. That is a permissionless action: open
 `https://superhero.com/trends/create`, pick a name, and the community factory deploys the whole
-stack — an AEX-9 token, an exponential bonding curve, an affiliation token sale, a DAO that
-owns and benefits from the sale, and a `CommunityManagement` contract — then registers the
+stack (an AEX-9 token, an exponential bonding curve, an affiliation token sale, a DAO that
+owns and benefits from the sale, and a `CommunityManagement` contract), then registers the
 community in its on-chain registry.
 
 The naming rules come from the collection you create in:
@@ -158,9 +158,9 @@ The naming rules come from the collection you create in:
 | Allowed characters | The collection's `allowed_name_chars` |
 | Allowed length | The collection's `allowed_name_length` |
 
-Once the token exists, every `#tag` matching its name or symbol in any post — including posts
-written before the token existed — resolves to its page. Nothing rewrites the old posts;
-resolution simply starts succeeding.
+Once the token exists, every `#tag` matching its name or symbol in any post, including posts
+written before the token existed, resolves to its page. Nothing rewrites the old posts;
+resolution starts succeeding.
 
 From there the token layer takes over: price is set by the bonding curve, 1% of every trade
 splits between the community DAO and the affiliation system, and holders govern the treasury.
@@ -184,9 +184,9 @@ at the end is on chain in a different one; everything in between is the indexer.
 
 ## Related
 
-- [Posting](/social/posting) — where the tag is written, and the other content conventions.
-- [The Feed](/social/feed) — topic feeds and the `trendingBoost` ranking signal.
-- [Tokens overview](/tokens/overview) — what a hashtag becomes once it has a token.
-- [Trending score](/tokens/trending-score) — the token-side ranking this index feeds.
-- [Collections and naming](/tokens/collections-and-naming) — the character and length rules a
+- [Posting](/social/posting): where the tag is written, and the other content conventions.
+- [The Feed](/social/feed): topic feeds and the `trendingBoost` ranking signal.
+- [Tokens overview](/tokens/overview): what a hashtag becomes once it has a token.
+- [Trending score](/tokens/trending-score): the token-side ranking this index feeds.
+- [Collections and naming](/tokens/collections-and-naming): the character and length rules a
   tag must satisfy to become a token.

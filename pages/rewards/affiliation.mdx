@@ -73,7 +73,7 @@ total_price        = bonding_curve_price + affiliation_amount
 
 The sale forwards `affiliation_amount` as the attached value of
 `record_sale_transaction(buyer, bonding_curve_price)`, so the `transaction_value` the treasury
-splits is the curve price, excluding the fee itself. Selling pays no affiliation fee —
+splits is the curve price, excluding the fee itself. Selling pays no affiliation fee:
 `sell()` never touches the treasury.
 
 ## Levels with no inviter
@@ -95,17 +95,17 @@ The buyer pays the full 0.5% in every case.
 
 ## How the referral chain is built
 
-The treasury stores the chain as a single map, `affiliation_tree: map(address, address)` —
+The treasury stores the chain as a single map, `affiliation_tree: map(address, address)`:
 each address points at its direct inviter. The four levels are found by walking that map
 upward four times.
 
 Two entrypoints write into it:
 
-- `redeem_invitation_code(invitee_address)` — the normal path. Someone opens an invite link,
+- `redeem_invitation_code(invitee_address)`: the normal path. Someone opens an invite link,
   the one-time key inside it signs this call, and the caller's wallet address is attached to
   the inviter who funded the code. See [Invite Links](/rewards/invite-links). It rejects
   `INVITER_EQUAL_INVITEE`, so you cannot redeem your own code into your own wallet.
-- `register_invitation(inviter_address)` — attaches the caller to an inviter directly. Any
+- `register_invitation(inviter_address)`: attaches the caller to an inviter directly. Any
   account can call it once to name its inviter; no funded code and no action by the named
   inviter are required.
 
@@ -119,7 +119,7 @@ Two read entrypoints get you back out:
 already (`INVITEE_ALREADY_REGISTERED`), and no entrypoint deletes from `affiliation_tree`.
 Once an address has an inviter it keeps that inviter for the life of the contract.
 
-## Unique invitees — the withdraw gate
+## Unique invitees: the withdraw gate
 
 Accruing rewards and withdrawing them are separate. Rewards accrue from the first buy in your
 downline. Withdrawing is gated on a qualification threshold, tracked per inviter in
@@ -131,8 +131,8 @@ unique_invitees_state
   | WaitingForInvitations(Set.set(address), map(address, int))
 ```
 
-- **`ThresholdReached`** — the gate is open permanently.
-- **`WaitingForInvitations(reached, in_progress)`** — the set holds the invitees who have
+- **`ThresholdReached`**: the gate is open permanently.
+- **`WaitingForInvitations(reached, in_progress)`**: the set holds the invitees who have
   already crossed the spend threshold; the map holds every other invitee against their
   cumulative spend in aettos.
 
@@ -170,7 +170,7 @@ entrypoint get_payout_period() : int =
 ```
 
 The index is `floor(unix_time_ms / 2_592_000_000)`. It advances on its own every 30 days, and
-the boundary is global — shared by every account — rather than a per-account anniversary.
+the boundary is global (shared by every account) rather than a per-account anniversary.
 Periods are 30 days, not calendar months, so they drift against the calendar.
 
 Rewards are credited into the bucket for whichever period is current when the buy is mined:
@@ -207,7 +207,7 @@ require(state.unique_invitees[Call.caller = WaitingForInvitations(Set.new(), {})
         "MINIMUM_ACCOUNTS_THRESHOLD_NOT_REACHED")
 ```
 
-It takes no arguments and pays the full two-bucket sum to `Call.caller` — there is no partial
+It takes no arguments and pays the full two-bucket sum to `Call.caller`. There is no partial
 withdrawal. Calling it with nothing accrued succeeds and spends zero.
 
 ## `redemption_fee_cover`
@@ -225,8 +225,8 @@ register_invitation_code(
 An invite link carries the **secret key** of a freshly generated account; the recipient's
 browser reconstructs that account and uses it to sign
 `redeem_invitation_code(<recipient wallet address>)`. That one-time account has never held AE,
-so `redemption_fee_cover` is the AE the inviter attaches to make that one call affordable —
-the recipient claims a gift without needing any AE first.
+so `redemption_fee_cover` is the AE the inviter attaches to make that one call affordable,
+so the recipient claims a gift without needing any AE first.
 
 The web app and the CLI both use **`10n ** 15n` aettos = 0.001 AE per link**, which is the
 contract's minimum:
@@ -264,9 +264,9 @@ the same one-time address cannot be re-registered.
 | Entrypoint | Returns |
 | --- | --- |
 | `get_state()` | The whole record: payout periods, affiliation tree, invitation codes, unique invitees |
-| `payout_periods()` | `map(int, map(address, int))` — accrual bucketed by period |
-| `affiliation_tree()` | `map(address, address)` — every invitee to its direct inviter |
-| `invitation_codes()` | `map(address, (address, int, bool))` — one-time address to `(inviter, amount, claimed)` |
+| `payout_periods()` | `map(int, map(address, int))`: accrual bucketed by period |
+| `affiliation_tree()` | `map(address, address)`: every invitee to its direct inviter |
+| `invitation_codes()` | `map(address, (address, int, bool))`: one-time address to `(inviter, amount, claimed)` |
 | `unique_invitees()` | `map(address, unique_invitees_state)` |
 
 ### Per-account queries
@@ -317,18 +317,18 @@ The treasury is resolved from the CommunityFactory rather than hardcoded:
 | Testnet | `ct_2QmAcPxY4TBbFmkSUhxU4UTwoRot8SMmZzaAKL6oyHmQqRL1rK` |
 
 The web app uses the mainnet address as `INVITATIONS_CONTRACT` to filter middleware
-transaction history — `/v3/transactions?contract=<that address>&caller_id=<your address>` —
+transaction history (`/v3/transactions?contract=<that address>&caller_id=<your address>`)
 when listing the invitation codes you have registered and revoked. On any other network,
 resolve through the factory or use the backend's invitation index.
 
 ## Related
 
-- [Invite Links](/rewards/invite-links) — creating, funding, sharing and revoking the codes
+- [Invite Links](/rewards/invite-links): creating, funding, sharing and revoking the codes
   this contract tracks.
-- [Claiming Rewards](/rewards/claiming) — the `withdraw()` flow and its error messages.
-- [AffiliationTreasury contract](/contracts/affiliation-treasury) — the contract reference page.
-- [Bonding curve fees and slippage](/tokens/fees-and-slippage) — where the 1% spread that
+- [Claiming Rewards](/rewards/claiming): the `withdraw()` flow and its error messages.
+- [AffiliationTreasury contract](/contracts/affiliation-treasury): the contract reference page.
+- [Bonding curve fees and slippage](/tokens/fees-and-slippage): where the 1% spread that
   feeds this system originates.
-- [Value flow](/concepts/value-flow) — the whole-protocol view of the same money.
-- [Refer & Earn on superhero.com](https://superhero.com/trends/invite) — where you generate
+- [Value flow](/concepts/value-flow): the whole-protocol view of the same money.
+- [Refer & Earn on superhero.com](https://superhero.com/trends/invite): where you generate
   codes, watch the 4 × 10 AE gate and call `withdraw()`.

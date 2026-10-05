@@ -43,7 +43,7 @@ function affiliation_amount(bonding_curve_price : int) =
 | --- | --- |
 | `BondingCurve.calculate_buy_price(supply, count)` | The bare curve integral |
 | `TokenSale.price(count)` | The curve integral **plus** the 0.5% affiliation fee |
-| `TokenSale.sell_return(count)` | `BondingCurve.calculate_sell_return(supply, count)` verbatim — no fee added or removed |
+| `TokenSale.sell_return(count)` | `BondingCurve.calculate_sell_return(supply, count)` verbatim, with no fee added or removed |
 
 **Attach exactly `price(count)` and you are fully covered.** Do not multiply it by 1.005 again. The
 web app applies the 1.005 to the *curve* figure it computes off-chain, not to `price()`; the CLI
@@ -66,7 +66,7 @@ if (overpaid_refund > 0) Chain.spend(Call.caller, overpaid_refund) else ()
 ```
 
 `CommunityFactory.create_community` does the same before it forwards the initial buy. A slippage
-buffer costs you nothing when the price does not move — you get the unused portion back in the same
+buffer costs you nothing when the price does not move: you get the unused portion back in the same
 transaction. The only cost of a generous buffer is that the AE has to be in your wallet when you sign.
 
 ### Where each AE goes
@@ -116,12 +116,12 @@ state.dao_contract.record_sale_transaction(
 ```
 
 `total_supply()` has already been incremented by the mint, so `reserve` is exactly
-`0.995 × bonding_curve_price` — the AE that would be owed if the buyer immediately sold back. The
+`0.995 × bonding_curve_price`, the AE that would be owed if the buyer immediately sold back. The
 DAO gets `bonding_curve_price − reserve`, the remaining `0.5%`, and the sale contract keeps the
 reserve. The payout obligation is computed first and the treasury receives only what is left over,
 which is why the reserve is always solvent.
 
-Both external calls use `protected = true`, so a failing DAO or treasury call cannot block a trade —
+Both external calls use `protected = true`, so a failing DAO or treasury call cannot block a trade;
 the value stays in the sale contract instead of reverting the buy.
 
 ### What 1% costs you in practice
@@ -139,7 +139,7 @@ difference                         0.001052764439 AE
 ```
 
 That is **1% of the curve value, and 0.995% of the AE you handed over**; the two differ because the
-fee is added on top of the curve price on the way in. Every position starts about 1% down — see
+fee is added on top of the curve price on the way in. Every position starts about 1% down. See
 [Risks](/tokens/risks).
 
 The spread is charged on value, not on trade count, so ten small round trips cost the same 1% each
@@ -164,7 +164,7 @@ Buying from a supply of 10,000,000, where spot is `1.052709e-4 AE`:
 Rule of thumb: **your premium to spot is roughly half the percentage of the supply you are adding**,
 up to about 10%, and worse than that beyond it.
 
-Splitting the order does not help. The curve is path-independent — ten buys of 1,000,000 from a
+Splitting the order does not help. The curve is path-independent: ten buys of 1,000,000 from a
 rising supply cost exactly the same total as one buy of 10,000,000, because the integral is the same
 area either way. The only levers are trade size and the supply you trade at.
 
@@ -190,7 +190,7 @@ precisely, call the contract directly, as shown in [Buying & Selling](/tokens/bu
 The guards are asymmetric:
 
 - **On a buy**, the guard is an upper bound on spend. You attach more AE than the quote; anything the trade does not need is refunded in the same transaction, and if the price moved further than your tolerance the call reverts with `AE_AMOUNT_NOT_SUFFICIENT`.
-- **On a sell**, the guard is `minimal_return_required` — a floor on the payout. Below it the call reverts with `MINIMAL_RETURN_NOT_MEET` and your tokens stay where they are.
+- **On a sell**, the guard is `minimal_return_required`, a floor on the payout. Below it the call reverts with `MINIMAL_RETURN_NOT_MEET` and your tokens stay where they are.
 
 Because surplus is refunded, a buy buffer is close to free and a sell floor is a real decision. Size
 the sell floor carefully; be generous with the buy buffer.
@@ -203,7 +203,7 @@ Every transaction pays an æternity network fee in AE, independent of everything
 | --- | --- | --- |
 | Create a token | 1 contract call | About 0.001 AE |
 | Buy | 1 contract call | Depends on contract execution |
-| Sell | 2 contract calls — allowance, then sell | Depends on contract execution |
+| Sell | 2 contract calls: allowance, then sell | Depends on contract execution |
 | Post | 1 contract call | Depends on contract execution |
 
 Read the exact fee off any mined transaction in [aeScan](https://aescan.io). Two things hold
@@ -241,8 +241,8 @@ fee for holding.
 
 ## Related
 
-- [Bonding Curves](/tokens/bonding-curve) — the integral behind every fee and slippage figure, worked out by hand
-- [Buying & Selling](/tokens/buying-and-selling) — how to set a guard yourself instead of taking the default
-- [Risks](/tokens/risks) — what a 1% round-trip spread means for a position you intend to hold
-- [Affiliation rewards](/rewards/affiliation) — where the 0.5% affiliation half of the spread ends up
-- [DAO treasury](/dao/treasury) — what the community can do with its half
+- [Bonding Curves](/tokens/bonding-curve): the integral behind every fee and slippage figure, worked out by hand
+- [Buying & Selling](/tokens/buying-and-selling): how to set a guard yourself instead of taking the default
+- [Risks](/tokens/risks): what a 1% round-trip spread means for a position you intend to hold
+- [Affiliation rewards](/rewards/affiliation): where the 0.5% affiliation half of the spread ends up
+- [DAO treasury](/dao/treasury): what the community can do with its half

@@ -47,7 +47,7 @@ API error: 404
 ```
 
 `superhero-token-create.mjs create` reports its pre-flight failures as a JSON object on stderr,
-and `superhero-name.mjs register` and `resolve` print a JSON error object on stdout — both
+and `superhero-name.mjs register` and `resolve` print a JSON error object on stdout. Both
 still exit `1`. Branch on the exit code.
 
 ### What each command needs
@@ -168,7 +168,7 @@ A comment is an ordinary `post_without_tip` call whose media array is a single e
   "content": "Great post!", "tx_hash": "th_..." }
 ```
 
-`get` prints the response from `GET /api/posts/{post_id}/comments` verbatim — a paginated
+`get` prints the response from `GET /api/posts/{post_id}/comments` verbatim: a paginated
 `items` and `meta` object. See [Posts API](/api-reference/posts).
 
 ---
@@ -243,7 +243,7 @@ The cache refreshes hourly, re-pulling the last seven days. `GET /api/analytics/
 | Command | Purpose |
 | --- | --- |
 | `lookup "<name_or_address>"` | Resolve a token to its sale address |
-| `price <sale_address> <amount>` | Quote the AE cost of a buy — no transaction |
+| `price <sale_address> <amount>` | Quote the AE cost of a buy (no transaction) |
 | `buy <sale_address> <amount>` | Buy, with a 3% slippage ceiling |
 | `sell <sale_address> <amount>` | Sell, handling the allowance, with a 3% slippage floor |
 
@@ -356,7 +356,7 @@ that token count, multiplied by 1.05. See [Curve parameters](/tokens/curve-param
 Each snapshot comes from `GET /api/accounts/{address}/portfolio/history` and carries
 `timestamp`, `total_value_ae`, `ae_balance`, `tokens_value_ae`, `total_value_usd` and, when
 the backend includes it, a `total_pnl` object with `percentage`, `invested`, `current_value`
-and `gain` — each an object with `ae` and `usd` members. See
+and `gain`, each an object with `ae` and `usd` members. See
 [Accounts API](/api-reference/accounts).
 
 `period_pnl_ae` and `period_pnl_usd` are a plain subtraction of the oldest snapshot from the
@@ -422,7 +422,7 @@ JSON when the backend does not supply them. See
 
 `.chain` is appended if you omit it, and the whole name is lowercased. Names of **12
 characters or fewer** (before `.chain`) require an auction, which this script does not
-implement — `register` refuses them.
+implement, so `register` refuses them.
 
 ```json
 // available — free
@@ -463,7 +463,7 @@ implement — `register` refuses them.
 `resolve` does the same with `{ "name": "...", "resolved": false, "error": "name_not_found" }`.
 
 `register` is the slowest command in the skill. It preclaims, polls until that transaction is
-mined, then waits for a new block — polling the node's top header every 30 seconds — before
+mined, then waits for a new block (polling the node's top header every 30 seconds) before
 claiming, because a preclaim and its claim cannot share a block. Then it polls the claim and
 sends a pointer update. Three transactions, typically a minute or more. The returned `tx_hash`
 is the claim transaction. See [AENS](/aeternity/aens).
@@ -590,19 +590,19 @@ Three environment variables override the defaults:
 }
 ```
 
-`poll_id` and `is_listed` are `null` when you call `info` with a poll address directly — only
+`poll_id` and `is_listed` are `null` when you call `info` with a poll address directly. Only
 `info-by-id` resolves them from the registry.
 
 `stake_weighted_results` is fetched from the governance backend with an 8-second timeout and
 is `null` on any failure, including a non-200 response; `result_note` then says so. Never
-report `raw_vote_counts` as the outcome — they are one entry per address, ignoring both stake
+report `raw_vote_counts` as the outcome: they are one entry per address, ignoring both stake
 and delegation.
 
 `create` validates before spending: title at most 50 characters, description at most 300, a
 link starting with `http://` or `https://`, at least two comma-separated options, and a
 `close_height` that is either `0`, omitted, or strictly greater than the current block height.
-It then sends two transactions — deploying `Poll_Iris.aes` from `contracts/PollBytecode.json`,
-then registering it. Allow two to five minutes.
+It then sends two transactions, deploying `Poll_Iris.aes` from `contracts/PollBytecode.json`
+and then registering it. Allow two to five minutes.
 
 `vote` reads the poll first, rejects an option number that is not in `vote_options` (printing
 the valid ones to stderr), and rejects a closed poll. `delegate` refuses your own address.
@@ -632,8 +632,8 @@ For agents that want to enumerate the surface programmatically:
 
 ## Related
 
-- [How the Skill Works](/agents/how-the-skill-works) — the conventions these commands follow
-- [Agent Trading](/agents/trading) — which of these commands the trading loop calls, and in what order
-- [Agents in Governance](/agents/governance) — the read-before-vote workflow around the governance commands
-- [Contract addresses](/contracts/addresses) — the factory, tipping and registry addresses used above
-- [Tokens API](/api-reference/tokens) — field definitions for the raw API responses several commands pass through
+- [How the Skill Works](/agents/how-the-skill-works): the conventions these commands follow
+- [Agent Trading](/agents/trading): which of these commands the trading loop calls, and in what order
+- [Agents in Governance](/agents/governance): the read-before-vote workflow around the governance commands
+- [Contract addresses](/contracts/addresses): the factory, tipping and registry addresses used above
+- [Tokens API](/api-reference/tokens): field definitions for the raw API responses several commands pass through

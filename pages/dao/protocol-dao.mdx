@@ -7,7 +7,7 @@ description: "The platform-wide AEX-9 token minted to every buyer of a community
 
 The ProtocolDAO token is issued automatically to anyone who buys a community token, in
 proportion to the AE they spend. It is one platform-wide token, intended for protocol-level
-governance. Issuance is live; the governance it is named after is not yet built — there is no
+governance. Issuance is live; the governance it is named after is not yet built. There is no
 ProtocolDAO contract, no proposal mechanism and no staking.
 
 It is not a community token. A community token governs one community's treasury through that
@@ -49,7 +49,7 @@ mint and no other issuance path, so ProtocolDAO supply is exactly 1,000 times th
 spent buying community tokens through the factory.
 
 The token contract is an ordinary `FungibleTokenFull` with 18 decimals, so the whole AEX-9
-surface applies — `balance`, `total_supply`, `transfer`, `create_allowance` and the rest. Its
+surface applies: `balance`, `total_supply`, `transfer`, `create_allowance` and the rest. Its
 name and symbol are the same string, set once at factory deployment by
 `CommunityFactory.init(protocol_token_name)`.
 
@@ -100,8 +100,8 @@ bonding-curve token and has no protocol-native market.
 
 ## Related
 
-- [Community DAOs](/dao) — the per-community governance that exists today.
-- [Governance and Voting](/governance) — æternity-wide polls, weighted by AE.
-- [Value flow](/concepts/value-flow) — where ProtocolDAO issuance sits in what a buyer pays and receives.
-- [Community Factory contract reference](/contracts/community-factory) — the factory entrypoints that mint it.
-- [AEX standards](/aeternity/aex-standards) — the AEX-9 interface this token implements.
+- [Community DAOs](/dao): the per-community governance that exists today.
+- [Governance and Voting](/governance): æternity-wide polls, weighted by AE.
+- [Value flow](/concepts/value-flow): where ProtocolDAO issuance sits in what a buyer pays and receives.
+- [Community Factory contract reference](/contracts/community-factory): the factory entrypoints that mint it.
+- [AEX standards](/aeternity/aex-standards): the AEX-9 interface this token implements.

@@ -17,7 +17,7 @@ registration, ownership and expiry are consensus state.
 | 12 characters or fewer | Goes to auction |
 
 An auction runs until it times out with no higher bid, and each new bid must beat the previous
-one by at least 5%. Neither the Superhero app nor the agent-skill CLI implements bidding — the
+one by at least 5%. Neither the Superhero app nor the agent-skill CLI implements bidding, and the
 CLI refuses a short name outright:
 
 ```text
@@ -36,14 +36,14 @@ AENS registration is two transactions, to stop front-running:
 2. **Claim.** Reveal the name and the salt. The protocol checks the commitment.
 
 The two transactions must land in **different blocks**. After the claim, **update** the name's
-pointers so it resolves to your address — a name with no `account_pubkey` pointer resolves to
+pointers so it resolves to your address. A name with no `account_pubkey` pointer resolves to
 nothing.
 
 ## The sponsored claim in the app
 
 Superhero sponsors **one free `.chain` claim per address**, for names longer than 12 characters
 before the suffix, so every user can have a human-readable identity at no cost. Claim additional
-names from Superhero Wallet — the browser extension, the mobile app, or `wallet.superhero.com`.
+names from Superhero Wallet: the browser extension, the mobile app, or `wallet.superhero.com`.
 
 The backend pays for and submits the sponsored transactions:
 
@@ -51,7 +51,7 @@ The backend pays for and submits the sponsored transactions:
 | --- | --- | --- |
 | 1 | `GET /api/profile/chain-name/sponsorship/{name}` | Check whether the sponsor account can fund this claim. The path segment is the label **without** the `.chain` suffix. Returns `sponsorable`, `sponsor_configured`, `sponsor_balance_aettos`, `required_balance_aettos` and a `reason`. |
 | 2 | `POST /api/profile/chain-name/challenge` | Get a `nonce`, an `expires_at` and a `message` bound to your address. |
-| 3 | — | Sign `message` with your wallet to prove you control the address. |
+| 3 | (in your wallet) | Sign `message` with your wallet to prove you control the address. |
 | 4 | `POST /api/profile/chain-name/claim` | Submit `address`, `name`, `challenge_nonce`, `challenge_expires_at` and `signature_hex`. |
 | 5 | `GET /api/profile/{address}/chain-name-claim` | Poll the status. Returns `status` plus `preclaim_tx_hash`, `claim_tx_hash`, `update_tx_hash`, `transfer_tx_hash` and the expiry. |
 
@@ -91,7 +91,7 @@ node scripts/superhero-name.mjs list                 # names owned by your own w
   header every 30 seconds. Expect minutes, not seconds.
 - `update` passes `extendPointers: true`, so repointing the account pointer does not wipe other
   pointers you have set. The CLI only ever sets the `account_pubkey` pointer.
-- `lookup` and `list` read the middleware — `/v3/names?owned_by=<address>&state=active`.
+- `lookup` and `list` read the middleware: `/v3/names?owned_by=<address>&state=active`.
   `resolve` and `available` read name state from the node and pick the `account_pubkey`
   pointer.
 
@@ -102,7 +102,7 @@ An AENS name has a finite time-to-live measured in key-blocks, exposed as an exp
 status response's `expires_at`.
 
 The ceiling is protocol configuration: an `expire_by` may be at most **180,000 key
-generations** into the future — roughly 375 days. Auction durations and starting bids are
+generations** into the future, roughly 375 days. Auction durations and starting bids are
 protocol parameters too; the
 [AENS protocol specification](https://github.com/aeternity/protocol/blob/master/AENS.md) is the
 reference.
@@ -134,16 +134,16 @@ puts the **name** in the subject slot rather than your address:
 link:hero.chain:prefaens:hero.chain:0
 ```
 
-The contract verifies ownership itself with `AENSv2.lookup` before accepting it —
+The contract verifies ownership itself with `AENSv2.lookup` before accepting it. It fails with
 `PRINCIPAL_NOT_FOUND` if the name is not registered, `PRINCIPAL_MISMATCH` if you do not own it.
 See [AddressLink](/identity/address-link).
 
 ## Related
 
-- [Names](/identity/names) — why a chain name outranks every other handle.
-- [Claim a name](/getting-started/claim-name) — the walkthrough for your first sponsored claim.
-- [AENS](/aeternity/aens) — the protocol-level view of the naming system.
-- [AddressLink](/identity/address-link) — where `link_principal` records the name after
+- [Names](/identity/names): why a chain name outranks every other handle.
+- [Claim a name](/getting-started/claim-name): the walkthrough for your first sponsored claim.
+- [AENS](/aeternity/aens): the protocol-level view of the naming system.
+- [AddressLink](/identity/address-link): where `link_principal` records the name after
   verifying you own it.
-- [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) —
+- [æternity Naming System (AENS)](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens):
   the official documentation for preclaim, claim, auctions and pointers.

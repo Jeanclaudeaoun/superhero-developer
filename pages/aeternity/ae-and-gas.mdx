@@ -19,7 +19,7 @@ An **aetto** (plural *aettos*) is the smallest unit of AE:
 ```
 
 **Every amount crossing a chain boundary is in aettos.** Node balances, contract call `amount`
-options, bonding-curve prices, event arguments — all aettos, all integers. AE is a presentation
+options, bonding-curve prices, event arguments: all aettos, all integers. AE is a presentation
 format.
 
 ### Convert safely
@@ -71,7 +71,7 @@ An æternity transaction has two separate charges:
 Gas is charged on top of `fee`, up to the limit in the transaction. At a routine 5M gas limit
 that ceiling is around thirty times the fee, so the Superhero wallet shows a separate
 "Gas, at most" row, computed as `gasLimit × gasPrice`. When you approve a contract call, that
-row — not "Network fee" — is your worst case.
+row, not "Network fee", is your worst case.
 
 ### Gas price
 
@@ -97,7 +97,7 @@ Superhero does not override the SDK's gas defaults: no contract call in the web 
 
 Gas is debited up front: the protocol subtracts `gas × gas_price` from the caller before
 execution, then refunds the unused portion and pays the used portion to the miner. A call that
-exhausts its `gasLimit` refunds nothing — the transaction is still mined, the state change is
+exhausts its `gasLimit` refunds nothing: the transaction is still mined, the state change is
 rolled back, and you pay the full limit. A generous `gasLimit` costs nothing when the call
 succeeds and everything when it does not.
 
@@ -136,8 +136,8 @@ AE.
 
 ## Related
 
-- [Fees & slippage](/tokens/fees-and-slippage) — the protocol fees layered on top of gas when you trade.
-- [Curve parameters & units](/tokens/curve-parameters) — where aettos meets bonding-curve math.
-- [Accounts & Keys](/aeternity/accounts-and-keys) — the account these balances belong to.
-- [Fund your wallet](/getting-started/fund-wallet) — the practical route to a funded account.
-- [SDK transaction options](https://github.com/aeternity/aepp-sdk-js/blob/develop/docs/transaction-options.md) — `gasLimit`, `gasPrice`, `fee` and their defaults.
+- [Fees & slippage](/tokens/fees-and-slippage): the protocol fees layered on top of gas when you trade.
+- [Curve parameters & units](/tokens/curve-parameters): where aettos meets bonding-curve math.
+- [Accounts & Keys](/aeternity/accounts-and-keys): the account these balances belong to.
+- [Fund your wallet](/getting-started/fund-wallet): the practical route to a funded account.
+- [SDK transaction options](https://github.com/aeternity/aepp-sdk-js/blob/develop/docs/transaction-options.md): `gasLimit`, `gasPrice`, `fee` and their defaults.

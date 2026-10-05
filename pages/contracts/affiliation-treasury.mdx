@@ -21,27 +21,27 @@ Or resolve it at runtime with `factory.affiliation_treasury()`. Its interface is
 
 | Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `() => AffiliationTreasury.state` | — |
+| `init` | `() => AffiliationTreasury.state` |  |
 | `register_invitation_code` | `(invitation_addresses: list(address), redemption_fee_cover: int, invitation_amount: int) => unit` | stateful, payable |
 | `revoke_invitation_code` | `(invitation_address: address) => unit` | stateful |
 | `redeem_invitation_code` | `(invitee_address: address) => unit` | stateful |
 | `register_invitation` | `(inviter_address: address) => unit` | stateful |
 | `record_sale_transaction` | `(buyer: address, transaction_value: int) => unit` | stateful, payable |
 | `withdraw` | `() => unit` | stateful |
-| `get_accumulated_rewards` | `(account: address) => int` | — |
-| `get_direct_inviter` | `(account: address) => option(address)` | — |
-| `get_affiliation_tree` | `(address: address) => address` | — |
-| `affiliation_tree` | `() => map(address, address)` | — |
-| `get_affiliation_fee_percentage` | `() => int` | — |
-| `get_affiliation_fee_percentages` | `() => list(int)` | — |
-| `get_affiliation_fee_precision` | `() => int` | — |
-| `get_invitation_code` | `(address: address) => tuple(address, int, bool)` | — |
-| `invitation_codes` | `() => map(address, tuple(address, int, bool))` | — |
-| `get_unique_invitee` | `(address: address) => AffiliationTreasury.unique_invitees_state` | — |
-| `unique_invitees` | `() => map(address, AffiliationTreasury.unique_invitees_state)` | — |
-| `get_payout_period` | `() => int` | — |
-| `payout_periods` | `() => map(int, map(address, int))` | — |
-| `get_state` | `() => AffiliationTreasury.state` | — |
+| `get_accumulated_rewards` | `(account: address) => int` |  |
+| `get_direct_inviter` | `(account: address) => option(address)` |  |
+| `get_affiliation_tree` | `(address: address) => address` |  |
+| `affiliation_tree` | `() => map(address, address)` |  |
+| `get_affiliation_fee_percentage` | `() => int` |  |
+| `get_affiliation_fee_percentages` | `() => list(int)` |  |
+| `get_affiliation_fee_precision` | `() => int` |  |
+| `get_invitation_code` | `(address: address) => tuple(address, int, bool)` |  |
+| `invitation_codes` | `() => map(address, tuple(address, int, bool))` |  |
+| `get_unique_invitee` | `(address: address) => AffiliationTreasury.unique_invitees_state` |  |
+| `unique_invitees` | `() => map(address, AffiliationTreasury.unique_invitees_state)` |  |
+| `get_payout_period` | `() => int` |  |
+| `payout_periods` | `() => map(int, map(address, int))` |  |
+| `get_state` | `() => AffiliationTreasury.state` |  |
 
 ## Types
 
@@ -58,7 +58,7 @@ record state =
   , unique_invitees  : map(address, unique_invitees_state) }
 ```
 
-`invitation_codes` is keyed by the **invite address** — the public key of a throwaway keypair
+`invitation_codes` is keyed by the invite address: the public key of a throwaway keypair
 whose secret key is the invite link. Each entry is a three-element tuple, decoded in
 JavaScript as an array:
 
@@ -78,7 +78,7 @@ entrypoint get_affiliation_fee_percentage(): int = 500  // 0.5%, the sum of the 
 
 | Level | Constant | Share of the transaction |
 | --- | --- | --- |
-| 1 — the direct inviter | 300 | 0.300% |
+| 1 (the direct inviter) | 300 | 0.300% |
 | 2 | 125 | 0.125% |
 | 3 | 50 | 0.050% |
 | 4 | 25 | 0.025% |
@@ -164,12 +164,12 @@ Chain.spend(Call.caller, invitation_amount)
 ```
 
 Only the original inviter may revoke, and only before redemption. The `redemption_fee_cover`
-is not part of the refund — it was spent to the invite address at registration. If you kept
+is not part of the refund, because it was spent to the invite address at registration. If you kept
 the keypair, sweep it from the invite account with a plain spend.
 
 ### Redeeming
 
-`redeem_invitation_code(invitee_address)` is called **by the invite address itself** — the
+`redeem_invitation_code(invitee_address)` is called by the invite address itself. The
 invitee's client signs with the secret key from the link, and the contract looks the code up by
 `Call.caller`. It marks the code redeemed, spends the gift to `invitee_address`, and writes
 `affiliation_tree[invitee_address] = inviter_address`.
@@ -286,14 +286,14 @@ Notes for indexers:
 
 ## Tree shape
 
-`affiliation_tree` is `map(address, address)` — one direct inviter per account, written once
+`affiliation_tree` is `map(address, address)`: one direct inviter per account, written once
 and never re-parented. The tree itself has no depth limit; the payout walk visits at most four
 ancestors, one per entry in `affiliation_fee_percentages`. Level five and beyond exist in the
 data and earn nothing.
 
 ## Related
 
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the contract that funds this one on every buy
-- [Affiliation](/rewards/affiliation) — the reward programme explained for participants
-- [Invite links](/rewards/invite-links) — creating and sharing invites from the app
-- [Claiming rewards](/rewards/claiming) — the withdrawal flow
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale): the contract that funds this one on every buy
+- [Affiliation](/rewards/affiliation): the reward programme explained for participants
+- [Invite links](/rewards/invite-links): creating and sharing invites from the app
+- [Claiming rewards](/rewards/claiming): the withdrawal flow

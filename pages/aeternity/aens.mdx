@@ -3,7 +3,7 @@ title: "AENS — the æternity Naming System"
 description: "How .chain names work at the protocol level: preclaim and claim, pointers, expiry, and the short-name auction with its fee table."
 ---
 
-# AENS — the æternity Naming System
+# AENS: the æternity Naming System
 
 AENS is part of the æternity protocol, not an application-level registry contract. A `.chain`
 name is an on-chain object (`nm_…`) owned by an account, carrying a set of pointers and an
@@ -31,7 +31,7 @@ Registration is two transactions in two different blocks.
    as a commitment (`cm_…`). The name itself is not in this transaction, so nobody watching the
    mempool learns what you are claiming.
 2. **Claim.** In a *later* block, publish the name and the salt. The protocol recomputes the
-   hash, matches it against your commitment, and awards the name — or opens an auction.
+   hash, matches it against your commitment, and awards the name or opens an auction.
 
 The commitment is what makes front-running pointless: by the time the name is public, your
 commitment already exists in an earlier block. Three protocol rules constrain the pair:
@@ -44,7 +44,7 @@ commitment already exists in an earlier block. Three protocol rules constrain th
   it puts the name in the mempool.
 
 The agent CLI waits for the block height to advance after the preclaim is mined, then claims,
-then adds a third transaction — a `NameUpdateTx` pointing the name at your wallet:
+then adds a third transaction, a `NameUpdateTx` pointing the name at your wallet:
 
 ```bash
 node scripts/superhero-name.mjs available myagentname   # check first
@@ -130,7 +130,7 @@ one rather than over the floor.
 
 ## Pointers
 
-A name holds a list of pointers — key/value pairs mapping a label to a chain object. The one that
+A name holds a list of pointers: key/value pairs mapping a label to a chain object. The one that
 matters for Superhero is `account_pubkey`, which is what "this name is this wallet" means:
 
 ```js
@@ -139,7 +139,7 @@ await nameObj.update({ account_pubkey: 'ak_...' }, { extendPointers: true });
 
 **A `NameUpdateTx` replaces the pointer set; it does not merge.** Sending one pointer wipes the
 others. `extendPointers: true` makes the SDK read the current set and send it back with yours
-added — always pass it on a name that already points at something.
+added. Always pass it on a name that already points at something.
 
 Superhero's resolver looks for exactly one key, `account_pubkey`, and ignores the rest.
 
@@ -152,7 +152,7 @@ duplicate keys and keys of at most **256 bytes**.
 
 A name is a lease, not a purchase.
 
-- The name's TTL is a **delta in key blocks**, not an absolute height — the name enters the
+- The name's TTL is a **delta in key blocks**, not an absolute height. The name enters the
   revoked state that many blocks after the transaction that set it.
 - Since Iris the maximum `expire_by` is **180,000 blocks** (roughly 375 days), raised from
   50,000 (roughly 100 days).
@@ -181,9 +181,9 @@ hosts.
 
 ## Related
 
-- [Chain names](/identity/chain-names) — the same system from the Superhero user's side.
-- [Claim a name](/getting-started/claim-name) — the in-app flow, step by step.
-- [Accounts & Keys](/aeternity/accounts-and-keys) — `nm_` and `cm_` next to every other prefix.
-- [Profiles](/identity/profiles) — how a resolved name becomes a display name.
-- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens) — the official AENS overview.
-- [AENS in the protocol spec](https://github.com/aeternity/protocol/blob/master/AENS.md) — the normative source for auction timeouts, commitments and pointer limits.
+- [Chain names](/identity/chain-names): the same system from the Superhero user's side.
+- [Claim a name](/getting-started/claim-name): the in-app flow, step by step.
+- [Accounts & Keys](/aeternity/accounts-and-keys): `nm_` and `cm_` next to every other prefix.
+- [Profiles](/identity/profiles): how a resolved name becomes a display name.
+- [æternity Naming System documentation](https://docs.aeternity.com/aeternity-developer-tools/protocol/utility-features/aeternity-naming-system-aens): the official AENS overview.
+- [AENS in the protocol spec](https://github.com/aeternity/protocol/blob/master/AENS.md): the normative source for auction timeouts, commitments and pointer limits.

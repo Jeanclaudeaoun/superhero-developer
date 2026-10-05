@@ -15,12 +15,12 @@ All paths are relative to `https://api.superhero.com`.
 
 | Method & path | Query | Returns |
 | --- | --- | --- |
-| `GET /api/profile/{address}` | — | One profile aggregate |
+| `GET /api/profile/{address}` | None | One profile aggregate |
 | `GET /api/profile` | `addresses` | A **bare array** of profile aggregates |
 | `GET /api/profile/feed` | `limit`, `offset` | A page of cached profiles with its own envelope |
 
 `GET /api/accounts/{address}` is the primary read for a linked X handle, bio, website and
-preferred `.chain` name — its `links` block is authoritative. `GET /api/profile/{address}` fills
+preferred `.chain` name, and its `links` block is authoritative. `GET /api/profile/{address}` fills
 in the remaining display fields. See [Accounts](/api-reference/accounts).
 
 ```bash
@@ -30,13 +30,13 @@ curl -s "https://api.superhero.com/api/profile/ak_2ruXgsLy9jMwEqsgyQgEsxw8chYDfv
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `address` | string | The `ak_...` |
-| `public_name` | string | Resolved display name. **Never null** — it falls back to the address |
+| `public_name` | string | Resolved display name. **Never null**: it falls back to the address |
 | `profile.fullname` | string | Display name from the legacy profile cache. `""` when unset |
 | `profile.bio` | string | The verified `links.bio` if present, else the cached bio, else `""` |
 | `profile.site` | string or null | The verified `links.site` |
 | `profile.avatarurl` | string | `""` when unset |
 | `profile.username` | string or null | Legacy custom username |
-| `profile.prefered_aens_name` | string or null | The verified `links.prefaens` — note the one-`r` spelling |
+| `profile.prefered_aens_name` | string or null | The verified `links.prefaens`. Note the one-`r` spelling |
 | `profile.x_username` | string or null | The verified `links.x` |
 | `profile.chain_name` | string or null | The account's `chain_name` first, then the cached copy |
 | `profile.chain_expires_at` | string or null | When the `.chain` name expires |
@@ -56,14 +56,14 @@ data.
 
 ### The batch form
 
-`GET /api/profile?addresses=ak_a,ak_b` returns a **plain JSON array** with no `items` wrapper —
+`GET /api/profile?addresses=ak_a,ak_b` returns a **plain JSON array** with no `items` wrapper:
 one element per unique address, in the order supplied, after trimming and de-duplication.
 Addresses with no cached profile still get an element with the empty-string defaults above.
 
 | Rule | Behaviour |
 | --- | --- |
 | More than **100** addresses | `400 addresses must contain at most 100 entries` |
-| Any malformed address | `400 addresses contains invalid account address ak_...` — the whole call fails |
+| Any malformed address | `400 addresses contains invalid account address ak_...`, and the whole call fails |
 | Empty or missing `addresses` | `[]` |
 
 ```bash
@@ -95,7 +95,7 @@ The nonce is single-use and the challenge expires.
 
 ## Address links
 
-An **address link** is a verified statement that an `ak_...` owns something off-chain — an X
+An **address link** is a verified statement that an `ak_...` owns something off-chain: an X
 handle, a bio, a website, a preferred `.chain` name, or a Nostr key. Five families, each with
 the same four endpoints.
 
@@ -152,7 +152,7 @@ curl -s -X POST "https://api.superhero.com/api/address-links/bio/submit" \
        "nonce":42,"signature":"sg_...","verification_token":"..."}'
 ```
 
-Response is `{ "txHash": "th_..." }` — the server broadcasts the on-chain write on your behalf.
+Response is `{ "txHash": "th_..." }`. The server broadcasts the on-chain write on your behalf.
 The API sponsors the transaction; your signature authorises it. `value` is capped at 200
 characters, `signature` is a hex-encoded wallet signature, and `address` is validated as an
 `ak_` account address.
@@ -177,7 +177,7 @@ The X value comes from an OAuth round trip rather than being typed. Two accepted
 
 The second is the PKCE form: redirect the user to X, receive the code at your redirect URI, and
 post the code, verifier and redirect URI; the backend exchanges the code itself. From there the
-flow is identical — claim returns `message` plus `verification_token`, the wallet signs it,
+flow is identical: claim returns `message` plus `verification_token`, the wallet signs it,
 `submit` returns a `txHash`.
 
 ```text
@@ -215,13 +215,13 @@ curl -s "https://api.superhero.com/api/profile/chain-name/sponsorship/mylongenou
 | `sponsorable` | boolean | True when the sponsor can fund it, making the claim free for the user |
 | `sponsor_configured` | boolean | Whether a sponsor account is configured at all |
 | `sponsor_balance_aettos` | string or null | Sponsor balance, in **aettos** |
-| `required_balance_aettos` | string | Total estimated on-chain cost — preclaim, claim, update and transfer — in **aettos** |
+| `required_balance_aettos` | string | Total estimated on-chain cost (preclaim, claim, update and transfer), in **aettos** |
 | `reason` | string or null | Why it is not sponsorable, when it is not |
 
 The claim body is `address`, `name`, `challenge_nonce`, `challenge_expires_at` and
 `signature_hex` (hex or an `sg_` string). It returns `{ status, message }`.
 
-Registration is asynchronous — four on-chain transactions. Poll
+Registration is asynchronous and takes four on-chain transactions. Poll
 `GET /api/profile/{address}/chain-name-claim`, which returns `status` plus, as they happen,
 `preclaim_tx_hash`, `claim_tx_hash`, `update_tx_hash`, `transfer_tx_hash`, an `error`, and the
 name's expiry under `expires_at` (older responses use `approximate_expire_time`,
@@ -229,7 +229,7 @@ name's expiry under `expires_at` (older responses use `approximate_expire_time`,
 
 ## X posting reward
 
-All four routes carry the per-IP rate limit — 10 requests per minute per route, returning `429`
+All four routes carry the per-IP rate limit: 10 requests per minute per route, returning `429`
 with a `retryAfter` field. See [Conventions](/api-reference/conventions#rate-limits).
 
 | Method & path | Purpose |
@@ -246,8 +246,8 @@ curl -s "https://api.superhero.com/api/profile/ak_YOUR_ADDRESS/x-posting-reward"
 The status payload carries `onboarding_status` (`not_started`, `pending`, `paid` or `failed`),
 `qualified_posts_count`, `tx_hash`, `next_check_allowed_at`, `x_username`,
 `per_post_total_paid_count`, `current_streak_days`, `tier_amount_ae`, `follower_count`,
-`referral_link`, and an `error` string explaining why a reward was not sent on a 200 — below the
-follower minimum, the X identity already rewarded, or the payout failed.
+`referral_link`, and an `error` string explaining why a reward was not sent on a 200 (below the
+follower minimum, the X identity already rewarded, or the payout failed).
 
 The recheck and referral-link endpoints take the same signed proof body: `challenge_nonce`,
 `challenge_expires_at`, `signature_hex`. **The recheck is capped at once per 24 hours**;
@@ -267,9 +267,9 @@ The editable payload is `fullname`, `bio`, `nostrkey`, `avatarurl`, `username`, 
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — the full list of challenge/submit pairs across the API
-- [Accounts API](/api-reference/accounts) — `GET /api/accounts/{address}` and the `links` precedence rule
-- [Posts API](/api-reference/posts) — `PostDto.sender`, the inlined profile on every post
-- [Profiles](/identity/profiles) — what a Superhero profile is, beyond its wire format
-- [Chain names](/identity/chain-names) — what a `.chain` name buys you
-- [X verification](/identity/x-verification) — the OAuth half of the X link flow
+- [API Conventions](/api-reference/conventions): the full list of challenge/submit pairs across the API
+- [Accounts API](/api-reference/accounts): `GET /api/accounts/{address}` and the `links` precedence rule
+- [Posts API](/api-reference/posts): `PostDto.sender`, the inlined profile on every post
+- [Profiles](/identity/profiles): what a Superhero profile is, beyond its wire format
+- [Chain names](/identity/chain-names): what a `.chain` name buys you
+- [X verification](/identity/x-verification): the OAuth half of the X link flow

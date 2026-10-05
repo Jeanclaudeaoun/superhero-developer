@@ -15,12 +15,12 @@ a sell and a bad fill.
 Open a token at `/trends/tokens/NAME` and use the **Trade** tab.
 
 1. Choose **Buy** or **Sell**.
-2. Type an amount in either field — AE or tokens. The other side is computed from the curve at the token's current supply as you type.
+2. Type an amount in either field, AE or tokens. The other side is computed from the curve at the token's current supply as you type.
 3. Review the quote: the average price you will pay, the price impact of your own trade, and, on a buy, the ProtocolDAO token reward.
 4. Confirm in your wallet.
 
 The slippage tolerance defaults to **1%** and is remembered per browser. A buy sends that much extra
-AE — refunded if unused — and a sell sets its return floor that much below the quote.
+AE (refunded if unused), and a sell sets its return floor that much below the quote.
 
 A buy also mints ProtocolDAO tokens at 1,000× the AE paid; the `Mint` event on the ProtocolDAO token
 contract carries the exact figure. See [The ProtocolDAO Token](/dao/protocol-dao).
@@ -44,7 +44,7 @@ node scripts/superhero-token-swap.mjs sell  ct_<sale_address> 5
 | `buy` | Yes | Quotes, adds 3%, and sends `buy(count)` with that amount attached |
 | `sell` | Yes | Sets the allowance, quotes `sell_return(count)`, subtracts 3%, and sends `sell(count, floor)` |
 
-Amounts are **whole tokens** — the script scales them by the token's own `decimals`. Run it from
+Amounts are **whole tokens**; the script scales them by the token's own `decimals`. Run it from
 the skill's root directory; it reads its ACI files from `./contracts/`.
 
 Both `buy` and `sell` apply **3% slippage protection**. To change it, edit `SLIPPAGE_PERCENT` in
@@ -69,7 +69,7 @@ Every `count` is in token decimal units and every AE figure is in aettos. See
 
 **Attach exactly `price(count)`, or more.** `buy` requires `Call.value >= total_price` and refunds
 the difference with `Chain.spend` in the same transaction. Attaching less aborts with
-`AE_AMOUNT_NOT_SUFFICIENT`. Do not add the affiliation fee on top of `price(count)` yourself — it is
+`AE_AMOUNT_NOT_SUFFICIENT`. Do not add the affiliation fee on top of `price(count)` yourself. It is
 already included. See [Fees & Slippage](/tokens/fees-and-slippage).
 
 `buy(count)` attributes the affiliation reward to the buyer's own position in the affiliation tree;
@@ -79,7 +79,7 @@ chain, populated once when the buyer redeems an invitation or calls `register_in
 
 A successful trade emits `Buy(int, int, int)` or `Sell(int, int)` on the sale contract, plus `Mint`
 or `Burn` on the token contract, plus a second `Mint` from the ProtocolDAO token contract on a buy.
-Read these events to learn what you actually received — they carry the executed numbers rather than
+Read these events to learn what you actually received. They carry the executed numbers rather than
 the quoted ones.
 
 ## `minimal_return_required`
@@ -125,7 +125,7 @@ supply it is not. Size the tolerance to the token.
 - **Too tight** and your sell reverts on ordinary activity. You pay gas and still hold the position.
 - **Too loose** and you have no protection. A floor of 0 means "fill me at any price", which on a falling curve is exactly what you do not want.
 
-Your *own* trade's slippage is already in the quote — `sell_return(count)` integrates the curve
+Your *own* trade's slippage is already in the quote: `sell_return(count)` integrates the curve
 across the tokens you are burning. The tolerance covers only what happens between quote and
 execution.
 
@@ -229,9 +229,9 @@ console.log('sell tx', sold.hash);
 
 | Cause | Direction | Typical size |
 | --- | --- | --- |
-| Your own trade size walking up the curve | Always against you | Already inside the quote — see the slippage table on [Bonding Curves](/tokens/bonding-curve) |
+| Your own trade size walking up the curve | Always against you | Already inside the quote; see the slippage table on [Bonding Curves](/tokens/bonding-curve) |
 | Other trades landing between quote and execution | Either way | Bounded by your tolerance; this is what the guards are for |
-| The 0.5% affiliation fee on a buy | Against you | 0.5% of the curve value — already inside `price()`, not inside `calculate_buy_price()` |
+| The 0.5% affiliation fee on a buy | Against you | 0.5% of the curve value, already inside `price()`, not inside `calculate_buy_price()` |
 | Off-chain estimates using a trapezoidal integral | Overstates by up to ~20 ppm on very large trades | Negligible, but see [Curve Parameters & Units](/tokens/curve-parameters) |
 
 The quote you get from `price()` or `sell_return()` is exact at the supply it was read at.
@@ -245,9 +245,9 @@ both carrying the executed figures, and both are preceded by
 
 ## Related
 
-- [Bonding Curves](/tokens/bonding-curve) — where the quote comes from, and why a big trade fills worse
-- [Fees & Slippage](/tokens/fees-and-slippage) — the 1% spread, the fee split, and the slippage defaults side by side
-- [Curve Parameters & Units](/tokens/curve-parameters) — the decimal scaling used throughout the code above
-- [Token sale contract](/contracts/token-sale) — entrypoint-level reference for the sale contract
-- [Portfolio & PnL](/tokens/portfolio) — checking what a trade did to your position afterwards
-- [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the allowance semantics used by the sell flow
+- [Bonding Curves](/tokens/bonding-curve): where the quote comes from, and why a big trade fills worse
+- [Fees & Slippage](/tokens/fees-and-slippage): the 1% spread, the fee split, and the slippage defaults side by side
+- [Curve Parameters & Units](/tokens/curve-parameters): the decimal scaling used throughout the code above
+- [Token sale contract](/contracts/token-sale): entrypoint-level reference for the sale contract
+- [Portfolio & PnL](/tokens/portfolio): checking what a trade did to your position afterwards
+- [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md): the allowance semantics used by the sell flow

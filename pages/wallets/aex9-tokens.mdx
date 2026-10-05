@@ -5,16 +5,16 @@ description: "How community token balances reach your wallet, sale address versu
 
 # Managing AEX-9 Tokens
 
-Every Superhero community token is an AEX-9 fungible token — the æternity equivalent of ERC-20.
+Every Superhero community token is an AEX-9 fungible token, the æternity equivalent of ERC-20.
 
 ## The AEX-9 surface
 
 | Entrypoint | Arguments | What it does |
 | --- | --- | --- |
-| `meta_info` | — | Name, symbol, decimals |
-| `total_supply` | — | Total minted supply |
+| `meta_info` | none | Name, symbol, decimals |
+| `total_supply` | none | Total minted supply |
 | `balance` | `address` | One account's balance, as an option |
-| `balances` | — | The whole balance map |
+| `balances` | none | The whole balance map |
 | `transfer` | `address, int` | Move your own tokens |
 | `allowance` | `from_account, for_account` | Read a granted allowance |
 | `allowance_for_caller` | `address` | Read the allowance granted to the caller |
@@ -26,7 +26,7 @@ Every Superhero community token is an AEX-9 fungible token — the æternity equ
 
 Amounts everywhere are integers in the token's **base units**. Divide by 10 to the power of
 `decimals` from `meta_info` to get a human figure. Superhero's signing prompt does *not* do that
-scaling — decimals are a per-token on-chain fact the decoder does not look up. Count the digits.
+scaling, because decimals are a per-token on-chain fact the decoder does not look up. Count the digits.
 
 ## Sale address vs token address
 
@@ -37,8 +37,8 @@ A community token has **two** contract addresses and they are not interchangeabl
 | **Sale address** (`sale_address`) | The bonding-curve sale contract that mints and burns tokens against AE | Buying and selling on the curve; the DAO for that community; the token's page URL |
 | **Token address** (`address`) | The AEX-9 contract that holds balances and allowances | Balances, transfers, allowances, adding the token to a DEX pool |
 
-The backend's token object carries both fields — plus `bonding_curve_address` and
-`factory_address` — so when you work from the API you never have to guess which one you have. When
+The backend's token object carries both fields (plus `bonding_curve_address` and
+`factory_address`), so when you work from the API you never have to guess which one you have. When
 something asks for "the token contract", it means `address`; when a DAO or a trade asks for a sale,
 it means `sale_address`.
 
@@ -66,7 +66,7 @@ automatically.
 
 The screen at **`/defi/pool/add-tokens`** (the legacy path `/pool/add-tokens` still works) scans
 your account for AEX-9 balances using the two mechanisms above, filters by name or symbol, and
-tells you whether a DEX pool already exists for each token — the question to answer before you
+tells you whether a DEX pool already exists for each token. That is the question to answer before you
 add liquidity.
 
 You need a **connected wallet** for it to have an account to scan. The address it works with is
@@ -77,12 +77,12 @@ arbitrary contract address.
 
 ### Superhero Wallet takes a pasted contract address
 
-To see a token superhero.com will not show you, open Superhero Wallet — extension, mobile app or
-`wallet.superhero.com` — and paste the token's `ct_...` **token address** (not the sale address)
+To see a token superhero.com will not show you, open Superhero Wallet (extension, mobile app or
+`wallet.superhero.com`) and paste the token's `ct_...` **token address** (not the sale address)
 into the asset selector's search box. When the term is a valid contract address and the selected
 protocol is æternity, the selector switches to exact-contract mode, fetches the token's metadata
-from the middleware (`GET /v3/aex9/<contract_id>`) and adds it to the available list — no pool, no
-indexed balance and no DEX listing required. Anything else falls back to a name-prefix search.
+from the middleware (`GET /v3/aex9/<contract_id>`) and adds it to the available list. It does not need a pool, an
+indexed balance or a DEX listing. Anything else falls back to a name-prefix search.
 
 ## Allowances
 
@@ -91,21 +91,21 @@ tokens. Superhero relies on this in two places.
 
 ### DEX swaps
 
-Swapping a non-AE token requires an allowance for the DEX router first. AE itself never needs one
-— it is the native coin, not a contract balance.
+Swapping a non-AE token requires an allowance for the DEX router first. AE itself never needs one,
+because it is the native coin, not a contract balance.
 
 The app manages this for you: it reads the current allowance, calls `create_allowance` if there is
 none, and `change_allowance` with the *difference* if there is one but it is too small. It never
 grants an unlimited approval.
 
-The grantee is the router's **contract address re-encoded as an account address** — the same bytes
+The grantee is the router's **contract address re-encoded as an account address**: the same bytes
 with the `ct_` prefix swapped for `ak_`. An allowance that looks like it was granted to an account
 is in fact granted to the router contract.
 
 ### DAO vote locking
 
 Governance votes lock the tokens you vote with until the vote closes, and that locking is
-implemented with the AEX-9 allowance mechanism — which is what prevents the same tokens being
+implemented with the AEX-9 allowance mechanism, which is what prevents the same tokens being
 double-spent across two concurrent votes. Revoking your vote releases the lock.
 
 This is why a vote can ask you to sign twice: once to grant or adjust the allowance, once to cast.
@@ -119,12 +119,12 @@ provide a screen to review or revoke them. Revoke per token with a direct contra
 reset_allowance(for_account)   on the AEX-9 token contract
 ```
 
-where `for_account` is the grantee in `ak_` form — for the DEX, the router's contract address with
+where `for_account` is the grantee in `ak_` form. For the DEX, that is the router's contract address with
 `ct_` swapped for `ak_`. Use the agent skill's SDK setup, `aepp-cli`, or any tool that can call a
 contract entrypoint.
 
 Every allowance Superhero grants is sized to the specific trade, so a stale allowance is capped at
-whatever was left over from the operation that created it — usually zero, because a swap spends
+whatever was left over from the operation that created it. That is usually zero, because a swap spends
 exactly what it was granted. Check, and revoke anything left standing on a token you hold in size.
 
 ### Hygiene
@@ -135,10 +135,10 @@ exactly what it was granted. Check, and revoke anything left standing on a token
 
 ## Related
 
-- [Wallet Security](/wallets/security) — approval hygiene, and why an allowance is a standing permission.
-- [The Built-In Wallet](/wallets/built-in-wallet) — how allowance calls are decoded and named before you approve them.
-- [AEX Standards](/aeternity/aex-standards) — what AEX-9 specifies at the protocol level.
-- [AEX-9 Contracts](/contracts/aex9) — the contract-side reference for these entrypoints.
-- [Tokens API](/api-reference/tokens) — the token object carrying both `address` and `sale_address`.
-- [Web Wallet](/wallets/web-wallet) — where pasting a contract address works, with no install.
-- [Token Standards on the æternity docs hub](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — the upstream specification.
+- [Wallet Security](/wallets/security): approval hygiene, and why an allowance is a standing permission.
+- [The Built-In Wallet](/wallets/built-in-wallet): how allowance calls are decoded and named before you approve them.
+- [AEX Standards](/aeternity/aex-standards): what AEX-9 specifies at the protocol level.
+- [AEX-9 Contracts](/contracts/aex9): the contract-side reference for these entrypoints.
+- [Tokens API](/api-reference/tokens): the token object carrying both `address` and `sale_address`.
+- [Web Wallet](/wallets/web-wallet): where pasting a contract address works, with no install.
+- [Token Standards on the æternity docs hub](https://docs.aeternity.com/aeternity-developer-tools/token-standards): the upstream specification.

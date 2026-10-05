@@ -27,7 +27,7 @@ prompt, no Windows Hello dialog, no error dialog.
 `VITE_WEBAUTHN_RP_ID`, or use a recovery phrase instead.
 
 The app catches this exception and shows *"Passkeys aren't available on this domain (this build
-expects …). Use a recovery phrase instead."* — the name it prints is the RP ID the build was
+expects …). Use a recovery phrase instead."* The name it prints is the RP ID the build was
 compiled with. The DOM exception name and message are also written to the browser console; include
 them in any report.
 
@@ -46,7 +46,7 @@ offered on the "this device already has a wallet" screen.
 
 ### Tapping the passkey card opens an onboarding screen instead of a biometric prompt
 
-Your device has a wallet, but that wallet has **no passkey factor** — it unlocks with a passphrase
+Your device has a wallet, but that wallet has **no passkey factor**; it unlocks with a passphrase
 and recovery code. The card hands off to the wallet screen, where your passphrase opens it. You
 can enroll a device passkey from there.
 
@@ -63,7 +63,7 @@ Superhero scans for an injected wallet over a browser message connection with a 
 | Situation | Detection window |
 | --- | --- |
 | Desktop browser, user-initiated connect | 4 seconds |
-| Mobile or Safari, not framed | 100 ms — fails fast to the deep-link path |
+| Mobile or Safari, not framed | 100 ms, failing fast to the deep-link path |
 | Silent reconnect after a page refresh | 15 seconds |
 
 The reconnect window is longer because the extension's content script can be injected after the
@@ -71,7 +71,7 @@ app has already booted.
 
 **Fix:** confirm the extension is installed *and enabled for this site*, unlock it, then reload the
 page and use Connect again. If no wallet answers and the page is not framed, the app falls back to
-a deep link — `superhero://` on mobile, otherwise `wallet.superhero.com` in a new window.
+a deep link: `superhero://` on mobile, otherwise `wallet.superhero.com` in a new window.
 
 ### The app opened wallet.superhero.com instead of my extension
 
@@ -88,14 +88,14 @@ per page load, but only when both a previously active account and persisted wall
 ### The app spontaneously shows "disconnected" while the extension is open
 
 A health check runs every five seconds and clears connection state when the SDK reports no
-accounts — a stale connection is treated as no connection. Reconnect.
+accounts. A stale connection is treated as no connection. Reconnect.
 
 ### Disconnect did not stick; it reconnected on refresh
 
 Disconnecting clears the persisted session keys (`account:activeAccount`, `wallet:walletInfo`,
 `wallet:balance`, `dex:recentActivities`, `liquidityPositions`), stops wallet detection and drops
 the cached connection. If a reconnect still happens, check for a stale `?address=` query parameter
-in the URL — the app consumes that parameter to install a static account, then strips it.
+in the URL. The app consumes that parameter to install a static account, then strips it.
 
 ## Hardware accounts in Superhero Wallet
 
@@ -108,7 +108,7 @@ the surface is neither Firefox nor a mobile app:
 | --- | --- |
 | Chrome, Brave, Opera extension | Shown |
 | `wallet.superhero.com` in a Chromium browser | Shown |
-| Firefox (extension or web) | **Hidden** — Firefox does not implement WebUSB |
+| Firefox (extension or web) | **Hidden**; Firefox does not implement WebUSB |
 | iOS or Android app | **Hidden** |
 | A non-æternity account selected | **Hidden** |
 
@@ -140,7 +140,7 @@ a non-AirGap account for it.
 Superhero builds are **network-pinned at build time** through `VITE_NETWORK`. The app offers only
 the network its bundle was built for; there is no in-app network switcher.
 
-**Fix:** switch networks in your wallet to match the build — `ae_mainnet` on superhero.com. For
+**Fix:** switch networks in your wallet to match the build: `ae_mainnet` on superhero.com. For
 testnet work, use a testnet build and see [Using Testnet](/getting-started/testnet).
 
 ## Balances and signing
@@ -155,7 +155,7 @@ max = balance − balance × (slippage + 1) / 100 − 0.001 AE
 ```
 
 With the default 1% slippage that is a 2% reserve plus 0.001 AE. Separately, **gas is charged on
-top of the transaction fee**, up to the gas limit — which is why the signing prompt shows a "Gas,
+top of the transaction fee**, up to the gas limit, which is why the signing prompt shows a "Gas,
 at most" row as well as "Network fee". A balance that exactly covers the amount will not cover the
 amount plus fee plus gas.
 
@@ -181,7 +181,7 @@ action.
 ### "derived key does not match the expected account address — refusing to sign"
 
 The signer derived a key that does not produce the address it was installed for, and refused. The
-device's wallet changed underneath a live session — a restore or import replaced it — or an
+device's wallet changed underneath a live session (a restore or import replaced it), or an
 address and index pair drifted apart.
 
 **Fix:** reload the page so the account list is rebuilt from the current vault, then retry.
@@ -194,14 +194,14 @@ The encrypted vault lives in this browser's IndexedDB for this origin. Clearing 
 it, and Safari's Intelligent Tracking Prevention can evict it after roughly seven days without
 interaction.
 
-**Neither your passphrase nor your recovery code can bring it back** — both need the deleted
+**Neither your passphrase nor your recovery code can bring it back**, because both need the deleted
 record to unwrap anything. What survives is the written recovery phrase, or a **syncing** passkey
 if the wallet was created by the passkey path. The full matrix is in
 [The Built-In Wallet](/wallets/built-in-wallet#what-clearing-site-data-destroys).
 
 ### My wallet unlocks but the app does not know my address
 
-The address list in `localStorage` was cleared while the encrypted vault in IndexedDB survived — a
+The address list in `localStorage` was cleared while the encrypted vault in IndexedDB survived. This is a
 normal outcome of some "clear site data" variants.
 
 **Fix:** open the wallet screen and unlock once; addresses are re-derived from index 0 upward and
@@ -223,7 +223,7 @@ Importing a seed phrase or private key is offered **only in the installed app** 
 Screen / installed PWA). In a plain browser tab, "I already have a wallet" means Connect, which
 never asks for your secret.
 
-### Nothing persists at all — private browsing
+### Nothing persists at all (private browsing)
 
 In Safari private mode and with site data blocked, storage reads can fail. The app treats an
 unreadable address list as "no wallet on this device" and an unreadable vault probe as unknown
@@ -235,7 +235,7 @@ rather than claiming you have no wallet.
 
 | What | Where |
 | --- | --- |
-| App, mobile app or PWA bug | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues) — the same destination as the in-app "Send Feedback" button |
+| App, mobile app or PWA bug | [github.com/superhero-com/superhero/issues](https://github.com/superhero-com/superhero/issues), the same destination as the in-app "Send Feedback" button |
 | API, indexer or a wrong figure in a response | [github.com/superhero-com/superhero-api/issues](https://github.com/superhero-com/superhero-api/issues) |
 | Superhero Wallet (extension, app, web wallet) bug | The wallet's own **Report a bug** entry, at [form.typeform.com/to/Kk3Zyjdr](https://form.typeform.com/to/Kk3Zyjdr), or [github.com/superhero-com/superhero-wallet/issues](https://github.com/superhero-com/superhero-wallet/issues) |
 | Security report, legal, privacy or data protection | `superherowallet@protonmail.com` |
@@ -256,8 +256,8 @@ Never include a private key, a seed phrase, or a screenshot showing either.
 
 ## Related
 
-- [The Built-In Wallet](/wallets/built-in-wallet) — the vault, factor and storage model these symptoms come from.
-- [Connecting a Wallet](/wallets/connecting) — the detection and handshake the connection failures happen inside.
-- [Backup & Recovery](/wallets/backup-and-recovery) — what to do before any of this bites.
-- [Using Testnet](/getting-started/testnet) — the network-pinning that causes mismatch symptoms.
-- [Support](/resources/support) — every reporting route in one place.
+- [The Built-In Wallet](/wallets/built-in-wallet): the vault, factor and storage model these symptoms come from.
+- [Connecting a Wallet](/wallets/connecting): the detection and handshake the connection failures happen inside.
+- [Backup & Recovery](/wallets/backup-and-recovery): what to do before any of this bites.
+- [Using Testnet](/getting-started/testnet): the network-pinning that causes mismatch symptoms.
+- [Support](/resources/support): every reporting route in one place.

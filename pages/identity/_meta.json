@@ -6,5 +6,8 @@
   "chain-names": "Chain Names (AENS)",
   "x-verification": "Verifying Your X Account",
   "profiles": "Profiles & Accounts",
-  "did-standard": "Identity and DIDs"
+  "did-standard": "Identity and DIDs",
+  "profile-registry": {
+    "display": "hidden"
+  }
 }

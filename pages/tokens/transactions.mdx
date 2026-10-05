@@ -24,7 +24,7 @@ node scripts/superhero-transactions.mjs activity ct_<sale_address> ak_<address> 
 | `mine` | your account | Confirming your own entry price and fills |
 | `token` | one sale address | Pre-trade research: is the flow organic? |
 | `account` | one account | Following a known trader or whale |
-| `all` | none | Market pulse — what is being traded right now |
+| `all` | none | Market pulse: what is being traded right now |
 | `activity` | token **and** account | Checking whether a specific whale is accumulating a specific token |
 
 Default `limit` is 20 and default `page` is 1 everywhere. `mine` needs `AE_PRIVATE_KEY` set, because
@@ -60,14 +60,14 @@ Each row carries these fields:
 | --- | --- | --- |
 | `tx_hash` | string | On-chain transaction hash, and the row's primary key |
 | `sale_address` | string | The bonding-curve sale contract the trade hit |
-| `tx_type` | string | `buy`, `sell` or `create_community` — nothing else |
+| `tx_type` | string | `buy`, `sell` or `create_community`, nothing else |
 | `block_height` | number | Key-block height of inclusion |
 | `address` | string | The trader's address |
 | `verified` | bool | Whether the indexer has re-validated the row against the chain |
 | `volume` | numeric string | **Tokens** bought or sold, in whole tokens |
 | `protocol_reward` | numeric string | ProtocolDAO tokens minted to the buyer, in whole tokens. `0` on a sell |
 | `amount` | price object | **AE** paid or received |
-| `unit_price` | price object | `amount / volume` — the average price you actually got |
+| `unit_price` | price object | `amount / volume`, the average price you actually got |
 | `previous_buy_price` | price object | Unit price before this trade |
 | `buy_price` | price object | Unit price after this trade |
 | `sell_price` | price object | Legacy field; do not rely on it |
@@ -95,15 +95,15 @@ events:
 | `protocol_reward` | the ProtocolDAO token's `Mint` event amount | whole tokens |
 | `total_supply` | the `Buy`/`Sell` event's supply argument, adjusted by `volume` | whole tokens |
 
-`amount` on a buy is the **fee-inclusive** total — `Buy`'s first argument is `total_price`, which
-already contains the 0.5% affiliation fee — which is why it is the right basis for a PnL cost
+`amount` on a buy is the **fee-inclusive** total. `Buy`'s first argument is `total_price`, which
+already contains the 0.5% affiliation fee, and that is why it is the right basis for a PnL cost
 figure. The event's own `total_supply` is the supply *before* the trade, so the indexer adds
 `volume` on a buy and subtracts it on a sell to store the supply *after*.
 
 ### `create_community` rows are buys
 
 A token creation with an initial buy is stored as one row with `tx_type: 'create_community'`, priced
-exactly like a buy. Anything counting purchases must include it — the backend's own PnL queries
+exactly like a buy. Anything counting purchases must include it; the backend's own PnL queries
 count `tx_type IN ('buy', 'create_community')`. A creation with no initial buy emits no
 `PriceChange` event and is stored with zeroes.
 
@@ -152,7 +152,7 @@ Three things to count in the output:
 2. **Buy-to-sell ratio.** A wall of buys with no sells can mean conviction, or it can mean nobody has been able to exit yet.
 3. **Clustering in time.** Trades evenly spread over days look different from trades in one minute, and the second pattern often has one account behind it.
 
-Cross-check whatever you conclude against the holders tab — see
+Cross-check whatever you conclude against the holders tab. See
 [Reading a Token Page](/tokens/token-page).
 
 ## Verifying a transaction on-chain
@@ -163,7 +163,7 @@ trade independently, open the hash in [aeScan](https://aescan.io). What to check
 - The **contract called** is the sale address you expected.
 - The **caller** is the account the indexer attributed it to.
 - The **amount** attached matches the AE you think moved.
-- The **events** — `Buy` or `Sell` on the sale contract, `Mint` or `Burn` on the token contract — carry the executed figures, which is what you want if a quote and a fill disagreed.
+- The **events** (`Buy` or `Sell` on the sale contract, `Mint` or `Burn` on the token contract) carry the executed figures, which is what you want if a quote and a fill disagreed.
 
 The same applies to a contract address: paste a `sale_address` into the explorer and you can read the
 deployed code and call its read-only entrypoints directly.
@@ -181,7 +181,7 @@ parameters, is not scoped to an account, and returns at most **500 rows, newest 
 | `error_trace` | The stack trace |
 | `created_at` | When it first failed |
 
-**These are transactions the indexer failed to ingest, not transactions that failed on-chain** — a
+**These are transactions the indexer failed to ingest, not transactions that failed on-chain**. A
 reverted buy never reaches it. A retry job runs every 30 minutes and drops a row once it succeeds or
 once `retries` passes 10, so the table is a rolling backlog rather than a history. If your trade is
 on aeScan but missing from `/api/transactions`, this is where to look for it.
@@ -191,20 +191,20 @@ First steps when a trade did not go through:
 | Symptom | Abort reason to look for | Likely cause |
 | --- | --- | --- |
 | Sell reverted, tokens still held | `MINIMAL_RETURN_NOT_MEET` | The curve moved below your floor |
-| Sell reverted, tokens still held | — | No allowance granted to the sale contract |
+| Sell reverted, tokens still held | None | No allowance granted to the sale contract |
 | Buy reverted | `AE_AMOUNT_NOT_SUFFICIENT` | Attached AE below `price(count)` after the curve moved; tolerance too tight |
 | Buy or sell reverted | `MINIMUM_TOKENS_REQUIRED` | `count` below `10^12`, almost always whole tokens passed where decimal units were expected |
-| Nothing in your transaction list, nothing on-chain | — | The transaction was never signed or never broadcast — check the wallet |
-| On-chain but not in the list | — | Indexer lag, or an ingest failure. Check `/api/debug/failed-transactions` |
+| Nothing in your transaction list, nothing on-chain | None | The transaction was never signed or never broadcast. Check the wallet |
+| On-chain but not in the list | None | Indexer lag, or an ingest failure. Check `/api/debug/failed-transactions` |
 
 See [Buying & Selling](/tokens/buying-and-selling) for the allowance and slippage mechanics behind
 the first two rows.
 
 ## Related
 
-- [Reading a Token Page](/tokens/token-page) — the holders and chart panels to weigh this data against
-- [Buying & Selling](/tokens/buying-and-selling) — what each of these transactions did on-chain
-- [Portfolio & PnL](/tokens/portfolio) — your positions, which these fills add up to
-- [The Trending Score](/tokens/trending-score) — the momentum signal that trade flow either confirms or contradicts
-- [Transactions API](/api-reference/transactions) — the endpoint reference
-- [aeScan](https://aescan.io) — the æternity explorer for verifying any hash or address
+- [Reading a Token Page](/tokens/token-page): the holders and chart panels to weigh this data against
+- [Buying & Selling](/tokens/buying-and-selling): what each of these transactions did on-chain
+- [Portfolio & PnL](/tokens/portfolio): your positions, which these fills add up to
+- [The Trending Score](/tokens/trending-score): the momentum signal that trade flow either confirms or contradicts
+- [Transactions API](/api-reference/transactions): the endpoint reference
+- [aeScan](https://aescan.io): the æternity explorer for verifying any hash or address

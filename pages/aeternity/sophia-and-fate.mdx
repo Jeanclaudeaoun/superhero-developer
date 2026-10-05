@@ -6,7 +6,7 @@ description: "æternity's smart-contract language and the VM that runs it, orien
 # Sophia & FATE
 
 **Sophia** is æternity's smart-contract language: functional, strongly and statically typed, with
-no mutable global state. **FATE** — the Fast æternity Transaction Engine — is the virtual machine
+no mutable global state. **FATE** (the Fast æternity Transaction Engine) is the virtual machine
 that executes it. Every Superhero contract is written in Sophia and runs on FATE.
 
 If you are arriving from Ethereum, most of your instincts transfer. The table covers the ones
@@ -20,7 +20,7 @@ that do not.
 | `public` / `external` function | `entrypoint` | Only entrypoints are callable from outside |
 | `internal` / `private` function | `function` | A local function, invisible off-chain |
 | `view` / `pure` | a plain `entrypoint` | Non-stateful is the default |
-| state-mutating function | `stateful entrypoint` | You must opt in — see below |
+| state-mutating function | `stateful entrypoint` | You must opt in; see below |
 | `payable` | `payable entrypoint` | Contracts are non-payable by default |
 | `msg.sender` | `Call.caller` | The calling entity, possibly another contract |
 | `msg.value` | `Call.value` | Coins transferred in this call |
@@ -43,7 +43,7 @@ reads it and calls `put` with a new one; there is no assignment to a storage slo
 is what reduces the surface for reentrancy and state-corruption bugs.
 
 **No floating point.** Sophia omits it. Every price, fee and curve value in Superhero is an
-integer in aettos or token-decimals — see [AE & Gas](/aeternity/ae-and-gas).
+integer in aettos or token-decimals. See [AE & Gas](/aeternity/ae-and-gas).
 
 **Types are checked, then checked again.** The compiler is strict, and FATE re-checks at runtime:
 each FATE operation is typed, and a type mismatch raises an exception that reverts the call. A
@@ -63,9 +63,9 @@ Three orthogonal properties, all opt-in, all visible in the ACI:
 otherwise, so a plain AE transfer to a `ct_` address fails by default.
 
 These map straight onto how you call a contract. A non-stateful entrypoint can be answered by a
-dry-run — no transaction, no gas, no wallet prompt, which is how Superhero prices a trade before
+dry-run with no transaction, no gas and no wallet prompt. That is how Superhero prices a trade before
 you confirm it. A `stateful` entrypoint needs a signed contract-call transaction. A `payable` one
-additionally takes an `amount` option:
+also takes an `amount` option:
 
 ```js
 // Calling a payable, stateful entrypoint
@@ -79,12 +79,12 @@ await factory.create_community(
 );
 ```
 
-## ACI — the ABI equivalent
+## ACI: the ABI equivalent
 
 **ACI** (æternity Contract Interface) is the JSON description of a contract's interface: its name,
 its type definitions, its event datatype, and every function with argument names, argument types,
 return type, and the `stateful` and `payable` flags. It is what a client needs to encode a call
-and decode a result — the role Ethereum's ABI plays.
+and decode a result, the role Ethereum's ABI plays.
 
 The ACI carries **named, typed arguments and the annotations**, so a client can tell a read from
 a write without being told. From the Tipping v3 ACI:
@@ -105,7 +105,7 @@ a write without being told. From the Tipping v3 ACI:
 ```
 
 You can read off that this is a write (`stateful: true`), that it takes no coins
-(`payable: false`), and that `sig` is a first-class `signature` type — which is how delegated
+(`payable: false`), and that `sig` is a first-class `signature` type. That is how delegated
 posting passes an off-chain signature into the contract for `Crypto.verify_sig` to check.
 
 ### Generate an ACI
@@ -118,7 +118,7 @@ aesophia_cli --create_json_aci Tipping.aes -o Tipping.aci.json
 
 The same generation is available over HTTP from a compiler service at its `/aci` endpoint;
 Superhero's web app uses the hosted compiler at `https://v7.compiler.aepps.com` for both
-networks. Calling an already-deployed contract needs only its ACI, not a compiler — the agent
+networks. Calling an already-deployed contract needs only its ACI, not a compiler. The agent
 skill vendors the JSON files and reads them from disk:
 
 ```js
@@ -126,7 +126,7 @@ const ACI = JSON.parse(fs.readFileSync('./contracts/FungibleTokenFull.aci.json',
 await Contract.initialize({ aci: ACI, address: tokenAddress, onAccount: aeSdk, onNode: aeSdk.api });
 ```
 
-Keep a vendored ACI in step with the deployed contract. A stale ACI does not fail loudly — it
+Keep a vendored ACI in step with the deployed contract. A stale ACI does not fail loudly; it
 encodes arguments against the wrong signature.
 
 The `@compiler >= N` pragma at the top of a `.aes` file is a minimum compiler version, not the
@@ -146,9 +146,9 @@ top of one.
 
 ## Related
 
-- [Smart Contracts](/contracts) — the Superhero contracts written in this language.
-- [Calling contracts](/contracts/calling-contracts) — using an ACI to make a real call.
-- [Contract security](/contracts/security) — where Sophia's guarantees stop and yours start.
-- [AEX Standards](/aeternity/aex-standards) — AEX-9 read from a Sophia ACI.
-- [Sophia language features](https://docs.aeternity.com/aesophia/v6.1.0/sophia_features/) — the canonical reference for `stateful`, `payable`, state and events.
-- [FATE VM](https://docs.aeternity.com/aeternity-core-concepts/protocol/fast-aeternity-transaction-engine-fate-vm) — the official description of the VM.
+- [Smart Contracts](/contracts): the Superhero contracts written in this language.
+- [Calling contracts](/contracts/calling-contracts): using an ACI to make a real call.
+- [Contract security](/contracts/security): where Sophia's guarantees stop and yours start.
+- [AEX Standards](/aeternity/aex-standards): AEX-9 read from a Sophia ACI.
+- [Sophia language features](https://docs.aeternity.com/aesophia/v6.1.0/sophia_features/): the canonical reference for `stateful`, `payable`, state and events.
+- [FATE VM](https://docs.aeternity.com/aeternity-core-concepts/protocol/fast-aeternity-transaction-engine-fate-vm): the official description of the VM.

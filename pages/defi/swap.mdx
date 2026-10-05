@@ -11,7 +11,7 @@ router, and submits one of six swap entrypoints depending on whether native AE i
 
 This is not the bonding curve. Buying a community token on its own page mints new supply against
 a fixed formula; swapping here moves tokens between pool reserves. The two prices for the same
-token are unrelated — see [the comparison table](/defi).
+token are unrelated; see [the comparison table](/defi).
 
 ## The form
 
@@ -66,7 +66,7 @@ is the difference between a bad fill and a rejected transaction.
 5. **No path, no quote.** If all of that fails, the quote errors with "No route found".
 
 Routes are at most two pairs long: direct, or through a single intermediate token. The on-chain
-fallback has the same ceiling — direct, or one hop through WAE. If two tokens are only reachable
+fallback has the same ceiling: direct, or one hop through WAE. If two tokens are only reachable
 through three pools, the swap form reports no route; make the intermediate swap yourself.
 
 ## How the quote is produced
@@ -145,7 +145,7 @@ switches it on. That switch is off by default and is described under
 rather than deducted from your trade.
 
 Because the fee is inside the invariant, it is already reflected in the router's
-`get_amounts_out` answer — it is not a separate line item. On top of it you pay the ordinary
+`get_amounts_out` answer and is not a separate line item. On top of it you pay the ordinary
 æternity transaction fee, plus a second transaction fee if an allowance approval is needed.
 
 ## Approvals
@@ -183,7 +183,7 @@ address. An AE-to-AE route is rejected as invalid.
 
 `callback_opt` is `option(IAedexV2Callback)`: an optional contract the pair calls back into, via
 `aedex_v2_call(sender, amount0_out, amount1_out)`, after it has optimistically transferred the
-output but before it checks the invariant. That is the flash-swap hook — a contract can receive
+output but before it checks the invariant. That is the flash-swap hook: a contract can receive
 the output first and supply the input during the callback. Superhero always passes `None`.
 
 The AE-side entrypoints do the wrapping for you. `swap_exact_ae_for_tokens` and
@@ -201,7 +201,7 @@ Router and factory addresses for both networks are in the [deployment table](/de
 | --- | --- |
 | "No route found" | No pool connects the two tokens, directly or through WAE |
 | Quote shows but the swap reverts | The pool moved past your slippage bound, or the deadline passed |
-| A large price impact warning | The pool is thin relative to your trade size — split it or pick another route |
+| A large price impact warning | The pool is thin relative to your trade size; split it or pick another route |
 | "Exceeds available liquidity" | Your input is larger than the first hop's input reserve |
 | Two wallet prompts for one swap | The first is the AEX-9 allowance approval |
 | Insufficient balance error | Checked client-side before submission, against the input token's balance |
@@ -214,16 +214,16 @@ When the revert comes from the chain, the abort string names the check that fail
 | `AedexV2Router: INSUFFICIENT_OUTPUT_AMOUNT` | An exact-in swap would have returned less than `amount_out_min` |
 | `AedexV2Router: EXCESSIVE_INPUT_AMOUNT` | An exact-out swap would have cost more than `amount_in_max` |
 | `AedexV2Library: NO_PAIR_FOUND` | A hop in the path has no pair contract |
-| `AedexV2Library: INSUFFICIENT_LIQUIDITY` | A hop's reserves are zero — the pool is empty or one-sided |
+| `AedexV2Library: INSUFFICIENT_LIQUIDITY` | A hop's reserves are zero: the pool is empty or one-sided |
 | `AedexV2Router: INVALID_PATH_FIRST` / `INVALID_PATH_LAST` | An AE entrypoint was called with a path that does not start or end at WAE |
-| `AedexV2Pair: INSUFFICIENT_BALANCE` | The pair's own invariant check failed — the input never arrived, or the fee was short |
+| `AedexV2Pair: INSUFFICIENT_BALANCE` | The pair's own invariant check failed: the input never arrived, or the fee was short |
 
 The first three are the ordinary ones and mean the market moved. The last is a contract-level
 safety net you should not normally reach through the app.
 
 ## Swap from a script
 
-The agent skill's `superhero-token-swap.mjs` trades on the bonding curve, not the DEX — its `buy`,
+The agent skill's `superhero-token-swap.mjs` trades on the bonding curve, not the DEX. Its `buy`,
 `sell` and `price` commands call the token sale contract. To swap on the AMM programmatically,
 initialise the router with the `AedexV2Router` ACI from `dex-contracts-v2` and call the
 entrypoints in the table above. The router also exposes the pricing library as read-only
@@ -235,16 +235,16 @@ entrypoints, so you can quote without holding anything:
 | `get_amounts_in(amount_out, path)` | Exact-out quote across the whole route |
 | `get_amount_out(amount_in, reserve_in, reserve_out)` | One hop, from reserves you already have |
 | `get_amount_in(amount_out, reserve_in, reserve_out)` | One hop, inverted |
-| `quote(amount_a, reserve_a, reserve_b)` | The fee-free ratio — for liquidity math, not for swaps |
+| `quote(amount_a, reserve_a, reserve_b)` | The fee-free ratio: for liquidity math, not for swaps |
 
 `quote` is `amount_a * reserve_b / reserve_a` with no fee applied, because it prices the second
 side of a liquidity deposit. Do not use it to predict a swap.
 
 ## Related
 
-- [Liquidity Pools](/defi/pools) — the other side of every swap, and where the 0.3% goes.
-- [Wrapped AE](/defi/wrapped-ae) — the 1:1 shortcut the swap form takes for AE and WAE.
-- [Exploring the DEX](/defi/explore) — finding a pair and checking its depth before you trade.
-- [Bonding curve fees and slippage](/tokens/fees-and-slippage) — the equivalent mechanics on the curve side.
-- [DEX API](/api-reference/dex) — the `/api/dex/*` endpoints, including swap routes.
-- [dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2) — the router, factory and pair contracts, with their ACIs.
+- [Liquidity Pools](/defi/pools): the other side of every swap, and where the 0.3% goes.
+- [Wrapped AE](/defi/wrapped-ae): the 1:1 shortcut the swap form takes for AE and WAE.
+- [Exploring the DEX](/defi/explore): finding a pair and checking its depth before you trade.
+- [Bonding curve fees and slippage](/tokens/fees-and-slippage): the equivalent mechanics on the curve side.
+- [DEX API](/api-reference/dex): the `/api/dex/*` endpoints, including swap routes.
+- [dex-contracts-v2](https://github.com/aeternity/dex-contracts-v2): the router, factory and pair contracts, with their ACIs.

@@ -32,9 +32,9 @@ only account permitted to write the `x`, `nostr`, `bio`, `site` and `prefaens` n
 | Data | Authority |
 | --- | --- |
 | Every provider link, its value, and the per-address nonce | `AddressLink` contract state |
-| The reverse index — which address owns a given provider value | `AddressLink` contract state |
+| The reverse index: which address owns a given provider value | `AddressLink` contract state |
 | Which account may write a provider namespace | `AddressLink` `providers` map |
-| AENS name registration, pointers, expiry | æternity AENS — the `prefaens` link references it, it does not own it |
+| AENS name registration, pointers, expiry | æternity AENS; the `prefaens` link references it but does not own it |
 | Posts, comments, tip totals | `Tipping` v3 plus the API index |
 | Avatar, fullname, legacy username, follow counts, leaderboard stats | Superhero API |
 | Chain name shown on a profile | Resolved hourly from the middleware, not from a contract link |
@@ -75,7 +75,7 @@ In order of how much can be checked independently:
    provider owner submitted it. The OAuth evidence lives only inside the backend. See
    [Verifying Your X Account](/identity/x-verification).
 4. **Bio and website.** Nothing to verify beyond ownership of the address.
-5. **Posts.** Independent of the identity layer — a post's `sender` is whichever address signed
+5. **Posts.** Independent of the identity layer. A post's `sender` is whichever address signed
    the transaction, recorded by the `Tipping` contract.
 
 The verified badge on a profile means an `x` link exists for that account.
@@ -91,9 +91,9 @@ Fullname, avatar and the legacy username are read-only.
 
 ## Related
 
-- [AddressLink](/identity/address-link) — the contract, its entrypoints and its
+- [AddressLink](/identity/address-link): the contract, its entrypoints and its
   provider-ownership model.
-- [Names](/identity/names) — the name types and how a public name is resolved.
-- [Verifying Your X Account](/identity/x-verification) — the `x` provider's flow in full.
-- [Profiles & Accounts](/identity/profiles) — where each linked value appears on screen.
-- [Identity and DIDs](/identity/did-standard) — how the model maps onto W3C DID Core.
+- [Names](/identity/names): the name types and how a public name is resolved.
+- [Verifying Your X Account](/identity/x-verification): the `x` provider's flow in full.
+- [Profiles & Accounts](/identity/profiles): where each linked value appears on screen.
+- [Identity and DIDs](/identity/did-standard): how the model maps onto W3C DID Core.

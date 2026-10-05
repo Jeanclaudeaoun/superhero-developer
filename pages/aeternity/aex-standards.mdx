@@ -6,17 +6,17 @@ description: "The æternity token standards Superhero relies on, with the AEX-9 
 # AEX Standards
 
 AEX ("æternity expansion") proposals are æternity's application-layer standards, the equivalent
-of Ethereum's ERCs. Superhero depends heavily on one of them — **AEX-9**, the fungible token
-standard — and touches a few others through its wallet stack.
+of Ethereum's ERCs. Superhero depends heavily on one of them, **AEX-9**, the fungible token
+standard, and touches a few others through its wallet stack.
 
-## AEX-9 — fungible tokens
+## AEX-9: fungible tokens
 
 Every Superhero community token and the ProtocolDAO token is an AEX-9 contract. That is why a
 token you mint on Superhero shows up in any æternity wallet and on [æScan](https://aescan.io/)
 without Superhero having to integrate with them.
 
 AEX-9 is inspired by ERC-20 but deliberately smaller: the base interface is the read functions
-plus `transfer`, and everything else — allowances, minting, burning, swapping — is an optional
+plus `transfer`, and everything else (allowances, minting, burning, swapping) is an optional
 extension. A contract advertises which extensions it implements through `aex9_extensions()`.
 
 ### The interface
@@ -31,7 +31,7 @@ Non-stateful entrypoints can be dry-run for free; stateful ones need a signed tr
 | `meta_info()` | record | `name`, `symbol`, `decimals` |
 | `total_supply()` | `int` | In token-decimals, not whole tokens |
 | `owner()` | `address` | The minting authority |
-| `balance(account)` | `option(int)` | An option, not an int — see below |
+| `balance(account)` | `option(int)` | An option, not an int; see below |
 | `balances()` | map | Every holder at once |
 | `allowance(accounts)` | `option(int)` | Keyed on a from/for pair |
 | `allowance_for_caller(from)` | `option(int)` | Convenience for the common case |
@@ -113,7 +113,7 @@ See [Networks & Endpoints](/aeternity/networks).
 | AEX-3 | Encrypted secret storage (keystore JSON) | Active | Relevant if you import a keystore file |
 | AEX-8 | Message signing | Draft | Relevant to any off-chain signature, including the tipping contract's signed messages |
 | AEX-9 | Fungible tokens | Review | Used everywhere |
-| AEX-10 | BIP32 derivation path for deterministic wallets | Final | Applies to any mnemonic-based æternity wallet — see [Accounts & Keys](/aeternity/accounts-and-keys) |
+| AEX-10 | BIP32 derivation path for deterministic wallets | Final | Applies to any mnemonic-based æternity wallet; see [Accounts & Keys](/aeternity/accounts-and-keys) |
 | AEX-130 | æpp meta-information format | Draft | Not used |
 | AEX-141 | Non-fungible tokens | Review | Not used; Superhero has no NFT feature |
 
@@ -122,9 +122,9 @@ middleware's AEX-9 indexing are built against it as written.
 
 ## Related
 
-- [AEX-9 contract reference](/contracts/aex9) — the Superhero-side view of the same contract.
-- [AEX-9 tokens in your wallet](/wallets/aex9-tokens) — what these balances look like to a user.
-- [Sophia & FATE](/aeternity/sophia-and-fate) — how to read an ACI.
-- [Token sale contract](/contracts/token-sale) — what mints and burns these tokens.
-- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the normative standard.
-- [Token standards overview](https://docs.aeternity.com/aeternity-developer-tools/token-standards) — æternity's own summary.
+- [AEX-9 contract reference](/contracts/aex9): the Superhero-side view of the same contract.
+- [AEX-9 tokens in your wallet](/wallets/aex9-tokens): what these balances look like to a user.
+- [Sophia & FATE](/aeternity/sophia-and-fate): how to read an ACI.
+- [Token sale contract](/contracts/token-sale): what mints and burns these tokens.
+- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md): the normative standard.
+- [Token standards overview](https://docs.aeternity.com/aeternity-developer-tools/token-standards): æternity's own summary.

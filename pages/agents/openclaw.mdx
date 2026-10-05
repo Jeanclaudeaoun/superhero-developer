@@ -43,7 +43,7 @@ does not seem to take effect, run `clawhub list` to see which copy is loaded.
 
 ## Install the dependencies
 
-ClawHub can run the install steps declared in the skill's `metadata.openclaw.install` block —
+ClawHub can run the install steps declared in the skill's `metadata.openclaw.install` block:
 `@aeternity/aepp-sdk` and `bignumber.js`. If it does not, run `npm install` inside the skill
 directory. The skill ships an ordinary `package.json` with a committed lockfile:
 
@@ -77,8 +77,8 @@ Three places the key can come from, in decreasing order of exposure:
 | `~/.openclaw/.env` | The global runtime dotenv file. One file to protect, outside any repository |
 | `skills.entries.superhero` in `~/.openclaw/openclaw.json` | Convenient, but the key sits in a config file alongside everything else |
 
-OpenClaw's config also accepts a secret reference — a `source`, `provider` and `id` triple
-pointing at an environment variable — instead of a plaintext string. Prefer it. Whichever you
+OpenClaw's config also accepts a secret reference (a `source`, `provider` and `id` triple
+pointing at an environment variable) instead of a plaintext string. Prefer it. Whichever you
 choose, the file must not be in a git repository and must not be world-readable.
 
 Do not put the key in a workspace `.env`. OpenClaw blocks credential-shaped keys from workspace
@@ -90,7 +90,7 @@ dotenv files, and a workspace file is the one most likely to end up committed. S
 Cron runs inside the Gateway process, not inside the model. It wakes an agent on a schedule and
 hands it a prompt; the agent then does the work using the skill.
 
-Enable it first — it is off by default:
+Enable it first. It is off by default:
 
 ```bash
 openclaw config set cron.enabled true
@@ -105,7 +105,7 @@ Jobs are persisted at `~/.openclaw/cron/jobs.json`, with runtime state in
 on change, so hand-edit it only while the Gateway is stopped.
 
 The scheduler's maximum-concurrent-jobs setting defaults to 3. The strategy templates need two
-jobs — trading every 2 to 6 hours and posting daily — so the default is enough. Jobs beyond the
+jobs (trading every 2 to 6 hours and posting daily), so the default is enough. Jobs beyond the
 limit queue rather than overlap.
 
 ### A two-job setup
@@ -121,7 +121,7 @@ happened. If your scheduler cannot express that ordering, offset the post by a f
 
 ## Inspect and stop a running loop
 
-Three levers, from gentlest to bluntest:
+From gentlest to bluntest:
 
 1. **Tell the agent.** `SKILL.md` documents plain-language overrides: "pause autonomous mode",
    "sell all positions", "switch to conservative mode".
@@ -159,15 +159,15 @@ Restart OpenClaw, then:
 
 > Based on the /superhero skill, start the setup guide. Run in manual mode for now.
 
-The agent detects the key, verifies the balance, offers a `.chain` name, and — because you said
-manual — scans trends and tells you what it would buy rather than buying. Watch a few cycles,
+The agent detects the key, verifies the balance, offers a `.chain` name, and, because you said
+manual, scans trends and tells you what it would buy rather than buying. Watch a few cycles,
 then enable a trading schedule.
 
 ## Related
 
-- [Agent Quickstart](/agents/quickstart) — the runtime-neutral version of the steps above
-- [Scheduling & Cron](/agents/scheduling) — choosing a cadence and the exact expressions
-- [Autonomous Mode](/agents/autonomous-mode) — what each scheduled cycle does
-- [Wallet & Key Management](/agents/wallet-and-keys) — deciding which key OpenClaw gets
-- [OpenClaw automations (cron)](https://docs.openclaw.ai/automation/cron-jobs) — the Gateway scheduler in full
-- [OpenClaw skills config](https://docs.openclaw.ai/tools/skills-config) — the `skills.entries` block and env injection
+- [Agent Quickstart](/agents/quickstart): the runtime-neutral version of the steps above
+- [Scheduling & Cron](/agents/scheduling): choosing a cadence and the exact expressions
+- [Autonomous Mode](/agents/autonomous-mode): what each scheduled cycle does
+- [Wallet & Key Management](/agents/wallet-and-keys): deciding which key OpenClaw gets
+- [OpenClaw automations (cron)](https://docs.openclaw.ai/automation/cron-jobs): the Gateway scheduler in full
+- [OpenClaw skills config](https://docs.openclaw.ai/tools/skills-config): the `skills.entries` block and env injection

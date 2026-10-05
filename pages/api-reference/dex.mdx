@@ -18,21 +18,21 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/dex/tokens` | `order_by`, `order_direction`, `listed`, `search`, `limit`, `page` | Paginated `DexTokenDto` |
-| `GET /api/dex/tokens/{address}` | — | One `DexTokenDto` |
-| `GET /api/dex/tokens/{address}/price` | — | Token plus current price |
+| `GET /api/dex/tokens/{address}` | None | One `DexTokenDto` |
+| `GET /api/dex/tokens/{address}/price` | None | Token plus current price |
 | `GET /api/dex/tokens/{address}/price/analysis` | `base_token`, `debug` | Liquidity-weighted price with confidence metrics |
-| `GET /api/dex/tokens/{address}/summary` | — | `DexTokenSummaryDto` |
+| `GET /api/dex/tokens/{address}/summary` | None | `DexTokenSummaryDto` |
 | `GET /api/dex/tokens/{address}/history` | `interval`, `convertTo`, `limit`, `page` | OHLCV candles |
-| `PATCH /api/dex/tokens/{address}/listed` | — | Set the listed flag. **Requires an API key** |
+| `PATCH /api/dex/tokens/{address}/listed` | None | Set the listed flag. **Requires an API key** |
 
 ### Pairs
 
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/dex/pairs` | `order_by`, `order_direction`, `token_address`, `search`, `limit`, `page` | Paginated `PairDto` |
-| `GET /api/dex/pairs/{address}` | — | One `PairDto` |
-| `GET /api/dex/pairs/from/{from_token}/to/{to_token}` | — | The direct pair for two tokens |
-| `GET /api/dex/pairs/from/{from_token}/to/{to_token}/providers` | — | All swap paths, direct and multi-hop |
+| `GET /api/dex/pairs/{address}` | None | One `PairDto` |
+| `GET /api/dex/pairs/from/{from_token}/to/{to_token}` | None | The direct pair for two tokens |
+| `GET /api/dex/pairs/from/{from_token}/to/{to_token}/providers` | None | All swap paths, direct and multi-hop |
 | `GET /api/dex/pairs/{address}/history` | `interval`, `from_token`, `convertTo`, `limit`, `page` | Pair price history |
 | `GET /api/dex/pairs/{address}/summary` | `token` | `PairSummaryDto` |
 | `GET /api/dex/pairs/{address}/preview` | `interval` | Compact preview payload |
@@ -42,9 +42,9 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/dex/transactions` | `order_by`, `order_direction`, `pair_address`, `token_address`, `tx_type`, `account_address`, `from_date`, `to_date`, `limit`, `page` | Paginated `PairTransactionDto` |
-| `GET /api/dex/transactions/{txHash}` | — | One `PairTransactionDto` |
+| `GET /api/dex/transactions/{txHash}` | None | One `PairTransactionDto` |
 | `GET /api/dex/transactions/pair/{pairAddress}` | `order_by`, `order_direction`, `limit`, `page` | Transactions for one pair |
-| `GET /api/dex/swap-routes/{from_token}/{to_token}` | — | All quotable routes |
+| `GET /api/dex/swap-routes/{from_token}/{to_token}` | None | All quotable routes |
 
 ## `DexTokenDto`
 
@@ -72,7 +72,7 @@ curated tokens, `listed=false` for the rest, and omit it for everything.
 curl -s "https://api.superhero.com/api/dex/tokens?listed=true&order_by=tvl&order_direction=DESC&limit=20"
 ```
 
-`DexTokenSummaryDto` carries `address`, `total_volume` (a `PriceDto`) and `change` — a map keyed
+`DexTokenSummaryDto` carries `address`, `total_volume` (a `PriceDto`) and `change`, a map keyed
 by period, or null.
 
 ## `PairDto`
@@ -88,7 +88,7 @@ by period, or null.
 | `transactions_count` | number | Lifetime transactions on the pair |
 | `created_at` | string | ISO 8601 |
 
-Reserves and LP supply are big-integer strings in base units — divide each by 10 raised to its
+Reserves and LP supply are big-integer strings in base units. Divide each by 10 raised to its
 own token's `decimals`, which may differ between the two sides.
 
 ```bash
@@ -118,9 +118,9 @@ One row per swap or liquidity event.
 | `account_address` | string or null | Who submitted it |
 | `block_height` | number | Inclusion height |
 | `pair` | `PairDto` | The pair, inlined |
-| `tx_type` | string | The router entrypoint that was called — see below |
+| `tx_type` | string | The router entrypoint that was called (see below) |
 | `reserve0` / `reserve1` | string | Reserves **after** the transaction, in base units |
-| `ratio0` | string | Price of `token0` quoted in `token1` — `reserve0 / reserve1` |
+| `ratio0` | string | Price of `token0` quoted in `token1`: `reserve0 / reserve1` |
 | `ratio1` | string | Price of `token1` quoted in `token0` |
 | `total_supply` | string | LP supply after the transaction |
 | `volume0` / `volume1` | string | Traded volume per side for swaps; `0` for liquidity operations |
@@ -158,7 +158,7 @@ inclusive. `order_by` accepts `created_at` (the default) or `tx_type`; anything 
 curl -s "https://api.superhero.com/api/dex/transactions?tx_type=swap_exact_tokens_for_tokens&limit=20&order_direction=DESC"
 ```
 
-Fetch a single transaction by hash as a path segment — `GET /api/dex/transactions/{txHash}` —
+Fetch a single transaction by hash as a path segment (`GET /api/dex/transactions/{txHash}`),
 unlike the bonding-curve equivalent, which takes a `tx_hash` query parameter.
 
 ## `GET /api/dex/swap-routes/{from_token}/{to_token}`
@@ -173,7 +173,7 @@ paths. An empty array means no route exists.
 | `token0` / `token1` | string | The two token addresses |
 | `liquidityInfo` | object | Reserve information for quoting |
 
-A route containing an unsynchronized pair is not quotable — check `synchronized` on every hop.
+A route containing an unsynchronized pair is not quotable, so check `synchronized` on every hop.
 
 ```bash
 curl -s "https://api.superhero.com/api/dex/swap-routes/ct_FROM_TOKEN/ct_TO_TOKEN"
@@ -214,7 +214,7 @@ The same computation with its working shown:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `price` | string or null | The best price — the same value the `/price` route returns |
+| `price` | string or null | The best price, the same value the `/price` route returns |
 | `confidence` | number | 0 to 1 |
 | `bestPath` | array of pairs | The route the price came from |
 | `allPaths` | array | Every path considered, each with `path`, `price`, `liquidity` and `confidence` |
@@ -234,7 +234,7 @@ Sets the `listed` flag. Body is `{ "listed": true }` or `{ "listed": false }`; r
 updated `DexTokenDto`, or 404 for an unknown token.
 
 Requires the API key, sent as `x-api-key: YOUR_KEY` or `Authorization: Bearer YOUR_KEY`. A
-missing or wrong key is a `401`. Every other write in the API uses a wallet signature — see
+missing or wrong key is a `401`. Every other write in the API uses a wallet signature. See
 [Conventions](/api-reference/conventions#authentication).
 
 ## Pagination on `/api/dex/*`
@@ -246,9 +246,9 @@ infer "no more results" from getting fewer rows than you asked for.
 
 ## Related
 
-- [API Conventions](/api-reference/conventions) — pagination, the `limit` cap and the date-parameter spellings
-- [Tokens API](/api-reference/tokens) — the bonding-curve tokens and their `TokenDto`
-- [Transactions API](/api-reference/transactions) — bonding-curve trades
-- [Swap](/defi/swap) — the feature these endpoints back
-- [Pools](/defi/pools) — what a pair is and what providing liquidity means
-- [Wrapped AE](/defi/wrapped-ae) — why WAE is the pricing base for every history series
+- [API Conventions](/api-reference/conventions): pagination, the `limit` cap and the date-parameter spellings
+- [Tokens API](/api-reference/tokens): the bonding-curve tokens and their `TokenDto`
+- [Transactions API](/api-reference/transactions): bonding-curve trades
+- [Swap](/defi/swap): the feature these endpoints back
+- [Pools](/defi/pools): what a pair is and what providing liquidity means
+- [Wrapped AE](/defi/wrapped-ae): why WAE is the pricing base for every history series

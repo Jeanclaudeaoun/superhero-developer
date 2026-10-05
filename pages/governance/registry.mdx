@@ -6,8 +6,8 @@ description: "The Registry contract that indexes every governance poll and holds
 # The Governance Registry
 
 The `Registry` is the single entry point to æternity governance. It keeps the index of every
-poll ever registered, and it holds the global delegation map. It does **not** hold votes —
-those live on each individual `Poll` contract — and it does not compute results, which happens
+poll ever registered, and it holds the global delegation map. It does **not** hold votes
+(those live on each individual `Poll` contract), and it does not compute results, which happens
 off-chain in the governance backend.
 
 One registry per network, deployed once, with no admin entrypoint and no upgrade path.
@@ -38,7 +38,7 @@ Registry.poll_data = { poll         : Poll
 ```
 
 **`poll_data` caches the title and close height**, which also live on the poll contract, so a
-client can render a full poll list from one contract call instead of one call per poll — which
+client can render a full poll list from one contract call instead of one call per poll, which
 is what the app and the CLI do.
 
 **`delegations` is a plain address-to-address map**, which is why an account can have at most
@@ -101,7 +101,7 @@ polls without re-reading `polls()`; the delegation events let it maintain the de
 incrementally.
 
 `Vote` and `RevokeVote` are emitted by each `Poll` contract, not by the registry, so an
-indexer subscribes per poll — discovering polls through `AddPoll` first and then following
+indexer subscribes per poll, discovering polls through `AddPoll` first and then following
 them individually. See [Contract events](/contracts/events).
 
 ## Call it
@@ -155,14 +155,14 @@ The agent skill's CLI defaults to `https://governance-server-mainnet.prd.aepps.c
 mainnet, overridable with `AE_GOVERNANCE_BACKEND_URL`. If one host does not answer, try the
 other.
 
-Superhero's own backend additionally indexes governance transactions at
-`/api/governance/votes` and `/api/governance/delegations` — useful for history rather than for
+Superhero's own backend also indexes governance transactions at
+`/api/governance/votes` and `/api/governance/delegations`. They are useful for history rather than for
 live results. See [Polls](/governance/polls).
 
 ## Related
 
-- [Polls](/governance/polls) — what `poll_data` summarises, and how the backend turns votes into results.
-- [Delegation](/governance/delegation) — the delegation entrypoints in context, with the transitivity rules.
-- [Creating a Poll](/governance/create-a-poll) — `add_poll` as the second half of poll creation.
-- [Registry and Poll contract reference](/contracts/governance-contracts) — the full signature tables.
-- [Contract addresses](/contracts/addresses) — every deployed address across both networks in one place.
+- [Polls](/governance/polls): what `poll_data` summarises, and how the backend turns votes into results.
+- [Delegation](/governance/delegation): the delegation entrypoints in context, with the transitivity rules.
+- [Creating a Poll](/governance/create-a-poll): `add_poll` as the second half of poll creation.
+- [Registry and Poll contract reference](/contracts/governance-contracts): the full signature tables.
+- [Contract addresses](/contracts/addresses): every deployed address across both networks in one place.

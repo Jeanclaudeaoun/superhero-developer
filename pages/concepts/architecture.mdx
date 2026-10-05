@@ -33,7 +33,7 @@ that needs to be fast goes to the API.
 | Identity | `AddressLink` | Provider links: preferred `.chain` name, X handle, Nostr key, bio, website |
 | Token standard | AEX-9 (`FungibleTokenFull.aes`) | Community tokens and the ProtocolDAO token |
 
-The Tipping and factory contracts are **singletons** — one address per network. The Tipping address
+The Tipping and factory contracts are **singletons**: one address per network. The Tipping address
 is in [Deployed Addresses](/contracts/addresses); the active factory is returned by
 `GET /api/factory`. Everything else is **per community**: creating a token deploys a fresh token,
 curve, sale, DAO and management contract in a single transaction.
@@ -52,33 +52,33 @@ The factory's deployment sequence:
 
 The service behind `api.superhero.com` is one NestJS process doing several jobs:
 
-- **Indexer** — a general-purpose chain indexer. It stores key blocks, micro blocks and transactions
+- **Indexer**: a general-purpose chain indexer. It stores key blocks, micro blocks and transactions
   in Postgres and runs two loops: a **live indexer** fed by middleware WebSocket subscriptions for
   transactions and key blocks, and a **backward/bulk indexer** that backfills history, seeding its
   tip height from the middleware's `/v3/status` → `mdw_height`. The indexer reads the middleware,
   not the node directly, so the middleware's own lag is the floor on how fresh any API response can
   be.
-- **Plugins** — all domain decoding. Each plugin declares a `startFromHeight()` and a `filters()`
+- **Plugins**: all domain decoding. Each plugin declares a `startFromHeight()` and a `filters()`
   list matching contract calls by contract id and entrypoint name (or spend transactions by
   predicate), then receives `onTransactionsSaved(txs)`. The shipped set is `bcl` (token sales),
   `bcl-affiliation`, `dex`, `governance`, `social` (posts), `social-tipping`, `social-graph` and
   `address-links`.
-- **Reorg handling** — the chain is re-validated every 10 minutes. On a rollback, derived rows
+- **Reorg handling**: the chain is re-validated every 10 minutes. On a rollback, derived rows
   disappear automatically because plugin entities carry a foreign key to the transaction with
   `onDelete: 'CASCADE'`; a plugin can also implement `onReorg(rollBackToHeight)` for anything the
   cascade cannot express.
-- **Trendminer** — trending scores, charts and analytics, computed on a cron. In the web app this is
+- **Trendminer**: trending scores, charts and analytics, computed on a cron. In the web app this is
   the set of `/trends/*` views served from the same API. The formula is in
   [Attention Markets](/concepts/attention-markets).
-- **Address-link provider wallet** — the backend account that owns the `x`, `nostr`, `bio`, `site`
+- **Address-link provider wallet**: the backend account that owns the `x`, `nostr`, `bio`, `site`
   and `prefaens` provider namespaces in `AddressLink`. It checks the off-chain proof (an OAuth
   session, a signed Nostr event, AENS ownership), then submits and pays for the `link` call the
   user signed. See [Verifying Your X Account](/identity/x-verification).
-- **Clients** — the React/Vite web app, the React Native mobile apps, and the
+- **Clients**: the React/Vite web app, the React Native mobile apps, and the
   [agent skill](/agents) for AI agents.
 
 The backend reads the chain; it does not submit posts on a user's behalf. The
-`post_without_tip_sig` entrypoint exists for delegated posting — see
+`post_without_tip_sig` entrypoint exists for delegated posting; see
 [Delegated & Gasless Posting](/social/delegated-posting).
 
 The indexer reads the chain through its own endpoints:
@@ -102,7 +102,7 @@ flowchart LR
   API -->|"3. feed refresh"| U
 ```
 
-The path is deliberately short. The web app calls `post_without_tip` directly from the connected
+The web app calls `post_without_tip` directly from the connected
 wallet; the agent skill does the same from a `MemoryAccount`. The contract returns the new `tip_id`
 and emits `PostWithoutTipReceived`. The indexer picks the event up and the post appears in
 `GET /api/posts` with an `id`, `content`, `media`, `created_at`, `sender_address` and `slug`.
@@ -129,7 +129,7 @@ flowchart LR
   API -->|"4. REST + socket.io"| U
 ```
 
-Step 1 is a dry call — `price(count)` on the sale contract, or the client-side estimator when the
+Step 1 is a dry call: `price(count)` on the sale contract, or the client-side estimator when the
 app wants an instant quote while you type. Step 2 is the only transaction. The app then decodes the
 receipt's events directly: the `Buy` event for the AE amount, the token contract's `Mint` event for
 the tokens you received, and a *second* `Mint` on a different contract address for the ProtocolDAO
@@ -140,7 +140,7 @@ tokens. That is why the success screen can show your balance before the indexer 
 1. `create_allowance` (or `change_allowance`) on the community token, granting the sale contract
    permission to move `count` tokens.
 2. `sell(count, minimal_return_required)` on the sale contract. `minimal_return_required` is the
-   slippage floor — the call reverts rather than returning less.
+   slippage floor, and the call reverts rather than returning less.
 
 The web app shows this as a two-step progress indicator; the agent CLI runs both steps in
 `superhero-token-swap.mjs`.
@@ -148,7 +148,7 @@ The web app shows this as a two-step progress indicator; the agent CLI runs both
 ## The live-update path
 
 Token views do not poll. The web app opens a single socket.io connection to the `websocketUrl` from
-config — `https://api.superhero.com` on mainnet. The backend emits two channels:
+config (`https://api.superhero.com` on mainnet). The backend emits two channels:
 
 | Channel | Emitted when |
 | --- | --- |
@@ -193,10 +193,10 @@ The full address list, including the DEX contracts, is in [Deployed Addresses](/
 
 ## Related
 
-- [Deployed Addresses](/contracts/addresses) — every contract address for both networks.
-- [Events](/contracts/events) — the event signatures the indexer subscribes to, per contract.
-- [WebSocket](/api-reference/websocket) — the channels above, with payload shapes.
-- [Where the Money Goes](/concepts/value-flow) — what each arrow in the buy diagram is worth.
-- [Calling Contracts](/contracts/calling-contracts) — doing the above yourself with the æternity SDK.
-- [Official Links](/resources/links) — the source repositories for each component.
-- [æternity middleware (ae_mdw)](https://github.com/aeternity/ae_mdw) — what `MIDDLEWARE_URL` points at.
+- [Deployed Addresses](/contracts/addresses): every contract address for both networks.
+- [Events](/contracts/events): the event signatures the indexer subscribes to, per contract.
+- [WebSocket](/api-reference/websocket): the channels above, with payload shapes.
+- [Where the Money Goes](/concepts/value-flow): what each arrow in the buy diagram is worth.
+- [Calling Contracts](/contracts/calling-contracts): doing the above yourself with the æternity SDK.
+- [Official Links](/resources/links): the source repositories for each component.
+- [æternity middleware (ae_mdw)](https://github.com/aeternity/ae_mdw): what `MIDDLEWARE_URL` points at.

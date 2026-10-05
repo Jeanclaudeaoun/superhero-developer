@@ -16,7 +16,7 @@ that community, not a claim on a company.
 | Decimals | 18, read from the token's `meta_info()` |
 | Issuance | Minted on buy, burned on sell, via the bonding curve |
 | Pricing | Exponential bonding curve, a pure function of supply |
-| Buy/sell spread | 1% of the curve value — 0.5% to the community DAO, 0.5% to affiliation |
+| Buy/sell spread | 1% of the curve value: 0.5% to the community DAO, 0.5% to affiliation |
 | Utility | Community governance voting, write-access threshold, community membership |
 | Solvency | The full supply is redeemable at all times against the curve reserve |
 | Supply cap | None. Supply is elastic and grows with demand |
@@ -33,8 +33,8 @@ order:
 | 3 | `AffiliationBondingCurveTokenSale` | Buy, sell, mint, burn, affiliation fee routing |
 | 4 | `DAO` | Owner and beneficiary of the sale; holds the treasury |
 | 5 | `CommunityManagement` | Moderators, mute list, write threshold, community metadata |
-| 6 | — | Registration in the factory's on-chain community registry |
-| 7 | — | Optional initial token purchase, in the same transaction |
+| 6 | None | Registration in the factory's on-chain community registry |
+| 7 | None | Optional initial token purchase, in the same transaction |
 
 `create_community` returns the tuple `(DAO, TokenSale, CommunityManagement)`. The bonding curve
 contract is shared: the factory exposes a single `bonding_curve()` and every sale contract points
@@ -55,7 +55,7 @@ Both are `ct_` addresses and both appear on a token page.
 listing keys off `sale_address`; you need the token address only for raw AEX-9 work such as
 approving an allowance before a sell. The sale contract holds tokens under the account form of its
 own address, so an allowance is granted to `sale_address` with its `ct_` prefix rewritten as
-`ak_` — see [Buying & Selling](/tokens/buying-and-selling).
+`ak_`. See [Buying & Selling](/tokens/buying-and-selling).
 
 ## What holding the token gets you
 
@@ -80,17 +80,17 @@ own address, so an allowance is granted to `sale_address` with its `ct_` prefix 
 | Scope | One community | The whole platform |
 | Issuance | Minted on buy against the curve | Minted as a reward on every community-token buy |
 | Price | Bonding curve | Not sold; issued only as a by-product of buying |
-| Utility today | Voting, write threshold, membership | None yet — issuance is live, governance is in development |
+| Utility today | Voting, write threshold, membership | None yet. Issuance is live; governance is in development |
 
-Every community-token buy mints ProtocolDAO tokens to the buyer at **1,000×** the AE paid —
+Every community-token buy mints ProtocolDAO tokens to the buyer at **1,000×** the AE paid,
 affiliation fee included, after any surplus refund. The `Mint` event on the ProtocolDAO token
 contract carries the exact figure. See [The ProtocolDAO Token](/dao/protocol-dao).
 
 ## Related
 
-- [Bonding Curves](/tokens/bonding-curve) — how the price of all this is computed, with worked numbers
-- [Create a Token (Dashboard)](/tokens/create-from-dashboard) — launch one from the app in a few minutes
-- [Collections & Naming Rules](/tokens/collections-and-naming) — the namespace your token name has to fit into
-- [Community factory contract](/contracts/community-factory) — `create_community` and the registry, entrypoint by entrypoint
-- [Risks](/tokens/risks) — read before you buy anything
-- [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the fungible token specification these tokens implement
+- [Bonding Curves](/tokens/bonding-curve): how the price of all this is computed, with worked numbers
+- [Create a Token (Dashboard)](/tokens/create-from-dashboard): launch one from the app in a few minutes
+- [Collections & Naming Rules](/tokens/collections-and-naming): the namespace your token name has to fit into
+- [Community factory contract](/contracts/community-factory): `create_community` and the registry, entrypoint by entrypoint
+- [Risks](/tokens/risks): read before you buy anything
+- [AEX-9 standard](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md): the fungible token specification these tokens implement

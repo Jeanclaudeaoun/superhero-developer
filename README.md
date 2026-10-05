@@ -1,6 +1,6 @@
 # Superhero Dev
 
-The developer documentation for [Superhero](https://superhero.com) — the on-chain attention
+The developer documentation for [Superhero](https://superhero.com), the on-chain attention
 market where you can discover, trade, and govern the trends you believe in.
 
 Built with [Nextra](https://nextra.site) (docs theme, `pages/` router).
@@ -27,7 +27,7 @@ The canonical origin used for `og:url` and the social-card image resolves automa
 `NEXT_PUBLIC_SITE_URL` if set, otherwise Vercel's `VERCEL_PROJECT_PRODUCTION_URL`. Attaching a
 custom domain in Vercel is enough; no code change is needed.
 
-Brand assets live in `public/` and come from the Superhero app's own `public/` directory —
+Brand assets live in `public/` and come from the Superhero app's own `public/` directory:
 the mark, the wordmark, the favicon set and the social card.
 
 ### Two constraints worth knowing before you edit
@@ -63,7 +63,7 @@ pages/
 ├── agents/              AI agents: skill install, autonomous mode, strategies, CLI reference
 ├── api-reference/       api.superhero.com REST reference
 ├── contracts/           Sophia contract reference and deployed addresses
-├── aeternity/           The underlying chain — scoped to what Superhero actually uses
+├── aeternity/           The underlying chain, scoped to what Superhero actually uses
 └── resources/           Whitepaper, brand, support, official links
 ```
 
@@ -71,13 +71,13 @@ pages/
 
 Every page follows the same shape: double-quoted `title` and `description` frontmatter, an H1,
 one to three sentences of opening prose, task-oriented sections, and a `## Read more` section of
-internal links. Plain MDX only — no imports, no components.
+internal links. Plain MDX only, with no imports and no components.
 
 Five things break the build, and `scripts/lint-mdx.py` catches all of them: unquoted
 frontmatter, a bare `{` or `<` in prose, a `|` inside inline code inside a table row, a broken
 internal link, and a page missing from its directory's `_meta.json`. Run it before every push.
 
-`NOTES.md` holds maintainer-only material — product defects found while writing, and facts that
+`NOTES.md` holds maintainer-only material: product defects found while writing, and facts that
 have not been verified against a live system. It is not part of the site.
 
 ## Where the content comes from

@@ -24,7 +24,7 @@ Copilot also reads personal skills from `~/.agents/skills`, and project skills f
 `.github/skills`, `.claude/skills` or `.agents/skills` inside a repository. If you already have
 the skill in `~/.claude/skills/superhero` for Claude Code, a symlink avoids a second copy.
 
-Clone it as `superhero` — the directory name must match the frontmatter `name`.
+Clone it as `superhero`, because the directory name must match the frontmatter `name`.
 
 ## Manage it in the CLI
 
@@ -46,8 +46,8 @@ appear, the folder name or the frontmatter `name` is wrong.
 | VS Code agent mode | Your machine, inside the editor | Yes, with the same environment-variable setup |
 | Copilot coding agent | GitHub's cloud environment | **No.** It does not inherit your local environment, so the key would have to be stored as a repository or environment secret readable by every workflow |
 
-For an unattended agent, run it on a host you control — see
-[Other Agents & Runtimes](/agents/other-runtimes) — or use the OpenClaw Gateway.
+For an unattended agent, run it on a host you control (see
+[Other Agents & Runtimes](/agents/other-runtimes)) or use the OpenClaw Gateway.
 
 ## Set the key
 
@@ -61,7 +61,7 @@ export AE_PRIVATE_KEY=<your_secret_key>
 Copilot does not prompt for it: its frontmatter fields are `name`, `description`,
 `allowed-tools` and `metadata`, with no environment declaration. Export the variable before
 launching, and ask for `superhero-wallet.mjs exists` as the first command. Use a dedicated
-wallet funded with only what you can lose — see
+wallet funded with only what you can lose. See
 [Wallet & Key Management](/agents/wallet-and-keys).
 
 Run Copilot from the skill directory, or tell it to run the scripts from there, so
@@ -102,7 +102,7 @@ want autonomous or manual mode.
 Copilot has no equivalent of OpenClaw's Gateway cron, so autonomous mode needs one of these:
 
 1. **Run it interactively.** Open a Copilot CLI session when you want a cycle. This pairs
-   naturally with manual mode.
+   well with manual mode.
 2. **Schedule the scripts, not the agent.** A cron job that runs
    `superhero-trending.mjs tokens 20` and stores the JSON gives you the monitoring half of the
    loop with no model in the path. See [Other Agents & Runtimes](/agents/other-runtimes).
@@ -116,9 +116,9 @@ use it, use it for read-only reporting.
 
 ## Related
 
-- [Other Agents & Runtimes](/agents/other-runtimes) — the agentless and MCP paths for scheduling
-- [OpenClaw](/agents/openclaw) — the runtime with a built-in scheduler
-- [Wallet & Key Management](/agents/wallet-and-keys) — where the key may live
-- [Example Prompts](/agents/prompts) — including a research-only prompt that never signs
-- [Adding agent skills for Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills) — directories, discovery and the slash commands
-- [Allowing and denying tool use](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools) — `--allow-tool`, `--deny-tool` and the `shell()` pattern
+- [Other Agents & Runtimes](/agents/other-runtimes): the agentless and MCP paths for scheduling
+- [OpenClaw](/agents/openclaw): the runtime with a built-in scheduler
+- [Wallet & Key Management](/agents/wallet-and-keys): where the key may live
+- [Example Prompts](/agents/prompts): including a research-only prompt that never signs
+- [Adding agent skills for Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills): directories, discovery and the slash commands
+- [Allowing and denying tool use](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools): `--allow-tool`, `--deny-tool` and the `shell()` pattern

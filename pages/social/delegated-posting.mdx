@@ -23,7 +23,7 @@ post_without_tip_sig(
 
 Stateful, not payable, returns the new `tip_id`, and emits the same
 `PostWithoutTipReceived(author, title)` event as a direct post. The stored `tip_meta` records
-`sender = author`, and the indexer treats a delegated post exactly like a direct one — the two
+`sender = author`, and the indexer treats a delegated post exactly like a direct one. The two
 paths are indistinguishable from the outside.
 
 ```sophia
@@ -42,7 +42,7 @@ separator:
 message = title ++ media[0] ++ media[1] ++ ... ++ media[n-1]
 ```
 
-Media order is part of the signature — reordering the list produces a different digest. An
+Media order is part of the signature: reordering the list produces a different digest. An
 empty media list signs the bare title.
 
 ### The digest
@@ -60,9 +60,9 @@ in the contract:
 
 | Bytes | Hex | Meaning |
 | --- | --- | --- |
-| 1 | `1a` | 26 — the length of the prefix string |
+| 1 | `1a` | 26, the length of the prefix string |
 | 26 | `61657465726e697479205369676e6564204d6573736167653a0a` | `aeternity Signed Message:` plus a newline |
-| 1 | `20` | 32 — the length of the body that follows |
+| 1 | `20` | 32, the length of the body that follows |
 
 This is the æternity personal-message framing the SDK's `hashMessage` produces, and it is what
 stops a signature captured here from being replayed as a raw transaction signature. The scheme
@@ -98,7 +98,7 @@ export function postDigest(title, media) {
 
 Sign `postDigest(title, media)` with the author's Ed25519 key and hand the relayer the tuple
 `(title, media, author, signature)`. The signature is a 64-byte value; a 128-character
-lowercase hex string with no prefix — the convention the address-links API uses — is a good
+lowercase hex string with no prefix (the convention the address-links API uses) is a good
 wire format.
 
 If you are signing from a connected wallet rather than a raw key, the wallet's `signMessage`
@@ -149,16 +149,16 @@ when the relayer submitted it, not when the author signed it.
 
 ## When to use it
 
-Use `post_without_tip_sig` when the author cannot pay — new-user onboarding before the wallet
+Use `post_without_tip_sig` when the author cannot pay: new-user onboarding before the wallet
 is funded, or a custodial surface that holds no user key but can forward a signature. For
 everything else prefer `post_without_tip`: it is simpler, and the author pays only gas.
 
 ## Related
 
-- [Posting](/social/posting) — the direct path, the data model, and the shared conventions.
-- [The Tipping contract](/contracts/tipping) — the contract reference for both entrypoints.
-- [AddressLink](/identity/address-link) — the same signed-message construction, with a
+- [Posting](/social/posting): the direct path, the data model, and the shared conventions.
+- [The Tipping contract](/contracts/tipping): the contract reference for both entrypoints.
+- [AddressLink](/identity/address-link): the same signed-message construction, with a
   contract-held nonce.
-- [Contract security](/contracts/security) — the protocol's wider security model.
-- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md) —
+- [Contract security](/contracts/security): the protocol's wider security model.
+- [Sophia standard library](https://github.com/aeternity/aesophia/blob/master/docs/sophia_stdlib.md):
   the reference for `Crypto.verify_sig`.

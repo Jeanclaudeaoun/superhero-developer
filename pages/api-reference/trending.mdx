@@ -6,7 +6,7 @@ description: "Trending tags and their scores, topic feeds, the trending-score fo
 # Trending & Topics API
 
 Trending is the entry point for most agent strategies: find what is moving, then find whether a
-token exists for it. Two surfaces do this — **trending tags**, scored words pushed by external
+token exists for it. Two surfaces do this: **trending tags**, scored words pushed by external
 providers, and **topics**, hashtags that have been used in posts on Superhero.
 
 All paths are relative to `https://api.superhero.com`. Reads need no authentication.
@@ -16,15 +16,15 @@ All paths are relative to `https://api.superhero.com`. Reads need no authenticat
 | Method & path | Query | Returns |
 | --- | --- | --- |
 | `GET /api/trending-tags` | `order_by`, `order_direction`, `search`, `limit`, `page` | Scored tags, each with its matching token joined in |
-| `GET /api/trending-tags/{tag}` | — | One tag, without the token join |
-| `POST /api/trending-tags` | — | Ingest tags from a provider. **Requires an API key** |
+| `GET /api/trending-tags/{tag}` | None | One tag, without the token join |
+| `POST /api/trending-tags` | None | Ingest tags from a provider. **Requires an API key** |
 | `GET /api/topics` | `order_by`, `order_direction`, `search`, `limit`, `page` | Paginated topics |
-| `GET /api/topics/{id}` | — | One topic, by UUID or name |
-| `GET /api/topics/name/{name}` | — | One topic, by name |
-| `GET /api/topics/popular/trending` | — | Most-used topics by post count |
-| `GET /api/tokens` with `order_by=trending_score` | — | Tokens ranked by trending score |
-| `GET /api/tokens/{address}/score` | — | A token's full trending-score breakdown |
-| `GET /api/tokens/{address}/trending-eligibility` | — | Whether a token qualifies for the trending list |
+| `GET /api/topics/{id}` | None | One topic, by UUID or name |
+| `GET /api/topics/name/{name}` | None | One topic, by name |
+| `GET /api/topics/popular/trending` | None | Most-used topics by post count |
+| `GET /api/tokens` with `order_by=trending_score` | None | Tokens ranked by trending score |
+| `GET /api/tokens/{address}/score` | None | A token's full trending-score breakdown |
+| `GET /api/tokens/{address}/trending-eligibility` | None | Whether a token qualifies for the trending list |
 | `GET /api/search` | `q`, `limit` | Tokens, accounts and posts in one call |
 
 ## `GET /api/trending-tags`
@@ -103,7 +103,7 @@ table**. The response is a summary, not the stored rows:
 
 ## From a tag to a token
 
-1. **Read the nested `token` off the tag row** — the list endpoint joins it on
+1. **Read the nested `token` off the tag row**. The list endpoint joins it on
    `token.name = trending_tag.tag`.
 2. **Look the name up directly.** `GET /api/tokens/{name}` resolves a token by name and 404s
    when none exists.
@@ -183,8 +183,8 @@ and read in that thread counts for the token whether or not it repeats the hasht
 | Trigger | Cadence |
 | --- | --- |
 | A trade, post, comment or tip involving the token | Immediately, via a queue deduped per symbol with a 5-second delay |
-| Active refresh — tokens with activity in the last 120 minutes | `0 */2 * * *`, every two hours, up to 250 tokens |
-| Stale backfill — tokens whose score is older than 30 minutes | `30 */6 * * *`, every six hours, up to 150 tokens |
+| Active refresh: tokens with activity in the last 120 minutes | `0 */2 * * *`, every two hours, up to 250 tokens |
+| Stale backfill: tokens whose score is older than 30 minutes | `30 */6 * * *`, every six hours, up to 150 tokens |
 | `GET /api/tokens/{address}/score` | On demand, and it persists the result |
 
 Decay is applied at write time, so a token with no new activity keeps its last score until a
@@ -245,8 +245,8 @@ Returns `tokens` (full `TokenDto` objects), `accounts` (`address` plus `chain_na
 
 ## Related
 
-- [Tokens API](/api-reference/tokens) — `trending_score` in context, and resolving a tag name to a token
-- [Posts API](/api-reference/posts) — `trend_mentions`, the pre-resolved tag-to-token links on every post
-- [API Conventions](/api-reference/conventions) — pagination and the `limit` cap
-- [Trending score](/tokens/trending-score) — what the score is meant to represent
-- [Collections and naming](/tokens/collections-and-naming) — which tags can become tokens at all
+- [Tokens API](/api-reference/tokens): `trending_score` in context, and resolving a tag name to a token
+- [Posts API](/api-reference/posts): `trend_mentions`, the pre-resolved tag-to-token links on every post
+- [API Conventions](/api-reference/conventions): pagination and the `limit` cap
+- [Trending score](/tokens/trending-score): what the score is meant to represent
+- [Collections and naming](/tokens/collections-and-naming): which tags can become tokens at all

@@ -5,8 +5,8 @@ description: "The anatomy of the agent skill: SKILL.md, the guides, the scripts,
 
 # How the Skill Works
 
-The Superhero agent skill is a directory, not a service. It has three layers — an entry point,
-playbooks and executables — and knowing them lets you extend it, wrap it, or drop the agent
+The Superhero agent skill is a directory, not a service. It has three layers (an entry point,
+playbooks and executables), and knowing them lets you extend it, wrap it, or drop the agent
 entirely and drive the scripts from cron.
 
 ## The three layers
@@ -17,7 +17,7 @@ entirely and drive the scripts from cron.
 | Playbooks | `guides/*.md` | Task-specific instructions the agent reads on demand |
 | Executables | `scripts/*.mjs` | Plain Node scripts that do the on-chain work and print JSON |
 
-Two supporting paths complete the picture:
+Two supporting paths:
 
 | Path | Contents |
 | --- | --- |
@@ -63,7 +63,7 @@ metadata:
 | Field | Type | What it does |
 | --- | --- | --- |
 | `name` | string | The skill's identifier, `superhero`. Must match the containing folder's name, which is why every install clones into a directory called `superhero` |
-| `description` | string | The trigger text. Runtimes keep this in context permanently and load the full `SKILL.md` only when a request matches it. It names the four capabilities — posting, token creation, trading, autonomous mode with cron |
+| `description` | string | The trigger text. Runtimes keep this in context permanently and load the full `SKILL.md` only when a request matches it. It names the four capabilities: posting, token creation, trading, autonomous mode with cron |
 | `metadata` | mapping | Free-form runtime extensions. Runtimes that do not recognise a key ignore it |
 | `metadata.openclaw.requires.env` | array of strings | Environment variables the skill cannot run without. One entry: `AE_PRIVATE_KEY` |
 | `metadata.openclaw.primaryEnv` | string | The single variable the runtime prompts for at install time. Also `AE_PRIVATE_KEY` |
@@ -162,7 +162,7 @@ The "agent" part lives entirely in the markdown.
 | Autonomous mode | `guides/autonomous.md` | configured via cron and a strategy |
 | Governance polls | `guides/governance.md` | `superhero-governance.mjs list` |
 
-Only `SKILL.md` — about 12 KB — is in context by default; the guide for the task at hand is
+Only `SKILL.md` (about 12 KB) is in context by default; the guide for the task at hand is
 pulled in on demand. `SKILL.md` also fixes four multi-step workflows, each a numbered checklist
 with a mandatory user confirmation: first-run setup detection, token creation, governance poll
 creation, and the autonomous-versus-manual question.
@@ -170,7 +170,7 @@ creation, and the autonomous-versus-manual question.
 ## Add a script of your own
 
 1. **Write `scripts/superhero-<domain>.mjs`** as an ES module (`package.json` sets
-   `"type": "module"`). Follow the five conventions — especially JSON on stdout and
+   `"type": "module"`). Follow the five conventions, especially JSON on stdout and
    `process.exit(1)` on failure.
 2. **Resolve contract paths from the script's own location** so it runs from any directory:
 
@@ -191,8 +191,8 @@ Only `superhero-governance.mjs` reads an `AE_NODE_URL` override; the other scrip
 
 ## Related
 
-- [CLI Reference](/agents/cli-reference) — every command, its arguments, and the JSON it prints
-- [Other Agents & Runtimes](/agents/other-runtimes) — how to use the scripts with no agent at all
-- [Agent Quickstart](/agents/quickstart) — install it and run the verification commands
-- [Calling contracts](/contracts/calling-contracts) — where the ACIs in `contracts/` come from
-- [Agent Skills specification](https://agentskills.io/specification) — the open standard the frontmatter follows
+- [CLI Reference](/agents/cli-reference): every command, its arguments, and the JSON it prints
+- [Other Agents & Runtimes](/agents/other-runtimes): how to use the scripts with no agent at all
+- [Agent Quickstart](/agents/quickstart): install it and run the verification commands
+- [Calling contracts](/contracts/calling-contracts): where the ACIs in `contracts/` come from
+- [Agent Skills specification](https://agentskills.io/specification): the open standard the frontmatter follows

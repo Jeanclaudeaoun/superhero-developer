@@ -5,8 +5,8 @@ description: "The AEX-9 token behind every community token and the ProtocolDAO t
 
 # FungibleTokenFull (AEX-9)
 
-`FungibleTokenFull.aes` is the AEX-9 implementation every Superhero token uses — each
-community's token and the ProtocolDAO token alike. It is the æternity reference fungible token
+`FungibleTokenFull.aes` is the AEX-9 implementation every Superhero token uses, for
+every community's token and for the ProtocolDAO token. It is the æternity reference fungible token
 (`aeternity-fungible-token` v2.2.0) with the allowance, mintable, burnable and swappable
 extensions.
 
@@ -20,7 +20,7 @@ token is `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` on mainnet and
 
 | Entrypoint | Signature | Flags |
 | --- | --- | --- |
-| `init` | `(name: string, decimals: int, symbol: string, initial_owner_balance: option(int)) => state` | — |
+| `init` | `(name: string, decimals: int, symbol: string, initial_owner_balance: option(int)) => state` |  |
 | `transfer` | `(to_account: address, value: int) => unit` | stateful |
 | `transfer_allowance` | `(from_account: address, to_account: address, value: int) => unit` | stateful |
 | `create_allowance` | `(for_account: address, value: int) => unit` | stateful |
@@ -28,17 +28,17 @@ token is `ct_dsa6octVEHPcm7wRszK6VAjPp1FTqMWa7sBFdxQ9jBT35j6VW` on mainnet and
 | `reset_allowance` | `(for_account: address) => unit` | stateful |
 | `mint` | `(account: address, value: int) => unit` | stateful |
 | `burn` | `(value: int) => unit` | stateful |
-| `balance` | `(account: address) => option(int)` | — |
-| `balances` | `() => FungibleTokenFull.balances` | — |
-| `allowance` | `(allowance_accounts: FungibleTokenFull.allowance_accounts) => option(int)` | — |
-| `allowance_for_caller` | `(from_account: address) => option(int)` | — |
-| `allowances` | `() => FungibleTokenFull.allowances` | — |
-| `meta_info` | `() => FungibleTokenFull.meta_info` | — |
-| `total_supply` | `() => int` | — |
-| `owner` | `() => address` | — |
-| `aex9_extensions` | `() => list(string)` | — |
+| `balance` | `(account: address) => option(int)` |  |
+| `balances` | `() => FungibleTokenFull.balances` |  |
+| `allowance` | `(allowance_accounts: FungibleTokenFull.allowance_accounts) => option(int)` |  |
+| `allowance_for_caller` | `(from_account: address) => option(int)` |  |
+| `allowances` | `() => FungibleTokenFull.allowances` |  |
+| `meta_info` | `() => FungibleTokenFull.meta_info` |  |
+| `total_supply` | `() => int` |  |
+| `owner` | `() => address` |  |
+| `aex9_extensions` | `() => list(string)` |  |
 | `swap` | `() => unit` | stateful |
-| `swapped` | `() => map(address, int)` | — |
+| `swapped` | `() => map(address, int)` |  |
 | `check_swap` | `(account: address) => int` | stateful |
 
 ## Types
@@ -65,8 +65,8 @@ record state =
   , swapped      : map(address, int) }
 ```
 
-`allowance` takes the `allowance_accounts` record as a **single argument**, not two
-addresses — pass an object with exactly those two field names:
+`allowance` takes the `allowance_accounts` record as a single argument, not as two
+addresses. Pass an object with exactly those two field names:
 
 ```javascript
 const current = await token
@@ -86,12 +86,12 @@ datatype event =
 ```
 
 These are the standard AEX-9 events. A single token buy produces a `Mint` on the community
-token *and* a `Mint` on the ProtocolDAO token in the same transaction — see
+token *and* a `Mint` on the ProtocolDAO token in the same transaction. See
 [Events](/contracts/events) for how to tell them apart.
 
 ## Decimals
 
-Community tokens have **18 decimals**: one whole token is `1000000000000000000` base units,
+Community tokens have 18 decimals: one whole token is `1000000000000000000` base units,
 the same scale as AE itself. Every `value`, `count` and `amount` in these contracts is in base
 units.
 
@@ -103,7 +103,7 @@ require(decimals == bonding_curve.supported_decimals(),
         "BONDING_CURVE_SUPPORTED_DECIMALS_MISSMATCH")
 ```
 
-Read `meta_info()` and use its `decimals` field rather than hardcoding 18 — the ProtocolDAO
+Read `meta_info()` and use its `decimals` field rather than hardcoding 18. The ProtocolDAO
 token or a future collection could differ:
 
 ```javascript
@@ -119,12 +119,11 @@ The sale contract creates the token in its own `init`:
 token_contract = Chain.create(name, decimals, symbol, None) : FungibleTokenFull
 ```
 
-- **The `owner` is the sale contract**, because `Chain.create` runs inside it. That is what
-  authorises `mint` on a buy and `burn` on a sell.
-- **`initial_owner_balance` is `None`**, so a new community token starts at zero total supply.
-  Every token in existence was minted by a buy.
-- **The name and the symbol are the same string.** `CommunityFactory.create_community` passes
-  its `name` argument to both positions.
+Because `Chain.create` runs inside the sale contract, the sale contract is the token's
+`owner`, and that is what authorises `mint` on a buy and `burn` on a sell.
+`initial_owner_balance` is `None`, so a new community token starts at zero total supply: every
+token in existence was minted by a buy. The name and the symbol are the same string, because
+`CommunityFactory.create_community` passes its `name` argument to both positions.
 
 ## Allowances
 
@@ -132,8 +131,8 @@ Two Superhero flows require an allowance before they work:
 
 | Flow | Grant the allowance to |
 | --- | --- |
-| Selling tokens back to the bonding curve | the **sale** contract address, `ct_` rewritten to `ak_` |
-| Voting in a community DAO | the **vote** contract address, `ct_` rewritten to `ak_` |
+| Selling tokens back to the bonding curve | the sale contract address, `ct_` rewritten to `ak_` |
+| Voting in a community DAO | the vote contract address, `ct_` rewritten to `ak_` |
 
 The `ct_` to `ak_` rewrite is required. A contract's account identity uses the `ak_` prefix
 over the same key bytes, and that is the address that appears as `for_account`:
@@ -147,7 +146,7 @@ Three entrypoints manage the value:
 | Entrypoint | Semantics | When to use it |
 | --- | --- | --- |
 | `create_allowance(for_account, value)` | Creates a new allowance entry. | First time granting to this spender |
-| `change_allowance(for_account, value_change)` | Adds a **delta** to an existing allowance. The delta may be negative. | Adjusting an existing allowance |
+| `change_allowance(for_account, value_change)` | Adds a delta to an existing allowance. The delta may be negative. | Adjusting an existing allowance |
 | `reset_allowance(for_account)` | Sets it to zero. | Revoking |
 
 The pattern:
@@ -176,9 +175,9 @@ if (existing === undefined) {
 
 `mint` and `burn` are how supply tracks the bonding curve:
 
-- **Buy** — the sale contract calls `mint(buyer, count)`. Supply goes up.
-- **Sell** — the sale contract pulls your tokens with `transfer_allowance` and calls `burn`.
-  Supply goes down.
+- On a buy, the sale contract calls `mint(buyer, count)` and supply goes up.
+- On a sell, the sale contract pulls your tokens with `transfer_allowance` and calls `burn`,
+  and supply goes down.
 
 Both are owner-gated. For a community token the owner is the sale contract, so the only way to
 increase supply is to pay the curve. That is what makes `total_supply()` a reliable input to a
@@ -191,15 +190,15 @@ balances from an older token contract into a newer one: `swap()` credits the cal
 their balance in the predecessor and records the amount in the `swapped` map. Superhero does
 not use this path; for a factory-created token `swapped()` is empty.
 
-`aex9_extensions()` returns the list of extension names the contract implements. Call it
-rather than assuming — it is the standard's own discovery mechanism.
+`aex9_extensions()` returns the list of extension names the contract implements. It is the
+standard's own discovery mechanism, so call it instead of assuming.
 
 ## Reading balances
 
 | Read | Returns | Note |
 | --- | --- | --- |
-| `balance(account)` | `option(int)` | `undefined` when the account has never held the token, **not** zero |
-| `balances()` | `map(address, int)` | Every holder. Large on popular tokens — prefer the middleware |
+| `balance(account)` | `option(int)` | `undefined` when the account has never held the token, not zero |
+| `balances()` | `map(address, int)` | Every holder. Large on popular tokens; prefer the middleware |
 | `total_supply()` | `int` | The input to every bonding curve price call |
 
 For holder lists and balances at scale, query the middleware's AEX-9 endpoints
@@ -208,9 +207,9 @@ in one response.
 
 ## Related
 
-- [AffiliationBondingCurveTokenSale](/contracts/token-sale) — the contract that mints and burns these tokens
-- [DAOVote](/contracts/dao-vote) — the other flow that needs an allowance
-- [Calling Contracts](/contracts/calling-contracts) — SDK setup and the full allowance example
-- [AEX-9 tokens in your wallet](/wallets/aex9-tokens) — the same token from a holder's point of view
-- [AEX standards](/aeternity/aex-standards) — where AEX-9 sits among the æternity standards
-- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md) — the standard itself
+- [AffiliationBondingCurveTokenSale](/contracts/token-sale): the contract that mints and burns these tokens
+- [DAOVote](/contracts/dao-vote): the other flow that needs an allowance
+- [Calling Contracts](/contracts/calling-contracts): SDK setup and the full allowance example
+- [AEX-9 tokens in your wallet](/wallets/aex9-tokens): the same token from a holder's point of view
+- [AEX standards](/aeternity/aex-standards): where AEX-9 sits among the æternity standards
+- [AEX-9 specification](https://github.com/aeternity/AEXs/blob/master/AEXS/aex-9.md): the standard itself

@@ -10,7 +10,7 @@ economics: who the moderators are, who is muted, how many tokens you need to hol
 and the community's free-form metadata.
 
 One instance is deployed per community by the factory. Its owner is the community's DAO, so
-every setting on it changes only through a DAO vote — except muting, which moderators do
+every setting on it changes only through a DAO vote, except muting, which moderators do
 directly.
 
 Resolve it with `factory.get_community_management(token_sale)`. Its interface is inlined in
@@ -28,13 +28,13 @@ Resolve it with `factory.get_community_management(token_sale)`. Its interface is
 | `change_minimum_token_threshold` | `(minimum_token_threshold: int) => unit` | stateful |
 | `change_meta_info` | `(meta_info: CommunityManagement.meta_info) => unit` | stateful |
 | `set_owner` | `(owner: address) => unit` | stateful |
-| `moderator_accounts` | `() => Set.set(address)` | — |
-| `muted_user_ids` | `() => Set.set(string)` | — |
-| `minimum_token_threshold` | `() => int` | — |
-| `meta_info` | `() => CommunityManagement.meta_info` | — |
-| `owner` | `() => address` | — |
-| `version` | `() => int` | — |
-| `get_state` | `() => state` | — |
+| `moderator_accounts` | `() => Set.set(address)` |  |
+| `muted_user_ids` | `() => Set.set(string)` |  |
+| `minimum_token_threshold` | `() => int` |  |
+| `meta_info` | `() => CommunityManagement.meta_info` |  |
+| `owner` | `() => address` |  |
+| `version` | `() => int` |  |
+| `get_state` | `() => state` |  |
 
 ## Types
 
@@ -65,7 +65,7 @@ moderators.has('ak_alice...');   // true or false
 
 ## The `meta_info` map
 
-`meta_info` is `map(string, string)` — no schema, no validation, nothing reserved. The
+`meta_info` is `map(string, string)` with no schema, no validation and no reserved keys. The
 Superhero app writes these keys when it creates a community:
 
 | Key | What the app puts there | Where it shows up |
@@ -100,7 +100,7 @@ datatype event =
   | ChangedMetaInfo
 ```
 
-`ChangedMetaInfo` is the only event in the Superhero suite that carries **no arguments** — it
+`ChangedMetaInfo` is the only event in the Superhero suite that carries no arguments. It
 signals that the map changed without saying how. An indexer that wants the new metadata
 re-reads `meta_info()` when it sees this event.
 
@@ -108,10 +108,10 @@ re-reads `meta_info()` when it sees this event.
 
 | Action | Caller |
 | --- | --- |
-| `add_moderator`, `delete_moderator` | the owner — the DAO, via an `AddModerator` / `DeleteModerator` vote |
-| `change_minimum_token_threshold` | the owner — via a `ChangeMinimumTokenThreshold` vote |
-| `change_meta_info` | the owner — via a `ChangeMetaInfo` vote |
-| `set_owner` | the owner — this is how a `ChangeDAO` migration hands over control |
+| `add_moderator`, `delete_moderator` | the owner (the DAO), via an `AddModerator` / `DeleteModerator` vote |
+| `change_minimum_token_threshold` | the owner, via a `ChangeMinimumTokenThreshold` vote |
+| `change_meta_info` | the owner, via a `ChangeMetaInfo` vote |
+| `set_owner` | the owner; this is how a `ChangeDAO` migration hands over control |
 | `mute_user_id`, `unmute_user_id` | a moderator, directly |
 
 Two guard functions enforce that table:
@@ -124,8 +124,8 @@ function require_moderator() =
   require(Set.member(Call.caller, state.moderator_accounts), "ONLY_MODERATOR_CAN_CHANGE")
 ```
 
-**Moderators are not owners** — a moderator cannot add another moderator, change the
-threshold, or touch the metadata. **The owner is not automatically a moderator** — the DAO
+Moderators are not owners: a moderator cannot add another moderator, change the
+threshold, or touch the metadata. The owner is not automatically a moderator either, so the DAO
 cannot mute anyone without first voting itself onto the moderator set. The initial moderator
 is the community creator, set once in `init`; the owner becomes the DAO immediately afterwards.
 
@@ -142,7 +142,7 @@ Chain.create(Call.caller, 10 ^ decimals(), is_private, meta_info) : CommunityMan
 
 | Field | Initial value |
 | --- | --- |
-| `initial_moderator` | `Call.caller` — whoever created the community |
+| `initial_moderator` | `Call.caller`, whoever created the community |
 | `minimum_token_threshold` | `10 ^ 18`, i.e. exactly **one whole token** |
 | `is_private` | whatever you passed to `create_community` |
 | `meta_info` | whatever you passed to `create_community` |
@@ -178,7 +178,7 @@ dedicated getter; read it through `get_state()`. Contract state is public, so a 
 community's moderators, mutes, threshold and metadata are readable by anyone.
 
 Off chain, the Superhero API copies it to the community's chat room and uses it to choose the
-visibility tag on the NIP-29 edit-metadata event — `public` or `private`. The web client
+visibility tag on the NIP-29 edit-metadata event, `public` or `private`. The web client
 reports a private room as `auth-required` rather than rendering it openly. A token with no
 chat room defaults to public.
 
@@ -187,8 +187,8 @@ control over on-chain data.
 
 ## Related
 
-- [DAO](/contracts/dao) — the owner of this contract and the source of every governed change
-- [CommunityFactory](/contracts/community-factory) — where the initial values above are set
-- [Moderators](/dao/moderators) — the moderator role explained for community members
-- [Moderation](/social/moderation) — what muting does in the social layer
-- [Proposals](/dao/proposals) — the vote subjects that change these settings
+- [DAO](/contracts/dao): the owner of this contract and the source of every governed change
+- [CommunityFactory](/contracts/community-factory): where the initial values above are set
+- [Moderators](/dao/moderators): the moderator role explained for community members
+- [Moderation](/social/moderation): what muting does in the social layer
+- [Proposals](/dao/proposals): the vote subjects that change these settings

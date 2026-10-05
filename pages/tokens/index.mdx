@@ -6,13 +6,13 @@ description: "Community tokens, the exponential bonding curve that prices them, 
 # Tokens & Bonding Curves
 
 Anyone can turn a topic into a market. Type a name, and a few seconds later that idea has a token,
-a price, a chart and a treasury — no listing, no approval, no market maker.
+a price, a chart and a treasury, with no listing, approval or market maker involved.
 
 The price comes from a curve rather than an order book. Every buy mints new tokens and nudges the
 price up; every sell burns them and moves it back down. So there is always a price, always
 liquidity, and no counterparty to find: you are trading with the contract itself, which holds
-enough reserve to buy the entire supply back. **Getting in early is not a metaphor here — it is
-arithmetic.**
+enough reserve to buy the entire supply back. Because the price is a function of supply, tokens bought
+before the supply grows cost less.
 
 ## The numbers to remember
 
@@ -22,7 +22,7 @@ arithmetic.**
 | Sell curve | `sell(x) = buy(x) · 0.995` |
 | Price of a trade | The integral of the curve across the supply you mint into or burn out of |
 | Launch price | 0.0000001 AE per token, at supply 0 |
-| Spread | 1% of the curve value — 0.5% to the community DAO, 0.5% to affiliation |
+| Spread | 1% of the curve value: 0.5% to the community DAO, 0.5% to affiliation |
 | Instant round trip | Returns 0.99502 of what you paid, before gas |
 | Affiliation split | 0.300% / 0.125% / 0.050% / 0.025% across four referral levels; burned if unreferred |
 | ProtocolDAO reward | Minted to the buyer on every buy, proportional to its AE value |
@@ -31,10 +31,10 @@ arithmetic.**
 
 ## Where to start
 
-1. **[Bonding Curves](/tokens/bonding-curve)** — the formula, integrated by hand, with two worked buys. Everything else assumes it.
-2. **[Curve Parameters & Units](/tokens/curve-parameters)** — read before you call a contract, so you are not off by 10^18.
-3. **[Fees & Slippage](/tokens/fees-and-slippage)** — the three things that separate the price you see from the price you get.
-4. **[Risks](/tokens/risks)** — read before you buy anything.
+1. **[Bonding Curves](/tokens/bonding-curve)**: the formula, integrated by hand, with two worked buys. Everything else assumes it.
+2. **[Curve Parameters & Units](/tokens/curve-parameters)**: read before you call a contract, so you are not off by 10^18.
+3. **[Fees & Slippage](/tokens/fees-and-slippage)**: the three things that separate the price you see from the price you get.
+4. **[Risks](/tokens/risks)**: read before you buy anything.
 
 To launch a token now, open [superhero.com/trends/create](https://superhero.com/trends/create); to
 buy one, start from [the trending list](https://superhero.com/trends/tokens).
@@ -59,8 +59,8 @@ buy one, start from [the trending list](https://superhero.com/trends/tokens).
 
 ## Related
 
-- [Value flow](/concepts/value-flow) — how AE moves through the whole platform, of which the curve is one part
-- [DAO overview](/dao/overview) — the treasury every token creates, and who controls it
-- [Affiliation rewards](/rewards/affiliation) — where the other half of the spread goes
-- [Token sale contract](/contracts/token-sale) — the entrypoint-level reference for the sale contract
-- [Tokens API](/api-reference/tokens) — the REST surface for tokens, prices and rankings
+- [Value flow](/concepts/value-flow): how AE moves through the whole platform, of which the curve is one part
+- [DAO overview](/dao/overview): the treasury every token creates, and who controls it
+- [Affiliation rewards](/rewards/affiliation): where the other half of the spread goes
+- [Token sale contract](/contracts/token-sale): the entrypoint-level reference for the sale contract
+- [Tokens API](/api-reference/tokens): the REST surface for tokens, prices and rankings

@@ -16,7 +16,7 @@ still have it.
 | --- | --- |
 | Email address on the account | Your address is your identity; a `.chain` name makes it readable |
 | Password to reset | You keep a recovery phrase, or a passkey, or both |
-| Anyone who can restore access for you | Your backup is the only restore path — see [Backup & Recovery](/wallets/backup-and-recovery) |
+| Anyone who can restore access for you | Your backup is the only restore path; see [Backup & Recovery](/wallets/backup-and-recovery) |
 | Account deletion | Posts and transactions are permanent on chain |
 | Server that stores your key | Nothing leaves your device |
 
@@ -52,7 +52,7 @@ This is a real backup **only if your passkey syncs** (iCloud Keychain, Google Pa
 device-bound credential such as Windows Hello dies with its device, and the app has no phrase
 reveal or export screen.
 
-If the option is greyed out, this device or browser cannot create a platform passkey — use a
+If the option is greyed out, this device or browser cannot create a platform passkey; use a
 recovery phrase instead. If tapping it does nothing at all, see
 [Troubleshooting](/wallets/troubleshooting).
 
@@ -64,13 +64,13 @@ device, with or without biometrics.
 1. **The phrase is shown.** Write it down by hand. Do not screenshot it.
 2. **The phrase is verified.** You re-enter the words. Nothing is stored until this passes.
 3. **You set a passphrase.** It encrypts the wallet on this device. The app scores it locally and
-   requires a genuinely unguessable one — a numeric PIN is rejected. Take the **generated
+   requires a genuinely unguessable one, so a numeric PIN is rejected. Take the **generated
    five-word passphrase** unless you have a reason not to. The passphrase cannot be changed later;
    changing it means recreating the wallet from the phrase.
 4. **The wallet is created** and your first address is derived.
-5. **A device passkey is offered.** Optional — with it you stop typing the passphrase for every
+5. **A device passkey is offered.** Optional. With it you stop typing the passphrase for every
    signature.
-6. **A recovery code is shown once.** Mandatory. It is a 128-bit code that unlocks this device's
+6. **A recovery code is shown once.** Mandatory. It is a 128-bit code that opens this device's
    wallet if your passphrase is forgotten or your passkey stops working. Save it somewhere other
    than where you put the phrase.
 
@@ -87,13 +87,13 @@ so a mistyped word is rejected rather than silently creating a different, empty 
 
 Choose **Restore a wallet you created with a passkey**. The ceremony derives the wallet your passkey
 implies and **shows you the address before saving anything**, together with a check of whether that
-address has on-chain history. If it reports no activity, stop — you probably picked the wrong
+address has on-chain history. If it reports no activity, stop: you probably picked the wrong
 passkey. Details in [Backup & Recovery](/wallets/backup-and-recovery).
 
 ### Coming back later
 
 If this device already has a wallet, Connect shows either *"Your wallet is ready"* or *"Finish
-setting up your wallet"*. The second appears when the recovery code was never enrolled — for
+setting up your wallet"*. The second appears when the recovery code was never enrolled, for
 example after a reload mid-flow. Finish it: on a passkey wallet that code is the only factor that
 survives a passkey rekey.
 
@@ -150,7 +150,7 @@ roughly seven days without interaction. Once it is gone:
 - your **recovery code** opens nothing,
 - a passkey belonging to a *phrase-created* wallet opens nothing.
 
-What survives is the written recovery phrase, or — on a passkey-created wallet — a passkey that
+What survives is the written recovery phrase or, on a passkey-created wallet, a passkey that
 syncs. The full matrix is in
 [The Built-In Wallet](/wallets/built-in-wallet#what-clearing-site-data-destroys).
 
@@ -164,8 +164,8 @@ Accounts held in Superhero Wallet or in an agent's environment variable are unaf
 
 ## Related
 
-- [The Built-In Wallet](/wallets/built-in-wallet) — what the in-app flow created, and where it lives.
-- [Backup & Recovery](/wallets/backup-and-recovery) — do this before funding the account.
-- [Choosing a Wallet](/wallets/choosing-a-wallet) — if you are still deciding between the paths above.
-- [Accounts and Keys](/aeternity/accounts-and-keys) — what an `ak_` address is at the protocol level.
-- [Superhero Wallet](https://wallet.superhero.com/) — create one in the hosted wallet with no install.
+- [The Built-In Wallet](/wallets/built-in-wallet): what the in-app flow created, and where it lives.
+- [Backup & Recovery](/wallets/backup-and-recovery): do this before funding the account.
+- [Choosing a Wallet](/wallets/choosing-a-wallet): if you are still deciding between the paths above.
+- [Accounts and Keys](/aeternity/accounts-and-keys): what an `ak_` address is at the protocol level.
+- [Superhero Wallet](https://wallet.superhero.com/): create one in the hosted wallet with no install.

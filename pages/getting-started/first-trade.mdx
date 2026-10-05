@@ -18,19 +18,19 @@ market cap by default, so established communities surface first.
 2. Choose the **Trade** tab. The token page's tabs are Feed, Trade, Info, Transactions and Holders;
    the last three appear once the token exists on chain.
 3. Press **Connect** if you have not already. Trading needs a connected account.
-4. Make sure **Buy** is selected, and enter an amount. The two fields are linked — type AE and it
+4. Make sure **Buy** is selected, and enter an amount. The two fields are linked: type AE and it
    shows the tokens you would receive, or type tokens and it shows the AE required.
 5. Read the quote. Check the slippage setting before you commit.
 6. Press buy and **approve in your wallet**.
-7. The confirmation shows what you received, and — on a buy — any protocol DAO tokens minted to you
+7. The confirmation shows what you received, and, on a buy, any protocol DAO tokens minted to you
    alongside.
 
 ### Selling is two transactions
 
 Selling an AEX-9 token requires granting the sale contract an allowance first, so the app runs:
 
-1. **Approve allowance** — step 1 of 2.
-2. **Sell with the existing allowance** — step 2 of 2.
+1. **Approve allowance**: step 1 of 2.
+2. **Sell with the existing allowance**: step 2 of 2.
 
 Buying is a single transaction: the AE rides along with the call, so there is nothing to
 pre-approve.
@@ -44,9 +44,9 @@ your transaction landing in a block, other people's buys and sells move that sta
 curve, the tokens you receive for a given amount of AE can be slightly fewer than quoted.
 
 **The quote does not tick.** It is recomputed only when you change the amount or flip between Buy
-and Sell — not on an interval, and not when the token's supply changes underneath you. Retype the
-amount before you press Buy if the card has been open for a while, and treat the slippage setting —
-not the displayed number — as your actual protection.
+and Sell, not on an interval, and not when the token's supply changes underneath you. Retype the
+amount before you press Buy if the card has been open for a while, and treat the slippage setting,
+not the displayed number, as your actual protection.
 
 ### Slippage
 
@@ -94,15 +94,15 @@ the same amount loses about 1% before any price movement.
 
 Buying also mints protocol-level DAO tokens to you, proportional to purchase activity. The
 confirmation screen shows the amount and symbol. These are separate from the community token you
-bought — see [Protocol DAO](/dao/protocol-dao).
+bought; see [Protocol DAO](/dao/protocol-dao).
 
 ## What you are signing
 
 Superhero's built-in wallet names the call rather than showing raw bytes:
 
-- **Buy tokens** — *"Spends the AE attached to this call to buy tokens from this sale contract."*
-- **Sell tokens** — *"Sells your tokens back to this sale contract for AE."*
-- **Lets another account spend your tokens up to this amount** — the allowance step of a sell.
+- **Buy tokens**: *"Spends the AE attached to this call to buy tokens from this sale contract."*
+- **Sell tokens**: *"Sells your tokens back to this sale contract for AE."*
+- **Lets another account spend your tokens up to this amount**: the allowance step of a sell.
 
 Check two things on that screen every time: the **contract address** matches the token you meant,
 and the **AE amount** is what you typed. Token amounts are shown in raw base units, not scaled by
@@ -112,13 +112,13 @@ the token's decimals, so count digits rather than eyeballing magnitude.
 
 | Where | What it tells you |
 | --- | --- |
-| **Transactions** tab on the token page | Recent buys and sells with timestamps and transaction hashes — yours should be at the top |
+| **Transactions** tab on the token page | Recent buys and sells with timestamps and transaction hashes; yours should be at the top |
 | **Holders** tab | Top addresses and balances; your address should now appear |
 | [aescan.io](https://aescan.io) | The raw transaction: sender, contract called, gas consumed, block |
 | Your wallet | The token balance, discovered from the middleware's AEX-9 balance index |
 
 If the token has not appeared in your wallet's list yet, that is an indexing delay rather than a
-failed trade — the transaction on aescan is authoritative. See
+failed trade. The transaction on aescan is authoritative. See
 [Managing AEX-9 Tokens](/wallets/aex9-tokens) for how balance discovery works.
 
 ## Every token uses the same curve
@@ -132,13 +132,13 @@ minimum_count = 10^12     sell_return_percentage = 9950    sell_return_precision
 ```
 
 Two tokens at the same supply cost exactly the same; a token's price says how much has been bought,
-nothing about how it was configured. `minimum_count = 10^12` aettos — 10^-6 of a token — is the
+nothing about how it was configured. `minimum_count = 10^12` aettos (10^-6 of a token) is the
 smallest tradable amount; below it the call aborts with `MINIMUM_TOKENS_REQUIRED`. See
 [Curve Parameters](/tokens/curve-parameters).
 
 ## Before you buy anything meaningful
 
-- Price is a function of supply, not of demand from a counterparty — an early buyer's gain comes
+- Price is a function of supply, not of demand from a counterparty. An early buyer's gain comes
   from later buyers pushing along the curve.
 - The 1% spread is a floor on round-trip cost.
 - A community token is not equity and carries no claim on anything. Read
@@ -147,9 +147,9 @@ smallest tradable amount; below it the call aborts with `MINIMUM_TOKENS_REQUIRED
 
 ## Related
 
-- [Buying and Selling](/tokens/buying-and-selling) — the trade mechanics in full.
-- [Fees and Slippage](/tokens/fees-and-slippage) — the spread, the split and the tolerance parameter.
-- [The Bonding Curve](/tokens/bonding-curve) — why the price moves the way it does.
-- [The Token Page](/tokens/token-page) — every tab and chart on `/trends/tokens/:tokenName`.
-- [Token Risks](/tokens/risks) — read before the trade, not after.
-- [superhero.com/trends/tokens](https://superhero.com/trends/tokens) — the trending list.
+- [Buying and Selling](/tokens/buying-and-selling): the trade mechanics in full.
+- [Fees and Slippage](/tokens/fees-and-slippage): the spread, the split and the tolerance parameter.
+- [The Bonding Curve](/tokens/bonding-curve): why the price moves the way it does.
+- [The Token Page](/tokens/token-page): every tab and chart on `/trends/tokens/:tokenName`.
+- [Token Risks](/tokens/risks): read before the trade, not after.
+- [superhero.com/trends/tokens](https://superhero.com/trends/tokens): the trending list.
